@@ -36,6 +36,19 @@ export const DEFAULT_ATTACK_HITBOX_LIFESPAN_TICKS = 15;
 /** Default forward offset from the attacker's origin to the hitbox centre. */
 export const DEFAULT_ATTACK_HITBOX_OFFSET = 0.75;
 
+/**
+ * Default hitstop (freeze) length, in ticks, applied to BOTH the attacker and the
+ * victim on a successful hit (4 ticks @60fps ≈ 0.067 s). See
+ * specs/04_combat_feedback_spec.md AC-01.
+ */
+export const DEFAULT_HITSTOP_TICKS = 4;
+
+/**
+ * Default knockback speed, in world units per second, applied to the victim along
+ * the hit direction during HITSTUN. See specs/04_combat_feedback_spec.md AC-03.
+ */
+export const DEFAULT_KNOCKBACK_FORCE = 12;
+
 export class HitboxComponent extends ComponentBase {
   /** Hit radius in world units. Overlap requires `dist < radius + hurtbox.radius`. */
   public radius: number;
@@ -49,6 +62,21 @@ export class HitboxComponent extends ComponentBase {
   /** Faction of the attacker; only entities of a DIFFERENT faction can be hit. */
   public faction: Faction;
 
+  /**
+   * Id of the attacking entity, snapshotted at spawn time (M2-T02). The hitbox is
+   * an INDEPENDENT entity that does not follow the attacker, so hitstop cannot be
+   * written back through the transform chain — the owner id is how CollisionSystem
+   * finds the attacker to freeze it. May refer to a since-destroyed entity, so
+   * callers MUST guard with `world.isAlive(...)` before using it.
+   */
+  public ownerEntityId: EntityId;
+
+  /** Ticks of hitstop applied to both sides on a successful hit (spec 04 AC-01). */
+  public hitstopTicks: number;
+
+  /** Knockback speed (world units/s) applied to the victim (spec 04 AC-03). */
+  public knockbackForce: number;
+
   /** Ids already struck by this hitbox, kept ascending for determinism. */
   public hitEntities: EntityId[];
 
@@ -57,6 +85,9 @@ export class HitboxComponent extends ComponentBase {
     damage: number,
     activeTicks: number,
     faction: Faction,
+    ownerEntityId: EntityId,
+    hitstopTicks = DEFAULT_HITSTOP_TICKS,
+    knockbackForce = DEFAULT_KNOCKBACK_FORCE,
     hitEntities: EntityId[] = [],
   ) {
     super();
@@ -64,6 +95,9 @@ export class HitboxComponent extends ComponentBase {
     this.damage = damage;
     this.activeTicks = activeTicks;
     this.faction = faction;
+    this.ownerEntityId = ownerEntityId;
+    this.hitstopTicks = hitstopTicks;
+    this.knockbackForce = knockbackForce;
     this.hitEntities = hitEntities;
   }
 }

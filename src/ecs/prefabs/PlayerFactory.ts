@@ -27,13 +27,18 @@ export interface PlayerSpawnOptions extends CombatantSpawnOptions {}
 
 export class PlayerFactory {
   /**
-   * Create a player entity owning Transform + Velocity + Input + State + DashStats
-   * + Tag + Faction(Player) + Health + Hurtbox.
+   * Create a player entity owning Transform + Velocity + Intent + PlayerInput +
+   * State + DashStats + Tag + Faction(Player) + Health + Hurtbox.
+   *
+   * The player is the ONLY combatant that carries the hardware input component
+   * (`hardwareInput = true`); its intent is derived from the device by
+   * PlayerControllerSystem.
+   *
    * @throws RangeError if `maxSpeed` is not a positive finite number, or if any dash
    *   override is invalid (speed multiplier must be positive finite; tick counts must
    *   be positive integers; `invulnerableTicks` must not exceed `durationTicks`).
    */
   public static spawn(world: World, options: PlayerSpawnOptions = {}): EntityId {
-    return spawnCombatant(world, Faction.Player, options);
+    return spawnCombatant(world, Faction.Player, options, true);
   }
 }

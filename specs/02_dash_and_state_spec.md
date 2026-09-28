@@ -10,6 +10,13 @@
 | Depends on | `specs/00_harness_spec.md`（时钟/输入/ECS/Snapshot 契约）、`specs/01_character_controller_spec.md`（移动控制器，rev.2 限幅） |
 | Runtime | Node.js ≥ 22 · TypeScript（`strict` 全开）· Vitest（node 环境） |
 
+> **M2-T02 变更（rev.2）**：本文件为 M1-T02 验收基线，逻辑与数值**不变**。M2-T02 引入**意图解耦**后：
+> - 冲刺的**触发源**由硬件电平 `InputComponent.buttonDash` 改为**逻辑意图脉冲 `IntentComponent.wantsToDash`**
+>   （单 Tick 上升沿，消费方读后置 `false`）；类名 `InputComponent` → `PlayerInputComponent`（**仅玩家**持有硬件组件）。
+> - `StateSystem` 的移动判定改读 `IntentComponent.moveVector`（原 `InputComponent.moveVector`）。
+> - **显式固化**冲刺起手门控"**仅 `IDLE`/`MOVING`**"（`HITSTUN`/`ATTACKING` 不可被打断）——与 §4.1 状态图一致，
+>   由 `DashSystem` 自身实现（因它早于 `StateSystem`）。详见 `specs/04_combat_feedback_spec.md` §5.1 / §8 F1/F2。
+
 ---
 
 ## 1. 目的与范围
@@ -27,7 +34,7 @@
 - `StateSystem`：状态推进与退出。
 - `MovementSystem` 扩展：`DASHING` 时按锁定方向与冲刺速度积分，**不受输入转向影响**。
 - 规范管道 `createDefaultSystems()`：`MovementSystem → DashSystem → StateSystem`。
-- `InputComponent.buttonDash` 与 `VelocityComponent.speedMultiplier` 两个新字段。
+- `InputComponent.buttonDash` 与 `VelocityComponent.speedMultiplier` 两个新字段（M2-T02：触发源改为 `IntentComponent.wantsToDash`，见头部变更说明）。
 - `PlayerFactory` 组装扩展。
 
 ### 1.3 Out of Scope（显式排除）
@@ -59,7 +66,8 @@
 | **无敌窗口** | 冲刺起始的前 `invulnerableTicks` 个 Tick，实体携带 `Invulnerable` 标签。 |
 | **冷却** | 两次冲刺之间必须间隔的 Tick 数（自上次冲刺**开始**计）。 |
 | **speedMultiplier** | `VelocityComponent` 上作用于 `maxSpeed` 的临时倍率；常态为 `1`。 |
-| **按钮按下（buttonDash）** | 由 `keysHeld` 派生的持久布尔，表示冲刺键当前是否按住。 |
+| **按钮按下（buttonDash）** | 由 `keysHeld` 派生的持久布尔，表示冲刺键当前是否按住（**M2-T02：硬件层**，仅 `PlayerInputComponent` 持有）。 |
+| **冲刺意图脉冲（wantsToDash）** | `IntentComponent.wantsToDash`：**单 Tick** 上升沿，`DashSystem` 的**唯一**触发源（读后置 `false`）。 |
 | **规范管道** | 每 Tick 固定的系统执行顺序：`MovementSystem → DashSystem → StateSystem`（硬契约）。 |
 
 ---
@@ -108,12 +116,15 @@
 | `removeTag` | `(world, id, tag) => void` | 移除 `tag`；无组件或不存在时为 no-op |
 | `hasTag` | `(world, id, tag) => boolean` | 是否携带 `tag`；**无组件视为 `false`** |
 
-### 3.4 `InputComponent`（新增字段）
+### 3.4 `InputComponent`（新增字段）→ M2-T02 更名 `PlayerInputComponent`
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `buttonDash` | `boolean` | `false` | 冲刺键是否按住（**持久**，由 `MovementSystem` 从 `keysHeld` 派生） |
+| `buttonDash` | `boolean` | `false` | 冲刺键是否按住（**持久**，由 `PlayerControllerSystem` 从 `keysHeld` 派生；M2-T02 起只存在于 `PlayerInputComponent`，且**不再**直接触发冲刺——触发源为 `IntentComponent.wantsToDash`） |
 
 导出常量 `DASH_KEY = 'dash'`（冲刺键名）。
+
+> **M2-T02**：`InputComponent` 更名为 `PlayerInputComponent`（仅玩家持有）；原 `MovementSystem.bindInput` 整段迁入
+> `PlayerControllerSystem`，随后由 `deriveIntent` 把上升沿 `buttonDashJustPressed` 写入 `IntentComponent.wantsToDash`。
 
 ### 3.5 `VelocityComponent`（新增字段）
 | 字段 | 类型 | 默认 | 说明 |
@@ -128,11 +139,13 @@
 ```
 IDLE   --(moveVector 非零)--> MOVING
 MOVING --(moveVector 为零)--> IDLE
-IDLE|MOVING --(buttonDash 且 cooldownRemaining === 0)--> DASHING
+IDLE|MOVING --(wantsToDash 且 cooldownRemaining === 0)--> DASHING
 DASHING --(ticksInState >= durationTicks)--> (moveVector 非零 ? MOVING : IDLE)
 ```
 - 进入 `DASHING` 由 `DashSystem` 执行（§5.3），退出由 `StateSystem` 执行（§5.4）。
-- `IDLE` 与 `MOVING` 之间的切换由 `StateSystem` 依据 `InputComponent.moveVector` 每 Tick 判定。
+  **M2-T02**：触发源为 `IntentComponent.wantsToDash`（脉冲）；且**仅** `IDLE`/`MOVING` 可进入——
+  `HITSTUN`/`ATTACKING` **不可被打断**（`DashSystem` 起手门控，见 §5.3）。
+- `IDLE` 与 `MOVING` 之间的切换由 `StateSystem` 依据 `IntentComponent.moveVector` 每 Tick 判定。
 - 每次状态切换 `ticksInState` 归 `0`；同状态持续则 `ticksInState += 1`。
 
 ### 4.2 冲刺语义（MUST）
@@ -151,6 +164,9 @@ DASHING --(ticksInState >= durationTicks)--> (moveVector 非零 ? MOVING : IDLE)
 ```
 MovementSystem  ->  DashSystem  ->  StateSystem
 ```
+> **M2-T02**：规范管道扩展为 `PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem -> StateSystem
+> -> CombatActionSystem -> CollisionSystem -> LifespanSystem`（见 `specs/04_combat_feedback_spec.md` §5.2）。
+> 本文件关注的**三段相对顺序 `Movement .. State` 一字不改**。
 
 顺序理由（**不得重排**，否则破坏 §6 时序契约）：
 1. `MovementSystem` 先跑，按**上一 Tick 决定的状态**积分 → 本 Tick 启动的冲刺从**下一 Tick** 开始位移，
@@ -159,6 +175,8 @@ MovementSystem  ->  DashSystem  ->  StateSystem
    它在移动之后（不能追溯改变本 Tick 位移），在状态机之前。
 3. `StateSystem` 最后跑，此时冲刺决策已就位，再推进 `ticksInState` —— 这使无敌窗口与冲刺前段对齐、
    并让冲刺恰在第 `durationTicks` 个 Tick 退出。
+   **因 `DashSystem` 早于 `StateSystem`，`StateSystem` 的 `HITSTUN`/`ATTACKING` 分支无法拦截冲刺起手——
+   故起手门控必须落在 `DashSystem` 自身（§5.3）。**
 
 ### 5.2 `MovementSystem`（修改）
 `name === 'MovementSystem'`，每 Tick 两阶段：
@@ -166,23 +184,33 @@ MovementSystem  ->  DashSystem  ->  StateSystem
 **bindInput（新增一行）**：原逻辑不变（`move` 覆盖 `moveVector`；`keyDown`/`keyUp` 维护升序 `keysHeld`），
 末尾追加 `input.buttonDash = input.keysHeld.includes(DASH_KEY)`。
 - `ctx.input` 为空时函数提前 return，**保留上一 Tick 的 `buttonDash`**（正确：按住状态跨空 Tick 持续）。
+- **M2-T02**：该阶段整段迁至 `PlayerControllerSystem.bindHardwareInput`（query 改为 `PlayerInputComponent`），
+  紧随其后由 `deriveIntent` 生成 `IntentComponent.wantsToDash = buttonDashJustPressed`（脉冲）。
 
-**integrate（分两路）**：对同时拥有 `InputComponent` + `VelocityComponent` + `TransformComponent` 的实体：
+**integrate（分两路）**：对同时拥有 `IntentComponent` + `VelocityComponent` + `TransformComponent` 的实体
+（M2-T02 起方向源为**意图**，硬件组件不再参与积分）：
 - 取可选 `StateComponent`；`dashing = state !== undefined && state.state === ActionState.DASHING`。
 - **dashing 路**：方向取 `velocity.directionVector`（由 `DashSystem` 锁定）；
   速度 `velocity.maxSpeed * velocity.speedMultiplier`；写入 `velocity.currentSpeed`；
-  位移 `transform.x/y += dir * currentSpeed * fixedDeltaSeconds`；**不读 `input.moveVector`、不重算 `facing`**。
-- **非 dashing 路**（M1-T01 行为，仅归一化改限幅）：`direction = clampMagnitude(input.moveVector, 1)`；
+  位移 `transform.x/y += dir * currentSpeed * fixedDeltaSeconds`；**不读 `intent.moveVector`、不重算 `facing`**。
+- **非 dashing 路**（M1-T01 行为，仅归一化改限幅）：`direction = clampMagnitude(intent.moveVector, 1)`；
   `moving = (direction ≠ 0)`；`currentSpeed = moving ? maxSpeed : 0`；写回 `velocity.directionVector`；
   `moving` 时积分并写 `transform.facingRadians = atan2(dir.y, dir.x)`。
 
 ### 5.3 `DashSystem`（新增）
-`name === 'DashSystem'`。对同时拥有 `Input` + `State` + `DashStats` + `Velocity` + `Transform` 的实体：
+`name === 'DashSystem'`。对同时拥有 `Intent` + `State` + `DashStats` + `Velocity` + `Transform` 的实体
+（**M2-T02**：query 由 `Input` 改为 `Intent`，并新增 `isFrozen` 跳过）。
+
+**通用（先于分支）**：**无条件**读后置 `false` 冲刺脉冲——
+`wantsToDash = intent.wantsToDash; intent.wantsToDash = false;`
+（脉冲**先消费、后门控** ⇒ 不可生效的脉冲被**丢弃**而非缓冲）。
 
 **非 DASHING 分支**：
 1. `if (dash.cooldownRemaining > 0) dash.cooldownRemaining -= 1;`
 2. `velocity.speedMultiplier = 1;`（清理，幂等）
-3. `if (input.buttonDash && dash.cooldownRemaining === 0) startDash(...)`
+3. **起手门控**：`inLocomotion = state.state === IDLE || state.state === MOVING;`
+   `if (wantsToDash && inLocomotion && dash.cooldownRemaining === 0) startDash(...)`
+   ——`HITSTUN`/`ATTACKING` **不可被打断**（**F1/F2 修复**；见 `specs/04_combat_feedback_spec.md` §5.1 / §8）。
 
 **DASHING 分支**：
 1. `if (dash.cooldownRemaining > 0) dash.cooldownRemaining -= 1;`
@@ -200,11 +228,12 @@ addTag(id, INVULNERABLE_TAG)
 ```
 
 ### 5.4 `StateSystem`（新增）
-`name === 'StateSystem'`。对每个拥有 `StateComponent` 的实体：
+`name === 'StateSystem'`。对每个拥有 `StateComponent` 的实体（**M2-T02**：移动判定改读 `IntentComponent.moveVector`，
+并新增 `isFrozen` 跳过；`HITSTUN` 分支见 `specs/04_combat_feedback_spec.md` §5.1）：
 - **DASHING**：`durationTicks = DashStats?.durationTicks ?? DEFAULT_DASH_DURATION_TICKS`；
-  若 `ticksInState >= durationTicks` → **退出**：`state = (input?.moveVector 非零 ? MOVING : IDLE)`、`ticksInState = 0`；
+  若 `ticksInState >= durationTicks` → **退出**：`state = (intent?.moveVector 非零 ? MOVING : IDLE)`、`ticksInState = 0`；
   否则 `ticksInState += 1`。
-- **其他状态**：`next = (input?.moveVector 非零) ? MOVING : IDLE`；
+- **其他状态**：`next = (intent?.moveVector 非零) ? MOVING : IDLE`；
   `next === state` → `ticksInState += 1`；否则切换并把 `ticksInState` 归 `0`。
 
 ### 5.5 实体过滤与顺序
@@ -216,6 +245,7 @@ addTag(id, INVULNERABLE_TAG)
 ## 6. 时序硬契约（逐 Tick，QA 将逐 Tick 断言）
 
 场景：`fps = 60`、`maxSpeed = 5`、`facingRadians = 0`、tick 0 注入 `keyDown('dash')` 并保持按住、无 move 输入。
+（**M2-T02**：触发为**边沿脉冲** `intent.wantsToDash`，故"保持按住"**不会**在冷却结束后自动再冲；见下方 tick 30 行与 §10 取舍 5。）
 
 | Tick | MovementSystem（integrate） | DashSystem | StateSystem | 时钟后 | `x` | `Invulnerable` | `state` |
 |---|---|---|---|---|---|---|---|
@@ -230,14 +260,14 @@ addTag(id, INVULNERABLE_TAG)
 | 16 | IDLE，无位移 | cd 15→14 | IDLE 持续 | 17 | 3.75 | ❌ | IDLE |
 | … | … | … | … | … | … | ❌ | IDLE |
 | 29 | 无位移 | cd 2→1 | — | 30 | 3.75 | ❌ | IDLE |
-| 30 | 无位移 | cd 1→0；buttonDash 且 cd===0 → startDash | 0 → 1 | 31 | 3.75 | ✅ | DASHING |
+| 30 | 无位移 | cd 1→0；**无新脉冲**（键自 tick 0 保持按住，边沿已耗）→ **不起手** | IDLE 持续 | 31 | 3.75 | ❌ | IDLE |
 
 **由该表派生的可断言事实（MUST）**：
 1. tick 0 冲刺启动，`Invulnerable` 挂上；**tick 0 无位移**。
 2. 冲刺位移发生在 **tick 1..15 共 15 个 Tick**，速度 `3 × maxSpeed`，方向 = 锁定面朝方向。
 3. 每步 `step(1)` 后：时钟 **1..12** `hasTag('Invulnerable') === true`；时钟 **13..15** 为 `false`。
 4. tick 15 的 `StateSystem` 之后状态回到 `IDLE`（若按住方向则 `MOVING`）。
-5. `cooldownRemaining` 在 **tick 30 归 0**，tick 30 可再次冲刺（按住键则自动再冲）。
+5. `cooldownRemaining` 在 **tick 30 归 0**；**但按住不自动再冲**——须**松开再按**产生新脉冲方可再次冲刺（边沿触发，见 §10 取舍 5）。
 6. facing=0 时冲刺总位移 `= 15 × (1/60) × 3 × maxSpeed`（maxSpeed=5 → **3.75**）；
    同 15 Tick 普通行走仅 `15 × (1/60) × 5 = 1.25`，比值 **3×**。
 
@@ -250,7 +280,7 @@ addTag(id, INVULNERABLE_TAG)
 | **AC-01** | 状态机存在 | 组装后实体拥有 `StateComponent`；`ActionState` 含 `IDLE`/`MOVING`/`DASHING` 三值 | 必达（派发要求） |
 | **AC-02** | 冲刺进入与方向锁定 | tick 0 `keyDown('dash')` ⇒ `DASHING`，持续 **15 Tick**；期间注入 `move` 不改变方向（`directionVector` 保持锁定值、`facing` 不变） | 必达（派发要求） |
 | **AC-03** | 前段无敌 | 冲刺前 **12 Tick** 携带 `Invulnerable`：时钟 1..12 `hasTag===true`，13..15 `===false` | 必达（派发要求） |
-| **AC-04** | 冷却 30 Tick | 冷却 30 Tick（0.5 s）；冷却期间忽略冲刺输入；tick 30 `cooldownRemaining` 归 0 且可再次冲刺 | 必达（派发要求） |
+| **AC-04** | 冷却 30 Tick | 冷却 30 Tick（0.5 s）；冷却期间忽略冲刺输入；tick 30 `cooldownRemaining` 归 0 且可再次冲刺（**须松开再按**——边沿触发，见 §10 取舍 5） | 必达（派发要求） |
 | **AC-05** | 速度显著更高 | 冲刺速度 = `3 × maxSpeed`；15 Tick 冲刺位移 3.75 对同 Tick 行走 1.25（比值 3） | 必达（派发要求） |
 | AC-06 | 确定性回放 | 同输入序列跑两个独立 Simulator，最终 Snapshot `toEqual` 一致 | 保障门 |
 | AC-07 | 状态机无卡死 | `DASHING` 必在 `durationTicks` 内退出；`IDLE`/`MOVING` 随输入正确切换；`ticksInState` 单调、切换归 0 | 保障门 |
@@ -273,17 +303,20 @@ addTag(id, INVULNERABLE_TAG)
 | `speedMultiplier` 未复位 | 退出冲刺后仍超速 | 非 DASHING 分支每 Tick 置 `1`（幂等） |
 | 硬编码 `1/60` | 换 fps 后冲刺位移错 | 取 `ctx.fixedDeltaSeconds` |
 | 无敌窗口越界 | `invulnerableTicks > durationTicks` | `PlayerFactory` 校验抛 `RangeError` |
+| 冲刺起手未门控 `HITSTUN`/`ATTACKING`（**F1/F2**） | 受击者冲刺**逃出硬直**、攻击承诺被**冲刺取消** | `DashSystem` 起手**仅允许自 `IDLE`/`MOVING` 进入**（§5.3）；脉冲无条件消费后丢弃；`feedback.test.ts` G6 回归断言 |
 
 ---
 
 ## 9. 追溯（Traceability）
 
-- **本 Spec → 测试**：`tests/combat/dash.test.ts`（AC-01…AC-07，由 QA 严守真编写）；AC-08 由 CI 静态门 + `npm run typecheck` 覆盖。
-- **本 Spec → 实现**：
+- **本 Spec → 测试**：`tests/combat/dash.test.ts`（AC-01…AC-07，由 QA 严守真编写；**G2 已固化为上升沿触发**——按住不自动连冲）；AC-08 由 CI 静态门 + `npm run typecheck` 覆盖。
+  M2-T02 的冲刺状态门控（F1/F2）由 `tests/combat/feedback.test.ts` G6 回归断言。
+- **本 Spec → 实现**（**M2-T02** 增补见括号）：
   - `src/ecs/components/{StateComponent,DashStatsComponent,TagComponent}.ts`（新增）
-  - `src/ecs/components/{InputComponent,VelocityComponent}.ts`（扩展）
-  - `src/ecs/systems/{DashSystem,StateSystem,pipeline}.ts`（新增）
-  - `src/ecs/systems/MovementSystem.ts`（扩展）
+  - `src/ecs/components/{InputComponent,VelocityComponent}.ts`（扩展；**M2-T02：`InputComponent` → `PlayerInputComponent`**）
+  - `src/ecs/components/IntentComponent.ts`（**M2-T02 新增**：冲刺触发源 `wantsToDash`）
+  - `src/ecs/systems/{DashSystem,StateSystem,pipeline}.ts`（新增；**M2-T02：`DashSystem` query 改 `IntentComponent` + 起手门控**）
+  - `src/ecs/systems/{MovementSystem,PlayerControllerSystem}.ts`（扩展；**M2-T02：`bindInput` 迁至 `PlayerControllerSystem`**）
   - `src/ecs/prefabs/PlayerFactory.ts`（组装扩展）
 - **契约依赖登记**：`specs/01_character_controller_spec.md` §4.2/§10（rev.2，归一化 → 限幅）。
 - 变更本 Spec 须同步更新测试与实现。
@@ -301,8 +334,10 @@ addTag(id, INVULNERABLE_TAG)
    采取惰性挂载；`hasTag` 对无组件实体返回 `false`。若未来要求"标签必须显式声明组件"，可收紧为 no-op。
 4. **`MovementSystem` 承载 dash 分支**：M1-T01 已把输入绑定与运动学合并；本次在 `integrate` 内分两路而非抽新系统，
    保持"一个积分点"。当 M2 引入攻击/技能位移后，应评估抽出统一的 `LocomotionSystem`。
-5. **`buttonDash` 为电平（held）而非边沿（pressed）**：本 Spec 以"按住即持续尝试冲刺"建模，
-   冷却一结束自动再冲。若需"必须松开再按"的严格边沿语义，需在 `InputComponent` 增加 `buttonDashPressed` 上升沿标记。
+5. **冲刺触发已由电平（held）改为边沿（pressed）**：本 Spec 初版以"按住即持续尝试冲刺"建模
+   （冷却一结束自动再冲）。**自 M2-T01 起**改为**上升沿**触发（`buttonDashJustPressed`），M2-T02 进一步
+   以逻辑意图脉冲 `IntentComponent.wantsToDash` 承载——**按住不再自动连冲，须松开再按**
+   （见 §6 tick 30 行、§7 AC-04 与 `tests/combat/dash.test.ts` G2）。
 
 ---
 
@@ -311,3 +346,4 @@ addTag(id, INVULNERABLE_TAG)
 | 版本 | 日期 | 作者 | 变更 |
 |---|---|---|---|
 | rev.1 | 2026-09-28 | 程基岩 | 初版（M1-T02）：冲刺 + 动作状态机，AC-01…AC-08 |
+| rev.2 | 2026-09-28 | 程基岩 | **M2-T02 同步**：触发源 `buttonDash`（硬件电平）→ `IntentComponent.wantsToDash`（逻辑脉冲，单 Tick）；`InputComponent.moveVector` → `IntentComponent.moveVector`；类名 `InputComponent` → `PlayerInputComponent`；**显式固化**冲刺起手门控"仅 `IDLE`/`MOVING`"（F1/F2 修复，§4.1/§5.3/§8）；**订正** §6 tick 30 行 / §7 AC-04 / §10 取舍 5——触发为**边沿**，"按住不再自动连冲"（与 `dash.test.ts` G2 一致）。逻辑与数值不变 |

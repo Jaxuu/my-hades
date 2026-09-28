@@ -32,7 +32,7 @@ import {
   DEFAULT_DASH_SPEED_MULTIPLIER,
   GameSimulator,
   hasTag,
-  InputComponent,
+  PlayerInputComponent,
   INVULNERABLE_TAG,
   PlayerFactory,
   StateComponent,
@@ -95,9 +95,9 @@ function tagsOf(rig: Rig): readonly string[] {
   return c.tags;
 }
 
-function inputOf(rig: Rig): InputComponent {
-  const c = rig.sim.world.getComponent(rig.player, InputComponent);
-  if (c === undefined) throw new Error('QA: player is missing InputComponent');
+function inputOf(rig: Rig): PlayerInputComponent {
+  const c = rig.sim.world.getComponent(rig.player, PlayerInputComponent);
+  if (c === undefined) throw new Error('QA: player is missing PlayerInputComponent');
   return c;
 }
 
@@ -119,15 +119,21 @@ describe('G0 · assembly and tuning constants (AC-01 support)', () => {
     expect(rig.sim.world.hasComponent(rig.player, StateComponent)).toBe(true);
     expect(rig.sim.world.hasComponent(rig.player, DashStatsComponent)).toBe(true);
     expect(rig.sim.world.hasComponent(rig.player, TagComponent)).toBe(true);
-    expect(rig.sim.world.hasComponent(rig.player, InputComponent)).toBe(true);
+    expect(rig.sim.world.hasComponent(rig.player, PlayerInputComponent)).toBe(true);
 
     expect(stateOf(rig).state).toBe(ActionState.IDLE);
     expect(stateOf(rig).ticksInState).toBe(0);
     expect(isInvulnerable(rig)).toBe(false);
   });
 
-  it('exposes exactly the four ActionState values (M2-T01 adds ATTACKING)', () => {
-    expect(Object.values(ActionState).sort()).toEqual(['ATTACKING', 'DASHING', 'IDLE', 'MOVING']);
+  it('exposes exactly the five ActionState values (M2-T02 adds HITSTUN)', () => {
+    expect(Object.values(ActionState).sort()).toEqual([
+      'ATTACKING',
+      'DASHING',
+      'HITSTUN',
+      'IDLE',
+      'MOVING',
+    ]);
   });
 
   it('exposes a one-tick-wide dash edge flag next to the persistent held level', () => {

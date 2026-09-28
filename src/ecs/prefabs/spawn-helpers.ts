@@ -12,7 +12,8 @@
 
 import type { EntityId } from '../Entity';
 import type { World } from '../World';
-import { InputComponent } from '../components/InputComponent';
+import { PlayerInputComponent } from '../components/PlayerInputComponent';
+import { IntentComponent } from '../components/IntentComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
 import { StateComponent } from '../components/StateComponent';
@@ -101,7 +102,17 @@ export interface CombatantSpawnOptions {
 
 /**
  * Assemble a combatant entity owning the full M2 component set:
- * Transform + Velocity + Input + State + DashStats + Tag + Faction + Health + Hurtbox.
+ * Transform + Velocity + Intent + State + DashStats + Tag + Faction + Health + Hurtbox.
+ *
+ * Every combatant owns an `IntentComponent` — the logical-intent seam that every
+ * gameplay system reads (M2-T02). The raw HARDWARE component (`PlayerInputComponent`)
+ * is added ONLY when `hardwareInput` is true, i.e. for the player: enemies are
+ * intent-driven by AI / scripts and must never carry an input device (this is what
+ * root-fixed spec 03 §10 trade-off 4 — one global input frame driving every entity).
+ *
+ * Keeping the whole assembly here (rather than letting each factory build its own
+ * component list) preserves the "assembly lives in exactly one place" invariant, so
+ * the player and enemy prefabs can never drift apart.
  *
  * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` is not a positive
  *   finite number, if `hp` falls outside `[0, maxHp]`, or if any dash override is
@@ -111,6 +122,7 @@ export function spawnCombatant(
   world: World,
   faction: Faction,
   options: CombatantSpawnOptions = {},
+  hardwareInput = false,
 ): EntityId {
   const maxSpeed = options.maxSpeed ?? DEFAULT_COMBATANT_MAX_SPEED;
   assertPositiveFinite(maxSpeed, 'maxSpeed');
@@ -133,7 +145,10 @@ export function spawnCombatant(
     new TransformComponent(options.x ?? 0, options.y ?? 0, options.facingRadians ?? 0),
   );
   world.addComponent(entity.id, new VelocityComponent(maxSpeed));
-  world.addComponent(entity.id, new InputComponent());
+  world.addComponent(entity.id, new IntentComponent());
+  if (hardwareInput) {
+    world.addComponent(entity.id, new PlayerInputComponent());
+  }
   world.addComponent(entity.id, new StateComponent());
   world.addComponent(
     entity.id,

@@ -1,11 +1,20 @@
 /**
  * StateSystem — the ActionState machine.
- * See specs/02_dash_and_state_spec.md §5.3.
+ * See specs/02_dash_and_state_spec.md §5.3 and specs/04_combat_feedback_spec.md §4.7.
  *
- * Pipeline position: runs LAST, after MovementSystem and DashSystem, so it
- * advances `ticksInState` only once the dash entry / invulnerability decisions
- * for this tick are already applied. This keeps the dash duration (15 ticks) and
- * the invulnerability span (leading 12 ticks) aligned with the movement ticks.
+ * Pipeline position: runs LAST of the movement trio, after MovementSystem and
+ * DashSystem, so it advances `ticksInState` only once the dash entry /
+ * invulnerability decisions for this tick are already applied. This keeps the dash
+ * duration (15 ticks) and the invulnerability span (leading 12 ticks) aligned with
+ * the movement ticks.
+ *
+ * `moving` is derived from the entity's `IntentComponent.moveVector` (not the
+ * hardware component), so enemies with no input device still transition
+ * IDLE <-> MOVING correctly.
+ *
+ * Frozen entities are skipped entirely (spec 04 §4.7): hitstop pauses the state
+ * machine, so `ticksInState` is preserved across the freeze and RESUMES from where
+ * it stopped (spec 04 AC-02).
  *
  * Holds NO cross-tick hidden state: the machine is fully described by
  * `StateComponent.state` / `StateComponent.ticksInState` (spec 00 §6.1).
@@ -13,19 +22,40 @@
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
-import { ActionState, DEFAULT_ATTACK_DURATION_TICKS, StateComponent } from '../components/StateComponent';
+import {
+  ActionState,
+  DEFAULT_ATTACK_DURATION_TICKS,
+  DEFAULT_HITSTUN_TICKS,
+  StateComponent,
+} from '../components/StateComponent';
 import { DEFAULT_DASH_DURATION_TICKS, DashStatsComponent } from '../components/DashStatsComponent';
-import { InputComponent } from '../components/InputComponent';
+import { IntentComponent } from '../components/IntentComponent';
+import { isFrozen } from '../components/FreezeComponent';
 
 export class StateSystem implements System {
   public readonly name = 'StateSystem';
 
   public update(world: World, _ctx: SystemContext): void {
     for (const id of world.query(StateComponent)) {
+      if (isFrozen(world, id)) continue;
+
       const state = world.getComponent(id, StateComponent);
       if (state === undefined) continue;
-      const input = world.getComponent(id, InputComponent);
-      const moving = input !== undefined && (input.moveVector.x !== 0 || input.moveVector.y !== 0);
+      const intent = world.getComponent(id, IntentComponent);
+      const moving = intent !== undefined && (intent.moveVector.x !== 0 || intent.moveVector.y !== 0);
+
+      // HITSTUN is the highest-priority interrupt: it pre-empts DASHING and
+      // ATTACKING and holds for DEFAULT_HITSTUN_TICKS before control returns to
+      // locomotion. It is entered by CollisionSystem, not here.
+      if (state.state === ActionState.HITSTUN) {
+        if (state.ticksInState >= DEFAULT_HITSTUN_TICKS) {
+          state.state = moving ? ActionState.MOVING : ActionState.IDLE;
+          state.ticksInState = 0;
+        } else {
+          state.ticksInState += 1;
+        }
+        continue;
+      }
 
       if (state.state === ActionState.DASHING) {
         const dash = world.getComponent(id, DashStatsComponent);

@@ -1,0 +1,122 @@
+/**
+ * PlayerControllerSystem — hardware input -> logical intent.
+ * See specs/04_combat_feedback_spec.md §4.1 / §5.1.
+ *
+ * Pipeline position: FIRST, before FreezeSystem and every per-entity advance
+ * system. It takes over the `bindInput` phase that used to live inside
+ * MovementSystem (M2-T02 architecture refactor): the hardware layer is bound to
+ * the PLAYER's `PlayerInputComponent` and then translated into an
+ * `IntentComponent` that every gameplay system reads instead of the device.
+ *
+ * Two phases, executed in this order every tick:
+ *
+ *  1. `bindHardwareInput` — the former MovementSystem.bindInput, moved verbatim.
+ *     Only entities owning `PlayerInputComponent` (i.e. the player) participate,
+ *     so the old "one global input frame drives every entity" cross-response is
+ *     gone (spec 03 §10 trade-off 4 — now root-fixed).
+ *
+ *  2. `deriveIntent` — for every entity owning BOTH `PlayerInputComponent` and
+ *     `IntentComponent`, copy the persistent stick vector across and raise the
+ *     single-tick dash / attack pulses from the rising-edge flags. Enemies own an
+ *     `IntentComponent` but no `PlayerInputComponent`, so their intent is written
+ *     by AI / scripts instead of being derived here.
+ *
+ * Holds NO cross-tick hidden state: the persistent bits live on
+ * `PlayerInputComponent` (keysHeld / moveVector), the pulses live on
+ * `IntentComponent` (spec 00 §6.1).
+ */
+
+import type { System, SystemContext } from '../System';
+import type { World } from '../World';
+import { ATTACK_KEY, DASH_KEY, PlayerInputComponent } from '../components/PlayerInputComponent';
+import { IntentComponent } from '../components/IntentComponent';
+
+export class PlayerControllerSystem implements System {
+  public readonly name = 'PlayerControllerSystem';
+
+  public update(world: World, ctx: SystemContext): void {
+    this.bindHardwareInput(world, ctx);
+    this.deriveIntent(world);
+  }
+
+  /**
+   * Phase 1 — bind the tick's input frame onto the PLAYER's hardware component.
+   * `move` overwrites the stick vector; `keyDown`/`keyUp` maintain the held-key set.
+   *
+   * Both LEVEL and EDGE flags are re-derived from the held-key set on EVERY tick,
+   * including ticks with an empty input frame:
+   *  - level (`buttonDash` / `buttonAttack`) mirrors `keysHeld`, so a held key keeps
+   *    reading as pressed on empty ticks — the previous value is preserved because
+   *    `keysHeld` is untouched when there are no events;
+   *  - edge (`buttonDashJustPressed` / `buttonAttackJustPressed`) is a transition of
+   *    the held-key set: released-before AND held-after. It is therefore true for
+   *    exactly one tick, which is what makes dash/attack fire once per press
+   *    (specs/03_combat_hitbox_spec.md §3.6, §4.3).
+   */
+  private bindHardwareInput(world: World, ctx: SystemContext): void {
+    for (const id of world.query(PlayerInputComponent)) {
+      const input = world.getComponent(id, PlayerInputComponent);
+      if (input === undefined) continue;
+
+      // Snapshot the held state BEFORE this tick's events, so the edge flags can
+      // be derived from the "released -> held" transition.
+      const wasDashHeld = input.keysHeld.includes(DASH_KEY);
+      const wasAttackHeld = input.keysHeld.includes(ATTACK_KEY);
+
+      if (ctx.input.length > 0) {
+        let keysChanged = false;
+        for (const event of ctx.input) {
+          switch (event.kind) {
+            case 'move':
+              input.moveVector = event.vector;
+              break;
+            case 'keyDown':
+              if (!input.keysHeld.includes(event.key)) {
+                input.keysHeld.push(event.key);
+                keysChanged = true;
+              }
+              break;
+            case 'keyUp': {
+              const at = input.keysHeld.indexOf(event.key);
+              if (at !== -1) {
+                input.keysHeld.splice(at, 1);
+                keysChanged = true;
+              }
+              break;
+            }
+          }
+        }
+        // Keep the held-key set ordered so snapshots stay deterministic.
+        if (keysChanged) input.keysHeld.sort();
+      }
+
+      const dashHeld = input.keysHeld.includes(DASH_KEY);
+      const attackHeld = input.keysHeld.includes(ATTACK_KEY);
+
+      input.buttonDash = dashHeld;
+      input.buttonDashJustPressed = dashHeld && !wasDashHeld;
+      input.buttonAttack = attackHeld;
+      input.buttonAttackJustPressed = attackHeld && !wasAttackHeld;
+    }
+  }
+
+  /**
+   * Phase 2 — translate the player's hardware snapshot into logical intent.
+   *
+   * `moveVector` is copied (persistent semantics); the dash / attack pulses are
+   * raised from the rising-edge flags only. Consumers clear the pulses after their
+   * gate check, so they are one-tick wide unless a freeze suppresses the consumer
+   * (in which case FreezeSystem clears them instead).
+   */
+  private deriveIntent(world: World): void {
+    for (const id of world.query(PlayerInputComponent, IntentComponent)) {
+      const input = world.getComponent(id, PlayerInputComponent);
+      const intent = world.getComponent(id, IntentComponent);
+      if (input === undefined || intent === undefined) continue;
+
+      intent.moveVector = input.moveVector;
+      intent.wantsToDash = input.buttonDashJustPressed;
+      intent.wantsToAttack = input.buttonAttackJustPressed;
+    }
+  }
+}

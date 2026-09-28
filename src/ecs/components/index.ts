@@ -1,6 +1,7 @@
 export * from './TransformComponent';
 export * from './VelocityComponent';
-export * from './InputComponent';
+export * from './PlayerInputComponent';
+export * from './IntentComponent';
 export * from './StateComponent';
 export * from './DashStatsComponent';
 export * from './TagComponent';
@@ -8,3 +9,5 @@ export * from './HealthComponent';
 export * from './FactionComponent';
 export * from './HurtboxComponent';
 export * from './HitboxComponent';
+export * from './FreezeComponent';
+export * from './KnockbackComponent';

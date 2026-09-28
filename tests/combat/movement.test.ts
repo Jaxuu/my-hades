@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest';
 import { GameSimulator } from '../../src/core/GameSimulator';
 import { vec2 } from '../../src/core/math';
 import type { EntityId } from '../../src/ecs/Entity';
-import { InputComponent } from '../../src/ecs/components/InputComponent';
+import { PlayerInputComponent } from '../../src/ecs/components/PlayerInputComponent';
 import { TransformComponent } from '../../src/ecs/components/TransformComponent';
 import { VelocityComponent } from '../../src/ecs/components/VelocityComponent';
 import { PlayerFactory } from '../../src/ecs/prefabs/PlayerFactory';
+import { PlayerControllerSystem } from '../../src/ecs/systems/PlayerControllerSystem';
 import { MovementSystem } from '../../src/ecs/systems/MovementSystem';
 
 const FPS = 60;
@@ -30,7 +31,10 @@ interface Rig {
 function makeRig(options: { fps?: number; maxSpeed?: number } = {}): Rig {
   const sim = new GameSimulator({
     fps: options.fps ?? FPS,
-    systems: [new MovementSystem()],
+    // M2-T02: PlayerControllerSystem (hardware -> intent) now runs BEFORE
+    // MovementSystem, which itself only integrates. Both are needed for input to
+    // reach the transform.
+    systems: [new PlayerControllerSystem(), new MovementSystem()],
   });
   const player = PlayerFactory.spawn(sim.world, { maxSpeed: options.maxSpeed ?? MAX_SPEED });
   return { sim, player };
@@ -49,12 +53,12 @@ function velocityOf(rig: Rig): VelocityComponent {
 }
 
 describe('AC-01 · player assembly', () => {
-  it('spawns a player owning Transform + Velocity + Input components', () => {
+  it('spawns a player owning Transform + Velocity + PlayerInput components', () => {
     const rig = makeRig();
 
     expect(rig.sim.world.hasComponent(rig.player, TransformComponent)).toBe(true);
     expect(rig.sim.world.hasComponent(rig.player, VelocityComponent)).toBe(true);
-    expect(rig.sim.world.hasComponent(rig.player, InputComponent)).toBe(true);
+    expect(rig.sim.world.hasComponent(rig.player, PlayerInputComponent)).toBe(true);
     expect(velocityOf(rig).maxSpeed).toBe(MAX_SPEED);
   });
 
@@ -219,13 +223,15 @@ describe('AC-06 · determinism and snapshot observability', () => {
     rig.sim.inject({ kind: 'keyUp', tick: 10, key: 'dash' });
     rig.sim.step(1);
 
-    expect(rig.sim.world.getComponent(rig.player, InputComponent)?.keysHeld).toEqual([
+    expect(rig.sim.world.getComponent(rig.player, PlayerInputComponent)?.keysHeld).toEqual([
       'attack',
       'dash',
     ]);
 
     rig.sim.step(10);
-    expect(rig.sim.world.getComponent(rig.player, InputComponent)?.keysHeld).toEqual(['attack']);
+    expect(rig.sim.world.getComponent(rig.player, PlayerInputComponent)?.keysHeld).toEqual([
+      'attack',
+    ]);
   });
 
   it('exposes the moved transform through the read-only snapshot', () => {

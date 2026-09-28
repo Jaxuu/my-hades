@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   verify:
-    name: typecheck + tests + pure-logic gate
+    name: typecheck + tests + lint
     runs-on: ubuntu-latest
 
     steps:
@@ -68,16 +68,14 @@ jobs:
       # ADR-001 rules R1 + R2: the simulation core must stay headless and
       # wall-clock free, otherwise determinism and replay silently break.
       #
-      # The pattern is deliberately narrow (M2-T01 tech-debt fix): it matches
-      # actual ACCESSES only — a trailing dot for browser globals and a trailing
-      # call for wall-clock/randomness — instead of the bare words. The previous
-      # `\b(document|window|...)\b` form false-positived on ordinary prose in
-      # comments (e.g. the word "window"), which forced comment-wording gymnastics.
-      - name: Pure-logic gate (no DOM / wall-clock / randomness in src/)
-        run: |
-          set -euo pipefail
-          if grep -rnE '\b(window\.|document\.|Date\.now\(\)|Math\.random\(\))' src/ ; then
-            echo "::error::src/ must stay headless — browser global or wall-clock access detected (ADR-001 R1/R2)."
-            exit 1
-          fi
-          echo "OK: src/ contains no DOM, wall-clock or randomness access."
+      # M2-T02 tech-debt fix: this gate was previously a `grep -rnE` over src/ that
+      # matched a REGEX against raw text. That false-positived on ordinary prose in
+      # comments (e.g. a sentence ending in "window."), forcing comment-wording
+      # gymnastics. It is now an ESLint AST gate (eslint.config.mjs) scoped to
+      # `src/**/*.ts`: no-restricted-globals (window, document),
+      # no-restricted-properties (Math.random, Date.now) and no-restricted-syntax
+      # (new Date()). AST nodes cannot be confused with comments, so the gate is
+      # both precise and false-positive free, while the four prohibitions are
+      # strictly preserved.
+      - name: Lint (ESLint AST gate — no DOM / wall-clock / randomness in src/)
+        run: npm run lint

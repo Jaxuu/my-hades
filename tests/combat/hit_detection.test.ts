@@ -1,16 +1,23 @@
 /**
  * M2-T01 · Combat hit-detection acceptance tests.
- * See specs/03_combat_hitbox_spec.md §6 (tick-by-tick contract) and §7 (AC-01 .. AC-06).
+ * See specs/03_combat_hitbox_spec.md §6 (tick-by-tick contract) and §7 (AC-01 .. AC-06),
+ * and specs/04_combat_feedback_spec.md §6 for the M2-T02 hit-feedback additions.
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical pipeline (MovementSystem -> DashSystem -> StateSystem ->
- * CombatActionSystem -> CollisionSystem -> LifespanSystem) and REAL prefab-assembled
- * entities (PlayerFactory / EnemyFactory). Nothing is mocked, and ticks are advanced
- * one at a time so the timing contract is pinned per tick rather than only at the end.
+ * canonical pipeline (PlayerControllerSystem -> FreezeSystem -> MovementSystem ->
+ * DashSystem -> StateSystem -> CombatActionSystem -> CollisionSystem ->
+ * LifespanSystem) and REAL prefab-assembled entities (PlayerFactory /
+ * EnemyFactory). Nothing is mocked, and ticks are advanced one at a time so the
+ * timing contract is pinned per tick rather than only at the end.
  *
  * Geometry used throughout (see spec 03 §6 for the derivation):
  *   player at (0, 0) facing +x  ->  attack hitbox centred at (0.75, 0), radius 1.0
  *   enemy hurtbox radius 0.5    ->  overlap iff centre distance < 1.5
+ *
+ * M2-T02 revision: enemies no longer own a hardware input component, so the enemy
+ * dash is driven DIRECTLY through its `IntentComponent` (see {@link armEnemyDash})
+ * instead of a global key press. This is the decoupled way and removes the old
+ * cross-response where one key press made BOTH player and enemy dash.
  *
  * Grouping:
  *   G0 · combatant assembly + faction rules          (AC-01 support)
@@ -27,6 +34,7 @@ import {
   DEFAULT_ATTACK_DAMAGE,
   DEFAULT_ATTACK_HITBOX_LIFESPAN_TICKS,
   DEFAULT_ATTACK_HITBOX_RADIUS,
+  DEFAULT_HITSTOP_TICKS,
   DEFAULT_HURTBOX_RADIUS,
   DEFAULT_MAX_HP,
   EnemyFactory,
@@ -36,6 +44,7 @@ import {
   HealthComponent,
   HitboxComponent,
   HurtboxComponent,
+  IntentComponent,
   INVULNERABLE_TAG,
   PlayerFactory,
   StateComponent,
@@ -136,6 +145,22 @@ function distanceToPoint(rig: Rig, x: number, y: number, targetId: EntityId): nu
   return Math.hypot(targetTransform.x - x, targetTransform.y - y);
 }
 
+/**
+ * Arm the ENEMY's dash intent pulse for the NEXT tick.
+ *
+ * Since M2-T02 the enemy owns no `PlayerInputComponent`, so a test cannot drive it
+ * with a key event any more. It must raise the logical intent directly — which is
+ * exactly how an AI would drive the enemy, and which also removes the old
+ * cross-response (a global key press used to make BOTH the player and the enemy
+ * dash). The caller must first advance the clock to the tick BEFORE the intended
+ * dash tick; the following `step` then lets DashSystem consume the pulse.
+ */
+function armEnemyDash(rig: Rig): void {
+  const intent = rig.sim.world.getComponent(rig.enemy, IntentComponent);
+  if (intent === undefined) throw new Error('QA: enemy is missing IntentComponent');
+  intent.wantsToDash = true;
+}
+
 /* ------------------------------------------------------------------ *
  * G0 · combatant assembly + faction rules                             *
  * ------------------------------------------------------------------ */
@@ -204,8 +229,16 @@ describe('G1 · hit detection, multi-hit guard and lifespan (AC-02, AC-03, AC-05
     rig.sim.step(1); // tick 0 — the hit lands
     expect(hpOf(rig, rig.enemy)).toBe(DEFAULT_MAX_HP - DEFAULT_ATTACK_DAMAGE);
 
-    rig.sim.step(10); // the circle keeps overlapping for many more ticks
-    expect(centreDistance(rig, onlyPlayerHitbox(rig), rig.enemy)).toBeLessThan(OVERLAP_REACH);
+    // The circle keeps overlapping the hitstop-frozen enemy for the whole freeze
+    // (M2-T02: the enemy cannot move while frozen).
+    const hitbox = onlyPlayerHitbox(rig);
+    rig.sim.step(DEFAULT_HITSTOP_TICKS); // ticks 1..4 — frozen, so the enemy has not moved
+    expect(centreDistance(rig, hitbox, rig.enemy)).toBeLessThan(OVERLAP_REACH);
+    expect(hpOf(rig, rig.enemy)).toBe(DEFAULT_MAX_HP - DEFAULT_ATTACK_DAMAGE);
+
+    // Knockback then carries the enemy out of reach, but the hp never drops a
+    // second time: the multi-hit guard is per (hitbox, target).
+    rig.sim.step(10);
     expect(hpOf(rig, rig.enemy)).toBe(DEFAULT_MAX_HP - DEFAULT_ATTACK_DAMAGE);
   });
 
@@ -244,9 +277,10 @@ describe('G2 · invulnerability consumption (AC-04)', () => {
     // Enemy starts 1.9 units up-field and dashes DOWN into the player's hitbox.
     const rig = makeRig(0, 1.9, ENEMY_FACING_BACK);
     rig.sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
-    rig.sim.inject({ kind: 'keyDown', tick: 1, key: DASH_KEY }); // enemy dash starts on tick 1
+    rig.sim.step(1); // tick 0 — the player's hitbox spawns
+    armEnemyDash(rig); // the enemy dash starts on tick 1
 
-    rig.sim.step(6); // ticks 0..5 — mid-dash, inside the i-frame window
+    rig.sim.step(5); // ticks 1..5 — mid-dash, inside the i-frame window
     expect(rig.sim.tick).toBe(6);
     expect(hasTag(rig.sim.world, rig.enemy, INVULNERABLE_TAG)).toBe(true);
     expect(stateOf(rig, rig.enemy).state).toBe(ActionState.DASHING);
@@ -266,9 +300,10 @@ describe('G2 · invulnerability consumption (AC-04)', () => {
     // so the first overlap of the whole scenario is a damaging one.
     const rig = makeRig(0, 4.4, ENEMY_FACING_BACK);
     rig.sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
-    rig.sim.inject({ kind: 'keyDown', tick: 1, key: DASH_KEY });
+    rig.sim.step(1); // tick 0 — the player's hitbox spawns
+    armEnemyDash(rig); // the enemy dash starts on tick 1
 
-    rig.sim.step(14); // ticks 0..13 — the tag is dropped ON tick 13, enemy still out of reach
+    rig.sim.step(13); // ticks 1..13 — the tag is dropped ON tick 13, enemy still out of reach
     expect(hasTag(rig.sim.world, rig.enemy, INVULNERABLE_TAG)).toBe(false);
     expect(stateOf(rig, rig.enemy).state).toBe(ActionState.DASHING); // still in dash recovery
     const hitboxTransform = rig.sim.world.getComponent(onlyPlayerHitbox(rig), TransformComponent);
@@ -289,9 +324,10 @@ describe('G2 · invulnerability consumption (AC-04)', () => {
   it('AC-04 · an i-frame hit is ignored entirely, so the SAME hitbox still connects later', () => {
     const rig = makeRig(0, 1.9, ENEMY_FACING_BACK);
     rig.sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
-    rig.sim.inject({ kind: 'keyDown', tick: 1, key: DASH_KEY });
+    rig.sim.step(1); // tick 0 — the player's hitbox spawns
+    armEnemyDash(rig); // the enemy dash starts on tick 1
 
-    rig.sim.step(13); // ticks 0..12 — the WHOLE i-frame window is overlapped
+    rig.sim.step(12); // ticks 1..12 — the WHOLE i-frame window is overlapped
     expect(hpOf(rig, rig.enemy)).toBe(DEFAULT_MAX_HP);
 
     const hitboxId = onlyPlayerHitbox(rig);
@@ -315,7 +351,7 @@ describe('G3 · deterministic replay (AC-06)', () => {
     const runScript = (): Snapshot[] => {
       const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-      EnemyFactory.spawn(sim.world, {
+      const enemy = EnemyFactory.spawn(sim.world, {
         x: 0,
         y: 1.9,
         facingRadians: ENEMY_FACING_BACK,
@@ -323,15 +359,25 @@ describe('G3 · deterministic replay (AC-06)', () => {
       });
 
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
-      sim.inject({ kind: 'keyDown', tick: 1, key: DASH_KEY });
+      // Dash entry is gated to IDLE/MOVING (spec 02 §4.1), so a dash pressed while
+      // the player is ATTACKING is dropped. The attack opened on tick 0 exits on
+      // tick 17 (12 counts + 4 frozen + the entry tick), so press the dash at the
+      // first legal tick afterwards — keeping the script a REAL dash replay.
+      sim.inject({ kind: 'keyDown', tick: 18, key: DASH_KEY }); // player dash starts on tick 18
       sim.inject({ kind: 'move', tick: 4, vector: vec2(0, -1) });
-      sim.inject({ kind: 'keyUp', tick: 10, key: DASH_KEY });
+      sim.inject({ kind: 'keyUp', tick: 28, key: DASH_KEY });
       sim.inject({ kind: 'keyDown', tick: 20, key: ATTACK_KEY });
       sim.inject({ kind: 'keyUp', tick: 22, key: ATTACK_KEY });
       sim.inject({ kind: 'keyDown', tick: 24, key: ATTACK_KEY });
 
       const frames: Snapshot[] = [];
-      for (let i = 0; i < 40; i += 1) {
+      sim.step(1); // tick 0
+      frames.push(sim.snapshot());
+      // M2-T02: drive the enemy through its intent (it owns no hardware input).
+      const intent = sim.world.getComponent(enemy, IntentComponent);
+      if (intent === undefined) throw new Error('QA: enemy is missing IntentComponent');
+      intent.wantsToDash = true; // enemy dash starts on tick 1
+      for (let i = 1; i < 40; i += 1) {
         sim.step(1);
         frames.push(sim.snapshot());
       }

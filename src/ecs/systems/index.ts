@@ -1,3 +1,5 @@
+export * from './PlayerControllerSystem';
+export * from './FreezeSystem';
 export * from './MovementSystem';
 export * from './DashSystem';
 export * from './StateSystem';

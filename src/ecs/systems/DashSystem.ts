@@ -1,6 +1,6 @@
 /**
  * DashSystem — dash entry, cooldown and invulnerability span.
- * See specs/02_dash_and_state_spec.md §5.2.
+ * See specs/02_dash_and_state_spec.md §5.2 and specs/04_combat_feedback_spec.md §4.7.
  *
  * Pipeline position: runs AFTER MovementSystem (so this tick's displacement is
  * integrated against the state decided last tick) and BEFORE StateSystem (so the
@@ -10,10 +10,23 @@
  * All timing is measured in Ticks and driven by `ticksInState` / `cooldownRemaining`
  * on components — the system holds NO cross-tick hidden state (spec 00 §6.1).
  *
- * Trigger semantics (M2-T01 tech-debt fix): a dash fires on the RISING EDGE of the
- * dash button (`buttonDashJustPressed`), never on the held level. Holding the key
- * therefore cannot auto-repeat a dash as soon as the cooldown lapses; the player
- * must release and press again. See specs/03_combat_hitbox_spec.md §4.3.
+ * Trigger semantics (M2-T02): a dash fires on the entity's logical intent pulse
+ * `IntentComponent.wantsToDash`, never on a held level. The pulse is CLEARED as
+ * soon as it is read, so holding the dash key cannot auto-repeat a dash as soon as
+ * the cooldown lapses; the player must release and press again (spec 03 §4.3).
+ * Reading intent instead of hardware also means enemies can dash without owning any
+ * input device — their AI simply raises the same pulse.
+ *
+ * Dash entry is gated to the LOCOMOTION states `IDLE` / `MOVING` only (spec 02
+ * §4.1, spec 04 §5.1). `HITSTUN` and `ATTACKING` are uninterruptible, so a dash
+ * pulse raised while the entity is stunned or mid-swing must NOT cancel that state:
+ * this closes the F1 (hitstun dash-cancel) and F2 (attack-cancel) holes. The pulse
+ * is consumed UNCONDITIONALLY (read-and-cleared before the state gate), so a pulse
+ * raised in a non-locomotion state is DROPPED, not buffered — it cannot fire later
+ * once the entity returns to locomotion.
+ *
+ * Frozen entities are skipped entirely (spec 04 §4.7): hitstop suppresses dash
+ * entry, so no pulse is buffered while frozen (FreezeSystem clears it instead).
  */
 
 import type { System, SystemContext } from '../System';
@@ -22,7 +35,8 @@ import type { EntityId } from '../Entity';
 import { vec2 } from '../../core/math';
 import { ActionState, StateComponent } from '../components/StateComponent';
 import { DashStatsComponent } from '../components/DashStatsComponent';
-import { InputComponent } from '../components/InputComponent';
+import { IntentComponent } from '../components/IntentComponent';
+import { isFrozen } from '../components/FreezeComponent';
 import { INVULNERABLE_TAG, addTag, removeTag } from '../components/TagComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
@@ -32,7 +46,7 @@ export class DashSystem implements System {
 
   public update(world: World, _ctx: SystemContext): void {
     const ids = world.query(
-      InputComponent,
+      IntentComponent,
       StateComponent,
       DashStatsComponent,
       VelocityComponent,
@@ -40,13 +54,15 @@ export class DashSystem implements System {
     );
 
     for (const id of ids) {
-      const input = world.getComponent(id, InputComponent);
+      if (isFrozen(world, id)) continue;
+
+      const intent = world.getComponent(id, IntentComponent);
       const state = world.getComponent(id, StateComponent);
       const dash = world.getComponent(id, DashStatsComponent);
       const velocity = world.getComponent(id, VelocityComponent);
       const transform = world.getComponent(id, TransformComponent);
       if (
-        input === undefined ||
+        intent === undefined ||
         state === undefined ||
         dash === undefined ||
         velocity === undefined ||
@@ -55,12 +71,22 @@ export class DashSystem implements System {
         continue;
       }
 
+      // Read-and-clear the one-tick dash pulse UNCONDITIONALLY, before the state
+      // gate: a pulse raised in an uninterruptible state (HITSTUN / ATTACKING) is
+      // consumed here and then ignored, so it can never fire later.
+      const wantsToDash = intent.wantsToDash;
+      intent.wantsToDash = false;
+
       if (state.state !== ActionState.DASHING) {
         // Not dashing: tick the cooldown down, clear any stale speed multiplier,
         // then start a dash if requested and off cooldown.
         if (dash.cooldownRemaining > 0) dash.cooldownRemaining -= 1;
         velocity.speedMultiplier = 1;
-        if (input.buttonDashJustPressed && dash.cooldownRemaining === 0) {
+        // Gate entry to LOCOMOTION only (spec 02 §4.1): HITSTUN and ATTACKING are
+        // uninterruptible, so a dash must not cancel a stun (F1) or a swing (F2).
+        const inLocomotion =
+          state.state === ActionState.IDLE || state.state === ActionState.MOVING;
+        if (wantsToDash && inLocomotion && dash.cooldownRemaining === 0) {
           this.startDash(world, id, state, dash, velocity, transform.facingRadians);
         }
       } else {
