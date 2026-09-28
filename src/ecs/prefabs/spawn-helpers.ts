@@ -26,6 +26,7 @@ import {
 } from '../components/DashStatsComponent';
 import { TagComponent } from '../components/TagComponent';
 import { ModifierComponent } from '../components/ModifierComponent';
+import { StatusEffectComponent } from '../components/StatusEffectComponent';
 import { Faction, FactionComponent } from '../components/FactionComponent';
 import { DEFAULT_MAX_HP, HealthComponent } from '../components/HealthComponent';
 import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxComponent';
@@ -102,13 +103,14 @@ export interface CombatantSpawnOptions {
 }
 
 /**
- * Assemble a combatant entity owning the full M2 component set:
- * Transform + Velocity + Intent + State + DashStats + Tag + Modifier + Faction
- * + Health + Hurtbox.
+ * Assemble a combatant entity owning the full component set:
+ * Transform + Velocity + Intent + State + DashStats + Tag + Modifier
+ * + StatusEffect + Faction + Health + Hurtbox.
  *
- * `ModifierComponent` (M3-T01) is mounted EMPTY on every combatant, exactly like
- * `TagComponent`: boons are opt-in data, but the component set itself stays
- * defined in this one place so the player and enemy prefabs can never drift.
+ * `ModifierComponent` (M3-T01) and `StatusEffectComponent` (M3-T02) are mounted
+ * EMPTY on every combatant, exactly like `TagComponent`: boons and statuses are
+ * opt-in data, but the component set itself stays defined in this one place so the
+ * player and enemy prefabs can never drift.
  *
  * Every combatant owns an `IntentComponent` — the logical-intent seam that every
  * gameplay system reads (M2-T02). The raw HARDWARE component (`PlayerInputComponent`)
@@ -168,6 +170,7 @@ export function spawnCombatant(
   );
   world.addComponent(entity.id, new TagComponent());
   world.addComponent(entity.id, new ModifierComponent());
+  world.addComponent(entity.id, new StatusEffectComponent());
   world.addComponent(entity.id, new FactionComponent(faction));
   world.addComponent(entity.id, new HealthComponent(hp, maxHp));
   world.addComponent(entity.id, new HurtboxComponent(hurtboxRadius));

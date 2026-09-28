@@ -5,8 +5,8 @@
  *
  * Order (HARD CONTRACT):
  *   PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem
- *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> ModifierSystem
- *     -> LifespanSystem.
+ *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
+ *     -> ModifierSystem -> LifespanSystem.
  *
  * Why this exact order:
  *  0. PlayerControllerSystem is the new FIRST segment (M2-T02): it replaces the old
@@ -39,13 +39,20 @@
  *     the hit-EVENT publish point: every landed hit emits a `HitEvent` on the shared
  *     bus. Feedback and events are both written at the END of the tick, so feedback
  *     takes effect from the NEXT tick.
- *  6. ModifierSystem is the M3-T01 INSERTION — it must sit after CollisionSystem (to
+ *  6. StatusEffectSystem is the M3-T02 INSERTION — it sits between CollisionSystem and
+ *     ModifierSystem, and that exact slot is what makes the damage-over-time timing
+ *     contract read as written: a status applied by a modifier on tick `T` is first
+ *     counted on `T+1`, so the first damage tick lands on `T + intervalTicks` and the
+ *     status clears at the end of `T + durationTicks` (spec 06 §4.2). It runs after
+ *     CollisionSystem so the hit that applies the status is already fully resolved. It
+ *     changes no existing system's relative position, and LifespanSystem stays LAST.
+ *  7. ModifierSystem is the M3-T01 INSERTION — it must sit after CollisionSystem (to
  *     read this tick's events) and before LifespanSystem (an injected hitbox must not
  *     be aged before it has ever been collision-tested, which is why a Zeus bolt has
  *     `activeTicks = 2` for exactly one test tick — spec 05 §4.4). It deliberately
  *     does NOT reorder anything: the six M1/M2 segments keep their relative order and
  *     LifespanSystem stays LAST.
- *  7. LifespanSystem runs LAST so it cannot destroy a hitbox before that hitbox has
+ *  8. LifespanSystem runs LAST so it cannot destroy a hitbox before that hitbox has
  *     been collision-tested this tick — a hitbox gets its full `activeTicks` span.
  *
  * Reordering any of these systems changes observable behaviour and will break the
@@ -61,6 +68,7 @@ import { DashSystem } from './DashSystem';
 import { StateSystem } from './StateSystem';
 import { CombatActionSystem } from './CombatActionSystem';
 import { CollisionSystem } from './CollisionSystem';
+import { StatusEffectSystem } from './StatusEffectSystem';
 import { ModifierSystem } from './ModifierSystem';
 import { LifespanSystem } from './LifespanSystem';
 
@@ -82,6 +90,7 @@ export function createDefaultSystems(events: EventQueue = new EventQueue()): rea
     new StateSystem(),
     new CombatActionSystem(),
     new CollisionSystem(events),
+    new StatusEffectSystem(),
     new ModifierSystem(events),
     new LifespanSystem(),
   ];

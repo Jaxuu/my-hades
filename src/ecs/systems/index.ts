@@ -5,6 +5,7 @@ export * from './DashSystem';
 export * from './StateSystem';
 export * from './CombatActionSystem';
 export * from './CollisionSystem';
+export * from './StatusEffectSystem';
 export * from './ModifierSystem';
 export * from './LifespanSystem';
 export * from './pipeline';

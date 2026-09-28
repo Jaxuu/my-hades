@@ -4,10 +4,10 @@
  * (AC-01 .. AC-09).
  *
  * Fresh-eyes harness suite: every behavioural assertion drives the REAL
- * GameSimulator with the canonical 9-segment pipeline
+ * GameSimulator with the canonical pipeline
  * (PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem ->
- * StateSystem -> CombatActionSystem -> CollisionSystem -> ModifierSystem ->
- * LifespanSystem) and REAL prefab-assembled entities. Nothing is mocked, and ticks
+ * StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem ->
+ * ModifierSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is mocked, and ticks
  * are advanced one at a time so the timing contract is pinned per tick.
  *
  * Geometry: player at (0, 0) facing +x attacks on tick 0; its hitbox is centred at
@@ -177,10 +177,11 @@ class EventSpy implements System {
 }
 
 /**
- * The canonical 9-segment pipeline with a probe spliced in right after
- * CollisionSystem, so the emitted HitEvent can be inspected field by field.
- * ModifierSystem is deliberately ABSENT here: the probe owns the bus, and this
- * suite only wants to assert the FACT that CollisionSystem published.
+ * The pipeline with a probe spliced in right after CollisionSystem, so the emitted
+ * HitEvent can be inspected field by field. ModifierSystem is deliberately ABSENT
+ * here: the probe owns the bus, and this suite only wants to assert the FACT that
+ * CollisionSystem published. (StatusEffectSystem is absent for the same reason —
+ * no status is ever applied in these cases, so it would be a no-op.)
  */
 function makeSpySim(events: EventQueue, spy: EventSpy): GameSimulator {
   return new GameSimulator({
@@ -721,8 +722,8 @@ describe('G6 · EventQueue is a FIFO, copy-on-drain, tick-scoped wire (AC-07)', 
 /* ------------------------------------------------------------------ *
  * G7 · canonical pipeline order                                       *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 9-segment pipeline order (AC-08)', () => {
-  it('runs ... Collision -> Modifier -> Lifespan, keeping Lifespan last', () => {
+describe('G7 · canonical 10-segment pipeline order (AC-08)', () => {
+  it('runs ... Collision -> StatusEffect -> Modifier -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'PlayerControllerSystem',
@@ -732,6 +733,7 @@ describe('G7 · canonical 9-segment pipeline order (AC-08)', () => {
       'StateSystem',
       'CombatActionSystem',
       'CollisionSystem',
+      'StatusEffectSystem',
       'ModifierSystem',
       'LifespanSystem',
     ]);
@@ -739,6 +741,9 @@ describe('G7 · canonical 9-segment pipeline order (AC-08)', () => {
     // Explicitly pin the two positional rules ModifierSystem must satisfy (§5.2).
     expect(names.indexOf('ModifierSystem')).toBeGreaterThan(names.indexOf('CollisionSystem'));
     expect(names.indexOf('ModifierSystem')).toBeLessThan(names.indexOf('LifespanSystem'));
+    // ... and the M3-T02 slot StatusEffectSystem must occupy (spec 06 §5.2).
+    expect(names.indexOf('StatusEffectSystem')).toBeGreaterThan(names.indexOf('CollisionSystem'));
+    expect(names.indexOf('StatusEffectSystem')).toBeLessThan(names.indexOf('ModifierSystem'));
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);
   });
 

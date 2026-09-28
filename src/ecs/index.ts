@@ -4,5 +4,6 @@ export * from './World';
 export * from './System';
 export * from './events';
 export * from './components/index';
+export * from './modifiers/index';
 export * from './systems/index';
 export * from './prefabs/index';

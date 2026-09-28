@@ -27,6 +27,12 @@ import type { World } from '../World';
 export const ZEUS_STRIKE_MODIFIER = 'zeus_strike';
 
 /**
+ * Dionysus Blight (M3-T02): when the holder's base attack lands, the victim is
+ * POISONED — a stacking damage-over-time status (spec 06 AC-02).
+ */
+export const DIONYSUS_BLIGHT_MODIFIER = 'dionysus_strike';
+
+/**
  * Fixed bonus damage of the Zeus Strike lightning bolt. Deliberately a CONSTANT
  * rather than a function of the attack's damage: AC-03 asks for "extra FIXED
  * damage", and a constant keeps the tick-by-tick assertions exact.
