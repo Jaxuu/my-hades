@@ -20,8 +20,16 @@
 - 预制体工厂 `spawn(world, options)` 一律返回 **`EntityId`**（不是 Entity 对象）。
   装配逻辑集中在 `src/ecs/prefabs/spawn-helpers.ts::spawnCombatant`，`PlayerFactory` / `EnemyFactory`
   只是传入不同 `Faction` 的薄封装——**不要在工厂里重复组件清单或校验逻辑**。
-- **组件复用优于新增组件**：`ActionState` 是通用动作状态机（`IDLE/MOVING/DASHING/ATTACKING`），
+- **组件复用优于新增组件**：`ActionState` 是通用动作状态机（`IDLE/MOVING/DASHING/ATTACKING/HITSTUN`），
   新动作优先加枚举值 + 在 `StateSystem` 里给出退出条件，而不是新开一个状态组件。
+- **硬件输入与逻辑意图分离**（M2-T02 起）：`PlayerInputComponent`（真实设备快照）**只挂玩家**；
+  `IntentComponent`（`moveVector` 持久 + `wantsToDash`/`wantsToAttack` 单 Tick 脉冲）挂**所有**战斗单位。
+  玩法系统**只读 `IntentComponent`**；敌人由 AI/脚本直接写意图。
+  意图脉冲由**消费方读后置 `false`**（`DashSystem`/`CombatActionSystem`），**先消费后门控**——
+  门控拒绝时脉冲也必须被丢弃，绝不允许缓冲到状态结束后补触发。
+- **冲刺起手门控**：`DASHING` **只能自 `IDLE`/`MOVING` 进入**（spec 02 §4.1）。
+  `HITSTUN`/`ATTACKING` 不可被冲刺取消（F1/F2 修复，M2-T02）。
+  门控必须落在 `DashSystem`——它排在 `StateSystem` **之前**，`StateSystem` 的分支顺序拦不住起手。
 
 ## 3. 测试约定
 - 浮点位移断言**统一容差 `1e-9`**，**禁止严格相等**（逐 Tick 积分漂移实测 ~1e-15）。
@@ -31,15 +39,26 @@
   否则极易差一拍（例：12 Tick 无敌窗口的最后一拍是 tick `t0+11`，标签在 tick `t0+12` 摘除）。
 - 碰撞类断言注意**实体可能在命中同一拍末被 `LifespanSystem` 销毁**：需要坐标时先在上一拍快照，
   不要等命中后再 `getComponent(hitbox)`。
+- **`ticksInState` 存在相位差（M2-T02 实测教训，极易踩）**：`ticksInState` 由 `StateSystem` 推进，
+  因此**由排在 `StateSystem` 之后的系统**写入的状态（如 `CollisionSystem` 写的 `HITSTUN`），
+  其进入 Tick **不会被计数**，实际可观测跨度比常量多 1 个 Tick。
+  而 `DashSystem`/`CombatActionSystem` 排在 `StateSystem` **之前**，它们写入的状态（`DASHING`/`ATTACKING`）
+  进入 Tick **会被计数**。⇒ 任何「N 个 Tick」的常量都必须对照管道相位核算；
+  本项目的补偿手段：`applyFreeze` 写入 `hitstopTicks + 1`；`CollisionSystem` 进入 `HITSTUN` 时
+  `ticksInState` 种入 `1` 而非 `0`。**改这两个数字前必须先看 spec 04 §6 的逐 Tick 表。**
 
 ## 4. 工程风险（已踩过的坑）
 - **npm 锁文件是平台相关的**：需在**无 `node_modules` 的隔离目录**生成后再采纳。
 - **`npm ci` 严格锁文件驱动**：缺 optional 平台包时**不报错（exit 0）但静默跳过** → vitest `MODULE_NOT_FOUND`。
 - **vitest 必须 `pool: 'threads'`**：默认 forks 池在本环境写系统 Temp 被拒（EPERM）。
-- **CI 纯逻辑门正则**（M2-T01 已收窄）：现为 `\b(window\.|document\.|Date\.now\(\)|Math\.random\(\))`，
-  只匹配真实访问形态。**残留缺陷**：`\bwindow\.` 仍会命中句末的英文名词 `window.`。
-  → `src/` 内注释/字符串继续**避免** `window` / `document` 词面量（含 `window.` 这种带句点的写法）；
-  根治需更精确的形态（如 `globalThis\.window` / 排除注释行）。
+- **CI 纯逻辑门 = ESLint AST 门**（M2-T02 起，`eslint.config.mjs`，flat config / ESLint 9）：
+  对 `src/**/*.ts` 启用 `no-restricted-globals`(window/document)、`no-restricted-properties`(Math.random/Date.now)、
+  `no-restricted-syntax`(new Date())。**旧的 `grep -rnE` 门已删除**——它会把注释里的普通英文名词
+  （如句末的 `window.`）当违规，逼着人给注释"绕词"。AST 门对注释**零误报**，已用变异测试验证
+  （真实访问 → 5 error；仅注释提及 → 0 error）。⇒ `src/` 注释现在**可以**自由使用 `window` / `document` 词面量。
+- **`@typescript-eslint/no-unused-vars` 必须配 `argsIgnorePattern: '^_'`**：否则 `update(world, _ctx)`
+  这种"故意不用"的参数会被默认的 `args: 'after-used'` 报错，`npm run lint` 不可能全绿。
+- **ESLint 版本钉在 9 线**：`@eslint/js@*` 会拉 10.x 与 eslint 9 冲突，须显式钉 `^9.x`。
 
 ## 5. 编排约定（工作室流程）
 - **先冻结、再评审、后修复**：禁止在 QA 评审窗口内并发改写受审产物（M0 的 C1 教训）。
@@ -54,13 +73,18 @@
 | M0-T01 | Headless 确定性 Harness + 工程基座 | ✅ PASS |
 | M1-T01 | 基础移动控制（`MovementSystem` + 3 组件 + `PlayerFactory`） | ✅ |
 | M1-T02 | 冲刺 / 动作状态机 / 无敌帧（`DashSystem` + `StateSystem` + 管道） | ✅ PASS（8 文件 / 72 用例全绿） |
-| M2-T01 | 基础战斗 / 圆碰撞 / 无敌帧消费（4 组件 + 3 系统 + `EnemyFactory`） | ✅ PASS（9 文件 / 86 用例全绿，未提交） |
+| M2-T01 | 基础战斗 / 圆碰撞 / 无敌帧消费（4 组件 + 3 系统 + `EnemyFactory`） | ✅ PASS（9 文件 / 86 用例全绿） |
+| M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**，未提交） |
 
 - 规范管道（**硬契约，不得重排**）：
-  `MovementSystem → DashSystem → StateSystem → CombatActionSystem → CollisionSystem → LifespanSystem`（`createDefaultSystems()`）。
-  前四段之后的三段是本里程碑新增；`LifespanSystem` **必须最后**（否则判定圆少一个 Tick 有效窗口）。
+  `PlayerControllerSystem → FreezeSystem → MovementSystem → DashSystem → StateSystem
+   → CombatActionSystem → CollisionSystem → LifespanSystem`（`createDefaultSystems()`）。
+  `PlayerControllerSystem`（硬件→意图）取代原 `MovementSystem.bindInput` 成为首段；
+  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`LifespanSystem` **必须最后**
+  （否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
 - 权威规格：`specs/00_harness_spec.md`、`specs/01_character_controller_spec.md`、`specs/02_dash_and_state_spec.md`、
-  `specs/03_combat_hitbox_spec.md`。
-- **输入是全局帧**（本里程碑最大局限）：同一 Tick 的事件会应用到**所有**持 `InputComponent` 的实体，
-  所以敌人也必须持 `InputComponent` 才能冲刺，测试需靠几何/朝向规避交叉响应。根治见 spec 03 §10 取舍 4。
+  `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`。
+- **"输入是全局帧"的局限已被根治**（M2-T02）：意图层解耦后敌人**不持有**硬件组件，
+  同一 Tick 的按键事件只作用于玩家。残留局限：玩家键位仍是全局的（`DASH_KEY`/`ATTACK_KEY` 不按实体绑定），
+  多玩家/重映射需在 `PlayerInputComponent` 上加 `dashKey`/`attackKey`（属 M3）。
 - 远端仓库：https://github.com/Jaxuu/my-hades（PUBLIC，默认分支 `main`）——**切勿提交密钥**。
