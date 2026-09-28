@@ -75,17 +75,20 @@
 | M1-T02 | 冲刺 / 动作状态机 / 无敌帧（`DashSystem` + `StateSystem` + 管道） | ✅ PASS（8 文件 / 72 用例全绿） |
 | M2-T01 | 基础战斗 / 圆碰撞 / 无敌帧消费（4 组件 + 3 系统 + `EnemyFactory`） | ✅ PASS（9 文件 / 86 用例全绿） |
 | M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**） |
-| M3-T01 | 变异引擎基础与事件拦截管道（`HitEvent` / `EventQueue` / `ModifierComponent` / `ModifierSystem` / Zeus Strike） | ✅ PASS（11 文件 / **143 用例全绿**，未提交） |
+| M3-T01 | 变异引擎基础与事件拦截管道（`HitEvent` / `EventQueue` / `ModifierComponent` / `ModifierSystem` / Zeus Strike） | ✅ PASS（11 文件 / 143 用例全绿，已提交 `7f4bd93`） |
+| M3-T02 | 修饰器注册表 + 状态异常容器 + DoT（`ModifierRegistry` / `IModifierHandler` / `StatusEffectComponent` / `StatusEffectSystem` / `DionysusBlightModifier`） | ✅ PASS（12 文件 / **165 用例全绿**，未提交） |
 
-- 规范管道（**硬契约，不得重排**）：
+- 规范管道（**硬契约，不得重排，10 段**）：
   `PlayerControllerSystem → FreezeSystem → MovementSystem → DashSystem → StateSystem
-   → CombatActionSystem → CollisionSystem → ModifierSystem → LifespanSystem`（`createDefaultSystems()`）。
+   → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem → LifespanSystem`（`createDefaultSystems()`）。
   `PlayerControllerSystem`（硬件→意图）取代原 `MovementSystem.bindInput` 成为首段；
-  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`ModifierSystem` **必须在 `CollisionSystem` 之后
+  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`StatusEffectSystem` **必须在 `CollisionSystem` 之后
+  且 `ModifierSystem` 之前**（DoT 相位契约的唯一实现手段，见下）；`ModifierSystem` **必须在 `CollisionSystem` 之后
   （读本 Tick 事件）、`LifespanSystem` 之前（注入的判定圆需被判定过才销毁）**；`LifespanSystem` **必须最后**
   （否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
 - 权威规格：`specs/00_harness_spec.md`、`specs/01_character_controller_spec.md`、`specs/02_dash_and_state_spec.md`、
-  `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`、`specs/05_boon_modifier_spec.md`。
+  `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`、`specs/05_boon_modifier_spec.md`、
+  `specs/06_status_effect_and_dot_spec.md`。
 - **变异引擎（M3-T01）铁律**：
   - 事件总线 `EventQueue<T = HitEvent>` 由 `createDefaultSystems(events?)` **构造注入**（不塞 `SystemContext`、
     不挂 `World`）；`ModifierSystem` 每 Tick 全量 `drain()` ⇒ **Tick 边界 `size === 0`**（非隐藏状态）。
@@ -95,6 +98,20 @@
     `LifespanSystem` 自减 ⇒ 写 1 会静默失效）。**"1 Tick 延迟"是架构固有属性。**
   - 命中反馈写入**按需门控**：`hitstopTicks > 0 || knockbackForce > 0`。纯伤害判定圆两项皆 `0` ⇒
     不延长顿帧、**不清零击退**（`KnockbackComponent` 是覆盖写）。
+- **变异引擎（M3-T02）铁律**：
+  - **修饰器效果一律放 `src/ecs/modifiers/*` 的 `IModifierHandler` 实现里，注册进 `ModifierRegistry`**；
+    `ModifierSystem` 只做「全量 `drain` → 防递归门 → 遍历攻击者 `modifiers`（升序）→ `registry.get(id)?.onHit(...)`」，
+    **不得**再出现任何具体祝福逻辑。`onHit(event, context)` 的 `context` 是
+    `ModifierContext extends SystemContext`（多一个 `world`）——**扩展而非修改 `SystemContext`**（C6）。
+  - handler **除 `id` 外零字段**（无跨 Tick 隐藏状态）；`drain()` 为空时连 context 都不构造。
+  - **DoT 相位靠「管道位置」解决，不靠 `+1` 补偿**（与判定圆/顿帧的补偿路线**不要混用**）：
+    `StatusEffectSystem` 排在 `ModifierSystem` **之前** ⇒ 施加当 Tick 不走状态时钟
+    ⇒ 第 k 次结算 = `T + k×intervalTicks`、摘除 = `T + durationTicks`，且**字段值 == 常量值**。
+    若挪到 `ModifierSystem` 之后，spec 06 §6 的每个数字都会静默少 1。
+  - **DoT = 真实伤害**：只调 `applyDamage`。**不生成判定圆、不抛 `HitEvent`、不写顿帧/`HITSTUN`/`KnockbackComponent`、
+    不做冻结门控、不检查无敌帧**。写击退会覆盖清零基础命中；进 `HITSTUN` 会变硬直锁。
+  - 状态结算**先于**到期判定（否则 `duration = k×interval` 时第 k 次结算消失）；`durationTicks` 取 `intervalTicks` 整数倍。
+  - 状态列表按 id **升序唯一**（多样性走 `stacks`）；排序一律 UTF-16 码元序（`<`/`>`），**禁用 `localeCompare`**。
 - **"输入是全局帧"的局限已被根治**（M2-T02）：意图层解耦后敌人**不持有**硬件组件，
   同一 Tick 的按键事件只作用于玩家。残留局限：玩家键位仍是全局的（`DASH_KEY`/`ATTACK_KEY` 不按实体绑定），
   多玩家/重映射需在 `PlayerInputComponent` 上加 `dashKey`/`attackKey`（属 M3）。
