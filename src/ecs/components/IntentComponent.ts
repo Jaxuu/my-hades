@@ -28,6 +28,11 @@
  *    consumer were skipped (e.g. while frozen) the pulse stays set, which is why
  *    FreezeSystem explicitly clears the whole intent while an entity is frozen
  *    (spec 04 §4.3).
+ *  - `aimRadians` is PERSISTENT, like `moveVector`, and `null` means "this entity
+ *    has no facing of its own". It exists so an entity can express "face THIS way
+ *    without moving" through the intent seam instead of writing
+ *    `TransformComponent.facingRadians` directly — which would create a second
+ *    facing writer alongside MovementSystem (spec 07 §3.3).
  */
 
 import { ComponentBase } from '../Component';
@@ -44,10 +49,28 @@ export class IntentComponent extends ComponentBase {
   /** Logical attack intent for this tick (single-tick pulse; consumer clears it). */
   public wantsToAttack: boolean;
 
-  constructor(moveVector: Vec2 = vec2(0, 0), wantsToDash = false, wantsToAttack = false) {
+  /**
+   * Facing intent in radians, or `null` for "no facing of my own" (M4-T01).
+   *
+   * MovementSystem applies it to `TransformComponent.facingRadians` ONLY while the
+   * entity is not moving (a moving entity faces its movement direction, which is
+   * the M1 contract). The AI uses it to lock the attack direction during a windup
+   * (spec 07 AC-04); the player never sets it in this milestone, so it stays
+   * `null` and the M1 behaviour is unchanged bit for bit (spec 07 C9).
+   */
+  public aimRadians: number | null;
+
+  constructor(
+    moveVector: Vec2 = vec2(0, 0),
+    wantsToDash = false,
+    wantsToAttack = false,
+    aimRadians: number | null = null,
+  ) {
     super();
     this.moveVector = moveVector;
     this.wantsToDash = wantsToDash;
     this.wantsToAttack = wantsToAttack;
+    this.aimRadians = aimRadians;
   }
 }
+

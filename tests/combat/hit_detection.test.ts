@@ -4,8 +4,8 @@
  * and specs/04_combat_feedback_spec.md §6 for the M2-T02 hit-feedback additions.
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical pipeline (PlayerControllerSystem -> FreezeSystem -> MovementSystem ->
- * DashSystem -> StateSystem -> CombatActionSystem -> CollisionSystem ->
+ * canonical pipeline (PlayerControllerSystem -> FreezeSystem -> AISystem ->
+ * MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem -> CollisionSystem ->
  * StatusEffectSystem -> ModifierSystem -> LifespanSystem) and REAL prefab-assembled entities (PlayerFactory /
  * EnemyFactory). Nothing is mocked, and ticks are advanced one at a time so the
  * timing contract is pinned per tick rather than only at the end.

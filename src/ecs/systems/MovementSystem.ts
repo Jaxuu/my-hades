@@ -16,7 +16,9 @@
  *                             scaled by speedMultiplier, NOT steered by intent
  *                             (spec 04 AC-03).
  *   3. DASHING             -> direction locked by DashSystem; intent ignored.
- *   4. otherwise           -> normal locomotion from `intent.moveVector`.
+ *   4. otherwise           -> normal locomotion from `intent.moveVector`. While
+ *                             rooted, a non-null `intent.aimRadians` still steers
+ *                             the facing (M4-T01 telegraph lock — spec 07 §3.3).
  *
  * The tick length is READ FROM THE SIMULATION CLOCK (`ctx.fixedDeltaSeconds`) and
  * never hard-coded, so behaviour is identical at any fps (spec 01 §5.2 / AC-05).
@@ -87,7 +89,17 @@ export class MovementSystem implements System {
       velocity.directionVector = direction;
       velocity.currentSpeed = moving ? velocity.maxSpeed : 0;
 
-      if (!moving) continue;
+      if (!moving) {
+        // A ROOTED entity can still steer its facing through the aim intent
+        // (M4-T01, spec 07 §3.3 / AC-04): the telegraph locks the attack
+        // direction without displacing the enemy. `null` means "no facing of my
+        // own", so every pre-M4 entity keeps its facing untouched here and this
+        // branch is behaviourally identical to the pre-M4 early `continue`.
+        if (intent.aimRadians !== null) {
+          transform.facingRadians = intent.aimRadians;
+        }
+        continue;
+      }
 
       transform.x += direction.x * velocity.currentSpeed * fixedDeltaSeconds;
       transform.y += direction.y * velocity.currentSpeed * fixedDeltaSeconds;

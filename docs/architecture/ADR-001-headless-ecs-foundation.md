@@ -80,6 +80,7 @@
 | R3 | **每 Tick 时长恒为 `fixedDeltaSeconds = 1 / fps`**，由 `GameSimulator` 注入到 `SystemContext`；系统**禁止硬编码** `1/60` 或 `16.67ms` | 换 fps 后行为一致；避免 `60 × 16.67ms = 1000.2ms ≠ 1s` 这类精度事故 |
 | R4 | **状态对外只读**：`snapshot()` 返回深拷贝 + 递归冻结的对象，与实时世界零引用共享 | 渲染层无法反向污染模拟（D3）；保证回放可信 |
 | R5 | **系统执行顺序确定**：按注册顺序每 Tick 执行一次；实体遍历按 id 升序 | 确定性（D1） |
+| R6 | **字符串排序 / 比较一律使用 UTF-16 码元序**（`a < b` / `a > b`，或 `sort()` 的默认比较）；**禁止 `localeCompare`** 及任何依赖语言环境 / ICU 数据 / 时区的比较 API | 确定性（D1）：`localeCompare` 的结果由**运行环境的 locale 与 ICU 数据**决定，同一份代码在两台机器（或不同 Node 构建）上可能排出不同顺序。它一旦出现在进入快照的排序路径上（如 `World.listComponents` 按组件类型名排序），回放比对就会跨机器失败 |
 
 ### 4.1 为什么 Fixed-Tick 而不是可变步长（Variable Timestep）？
 可变步长（`dt = 本帧真实耗时`）写起来更省事，但它把**物理结果与硬件性能绑死**：
@@ -131,6 +132,7 @@ Fixed-Tick 用"时间换确定性"：逻辑步长恒定，渲染可以自由插�
 | R3 步长来自时钟 | `tsconfig` 的 `lib` **不含 DOM**；AC-05 断言 `fps=30` 与 `fps=60` 位移一致 | `tests/combat/movement.test.ts` |
 | R4 只读状态 | Snapshot 不可变性 + 零引用共享断言 | `tests/harness/snapshot.test.ts`、`tests/harness/independent-verify.test.ts` |
 | R5 顺序确定 | 系统执行顺序 + 实体遍历顺序断言 | `tests/harness/independent-verify.test.ts` |
+| R6 无环境依赖比较 | CI 静态门（ESLint AST）：`localeCompare` / `toLocale*` 方法调用 / `Intl` 构造在 `src/` 内命中即 fail；另有码元序回归断言 | `eslint.config.mjs`、`tests/harness/ecs.test.ts` |
 | 全局确定性 | 同输入两遍 Snapshot 深度相等 | `tests/harness/determinism.test.ts` |
 
 ### 6.1 测试套件构成（当前基线）

@@ -7,6 +7,25 @@ import type { Component, ComponentCtor } from './Component';
 import { Entity } from './Entity';
 import type { EntityId } from './Entity';
 
+/**
+ * Order two components by their type name using **UTF-16 code-unit order**.
+ *
+ * Deliberately NOT `String.prototype.localeCompare`: that compares under the
+ * ambient locale / ICU collation, so the same two names can order differently on
+ * two machines (or two Node builds with different ICU data). `listComponents`
+ * feeds `GameSimulator.snapshot()`, so a locale-sensitive sort would make the
+ * exported snapshot — and therefore replay comparison — environment dependent
+ * (ADR-001 R6). `a < b` on strings is the ECMAScript abstract relational
+ * comparison, which is a pure code-unit comparison with no environment input.
+ */
+function compareComponentTypeName(a: Component, b: Component): number {
+  const left = a.constructor.name;
+  const right = b.constructor.name;
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 export class World {
   private nextId: EntityId = 0;
   private readonly alive = new Set<EntityId>();
@@ -89,7 +108,7 @@ export class World {
       const component = store.get(id);
       if (component !== undefined) out.push(component);
     }
-    return out.sort((a, b) => a.constructor.name.localeCompare(b.constructor.name));
+    return out.sort(compareComponentTypeName);
   }
 
   private assertAlive(id: EntityId): void {

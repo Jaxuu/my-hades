@@ -5,7 +5,7 @@
  *
  * Fresh-eyes harness suite: every behavioural assertion drives the REAL
  * GameSimulator with the canonical pipeline
- * (PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem ->
+ * (PlayerControllerSystem -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem ->
  * StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem ->
  * ModifierSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is mocked, and ticks
  * are advanced one at a time so the timing contract is pinned per tick.
@@ -722,12 +722,13 @@ describe('G6 · EventQueue is a FIFO, copy-on-drain, tick-scoped wire (AC-07)', 
 /* ------------------------------------------------------------------ *
  * G7 · canonical pipeline order                                       *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 10-segment pipeline order (AC-08)', () => {
+describe('G7 · canonical 11-segment pipeline order (AC-08)', () => {
   it('runs ... Collision -> StatusEffect -> Modifier -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'PlayerControllerSystem',
       'FreezeSystem',
+      'AISystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',
@@ -744,6 +745,11 @@ describe('G7 · canonical 10-segment pipeline order (AC-08)', () => {
     // ... and the M3-T02 slot StatusEffectSystem must occupy (spec 06 §5.2).
     expect(names.indexOf('StatusEffectSystem')).toBeGreaterThan(names.indexOf('CollisionSystem'));
     expect(names.indexOf('StatusEffectSystem')).toBeLessThan(names.indexOf('ModifierSystem'));
+    // ... and the M4-T01 slot AISystem must occupy (spec 07 §5.2): after the freeze
+    // gate (so it reads the same freeze verdict as the systems it feeds) and before
+    // every advance system (it is an intent PRODUCER).
+    expect(names.indexOf('AISystem')).toBeGreaterThan(names.indexOf('FreezeSystem'));
+    expect(names.indexOf('AISystem')).toBeLessThan(names.indexOf('MovementSystem'));
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);
   });
 

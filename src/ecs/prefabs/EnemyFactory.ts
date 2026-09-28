@@ -13,6 +13,11 @@
  * how the old "enemies must carry an InputComponent to be able to dash" limitation
  * was root-fixed. Intent and hardware input are now fully decoupled — spec 03 §10
  * trade-off 4 is resolved by M2-T02 (spec 04 §10).
+ *
+ * M4-T01 adds the AI writer as an OPT-IN: pass `ai` in the spawn options and an
+ * `AIControllerComponent` is mounted, making the enemy drive itself through the
+ * FSM (spec 07). Omit it and the enemy behaves exactly as it did before M4 —
+ * script-driven through its `IntentComponent`.
  */
 
 import type { EntityId } from '../Entity';

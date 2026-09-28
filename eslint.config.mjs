@@ -7,8 +7,9 @@
 // comments can never trip the gate, while real browser-global / wall-clock /
 // randomness ACCESSES are still rejected.
 //
-// The four pure-logic prohibitions (window, document, Math.random, Date.now) are
-// scoped to `src/**/*.ts` ONLY and MUST NOT be relaxed.
+// The pure-logic prohibitions (window, document, Math.random, Date.now) and, as of
+// M4-T01, the environment-dependent-comparison prohibitions (localeCompare, the
+// toLocale* family, Intl) are scoped to `src/**/*.ts` ONLY and MUST NOT be relaxed.
 
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -52,8 +53,8 @@ export default tseslint.config(
   },
 
   {
-    // Pure-logic gate — src/ must stay headless and deterministic (ADR-001 R1/R2,
-    // specs/00_harness_spec.md §6.1). These four restrictions are non-negotiable.
+    // Pure-logic gate — src/ must stay headless and deterministic (ADR-001 R1/R2/R6,
+    // specs/00_harness_spec.md §6.1). These restrictions are non-negotiable.
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-globals': [
@@ -87,6 +88,29 @@ export default tseslint.config(
           // Date.now(), caught separately because it is a constructor call.
           selector: 'NewExpression[callee.name="Date"]',
           message: 'src/ must stay wall-clock free — no `new Date()` (ADR-001 R2).',
+        },
+        {
+          // R6: `localeCompare` collates under the ambient locale / ICU data, so the
+          // SAME two strings can order differently on two machines. `World.listComponents`
+          // feeds `snapshot()`, so a locale-sensitive sort makes replay comparison
+          // environment dependent. `a < b` on strings is a pure UTF-16 code-unit
+          // comparison — use that instead.
+          selector: 'CallExpression[callee.property.name="localeCompare"]',
+          message:
+            'src/ must stay environment-independent — no `localeCompare`; compare strings with `<` / `>` (ADR-001 R6).',
+        },
+        {
+          // The `toLocale*` family is the same hazard in another disguise:
+          // toLocaleLowerCase / toLocaleUpperCase / toLocaleString / toLocaleDateString
+          // all consult the ambient locale.
+          selector: 'CallExpression[callee.property.name=/^toLocale/]',
+          message:
+            'src/ must stay environment-independent — no `toLocale*` methods; use the locale-free variants (ADR-001 R6).',
+        },
+        {
+          // `Intl` is locale/ICU-backed by definition.
+          selector: 'NewExpression[callee.object.name="Intl"], NewExpression[callee.name="Intl"]',
+          message: 'src/ must stay environment-independent — no `Intl` (ADR-001 R6).',
         },
       ],
     },

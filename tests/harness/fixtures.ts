@@ -38,6 +38,23 @@ export class Tag extends ComponentBase {
 }
 
 /**
+ * R6 regression pair (ADR-001 R6).
+ *
+ * `'Zebra' < 'alpha'` under UTF-16 code-unit order (0x5A < 0x61) but
+ * `'alpha' < 'Zebra'` under locale collation, so a sort of these two components
+ * tells the two orderings apart. Used to pin `World.listComponents` to the
+ * environment-independent ordering.
+ */
+export class Zebra extends ComponentBase {
+  public readonly marker = 'Zebra';
+}
+
+/** See {@link Zebra}. */
+export class alpha extends ComponentBase {
+  public readonly marker = 'alpha';
+}
+
+/**
  * Applies every `move` event in the tick's input frame to entities that have
  * both Position and Velocity. Deterministic: iterates ids in ascending order.
  */

@@ -27,6 +27,13 @@ import {
 import { TagComponent } from '../components/TagComponent';
 import { ModifierComponent } from '../components/ModifierComponent';
 import { StatusEffectComponent } from '../components/StatusEffectComponent';
+import {
+  AIControllerComponent,
+  DEFAULT_AI_ATTACK_RADIUS,
+  DEFAULT_AI_COOLDOWN_TICKS,
+  DEFAULT_AI_SIGHT_RADIUS,
+  DEFAULT_AI_WINDUP_TICKS,
+} from '../components/AIControllerComponent';
 import { Faction, FactionComponent } from '../components/FactionComponent';
 import { DEFAULT_MAX_HP, HealthComponent } from '../components/HealthComponent';
 import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxComponent';
@@ -100,6 +107,61 @@ export interface CombatantSpawnOptions {
   readonly hp?: number;
   readonly maxHp?: number;
   readonly hurtboxRadius?: number;
+  /**
+   * AI tuning (M4-T01). When present, an `AIControllerComponent` is mounted and the
+   * entity becomes AI-driven. When absent, NO AI component is mounted at all — the
+   * enemy stays script-driven, exactly as it was before M4. This opt-in shape is
+   * deliberate: `AISystem` overwrites the intent of every entity it owns, so
+   * mounting it by default would silently break every hand-written-intent test
+   * (spec 07 C10 / §10 trade-off 5).
+   */
+  readonly ai?: AITuningOptions;
+}
+
+/** Optional AI tuning overrides; every field defaults to its `AIControllerComponent` default. */
+export interface AITuningOptions {
+  /** Explicit target; omit (or pass `null`) to let the AI auto-acquire one at run time. */
+  readonly targetEntityId?: EntityId | null;
+  readonly sightRadius?: number;
+  readonly attackRadius?: number;
+  readonly windupTicks?: number;
+  readonly cooldownTicks?: number;
+}
+
+/** Fully-resolved AI tuning, ready to be written onto an `AIControllerComponent`. */
+export interface ResolvedAITuning {
+  readonly targetEntityId: EntityId | null;
+  readonly sightRadius: number;
+  readonly attackRadius: number;
+  readonly windupTicks: number;
+  readonly cooldownTicks: number;
+}
+
+/**
+ * Resolve (and validate) AI tuning overrides.
+ *
+ * @throws RangeError for non-positive radii / tick counts, or when `attackRadius`
+ *   exceeds `sightRadius` — "can attack something it cannot see" is always a config
+ *   bug, and it would make the FSM's attack branch shadow its own sight branch.
+ */
+export function resolveAITuning(options: AITuningOptions = {}): ResolvedAITuning {
+  const targetEntityId = options.targetEntityId ?? null;
+  const sightRadius = options.sightRadius ?? DEFAULT_AI_SIGHT_RADIUS;
+  const attackRadius = options.attackRadius ?? DEFAULT_AI_ATTACK_RADIUS;
+  const windupTicks = options.windupTicks ?? DEFAULT_AI_WINDUP_TICKS;
+  const cooldownTicks = options.cooldownTicks ?? DEFAULT_AI_COOLDOWN_TICKS;
+
+  assertPositiveFinite(sightRadius, 'ai.sightRadius');
+  assertPositiveFinite(attackRadius, 'ai.attackRadius');
+  assertPositiveInteger(windupTicks, 'ai.windupTicks');
+  assertPositiveInteger(cooldownTicks, 'ai.cooldownTicks');
+  if (attackRadius > sightRadius) {
+    throw new RangeError(
+      `ai.attackRadius (${String(attackRadius)}) must not exceed ai.sightRadius (${String(sightRadius)})`,
+    );
+  }
+
+  return { targetEntityId, sightRadius, attackRadius, windupTicks, cooldownTicks };
 }
 
 /**
@@ -122,9 +184,15 @@ export interface CombatantSpawnOptions {
  * component list) preserves the "assembly lives in exactly one place" invariant, so
  * the player and enemy prefabs can never drift apart.
  *
+ * The component set above is the MANDATORY one. `PlayerInputComponent` (hardware)
+ * and `AIControllerComponent` (M4-T01) are the two OPT-IN extras, and they are
+ * mutually exclusive: the player gets the device, an AI-driven enemy gets the FSM,
+ * and a plain script-driven enemy gets neither.
+ *
  * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` is not a positive
- *   finite number, if `hp` falls outside `[0, maxHp]`, or if any dash override is
- *   invalid (see {@link resolveDashTuning}).
+ *   finite number, if `hp` falls outside `[0, maxHp]`, if any dash override is
+ *   invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
+ *   {@link resolveAITuning}), or if AI tuning is combined with `hardwareInput`.
  */
 export function spawnCombatant(
   world: World,
@@ -146,6 +214,17 @@ export function spawnCombatant(
   assertPositiveFinite(hurtboxRadius, 'hurtboxRadius');
 
   const dash = resolveDashTuning(options.dash);
+
+  // AI is an OPT-IN capability, and it is mutually exclusive with hardware input:
+  // a player derives its intent from the device, an AI-driven entity has its intent
+  // rewritten by AISystem every tick, so mounting both would make one of the two
+  // silently dead (spec 07 §3.5 / §8).
+  const ai = options.ai === undefined ? undefined : resolveAITuning(options.ai);
+  if (ai !== undefined && hardwareInput) {
+    throw new RangeError(
+      'ai tuning cannot be combined with hardware input: an entity is either device-driven or AI-driven',
+    );
+  }
 
   const entity = world.createEntity();
   world.addComponent(
@@ -174,5 +253,17 @@ export function spawnCombatant(
   world.addComponent(entity.id, new FactionComponent(faction));
   world.addComponent(entity.id, new HealthComponent(hp, maxHp));
   world.addComponent(entity.id, new HurtboxComponent(hurtboxRadius));
+  if (ai !== undefined) {
+    world.addComponent(
+      entity.id,
+      new AIControllerComponent(
+        ai.targetEntityId,
+        ai.sightRadius,
+        ai.attackRadius,
+        ai.windupTicks,
+        ai.cooldownTicks,
+      ),
+    );
+  }
   return entity.id;
 }

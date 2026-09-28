@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { World } from '../../src/ecs/World';
-import { Position, Tag, Velocity } from './fixtures';
+import { Position, Tag, Velocity, Zebra, alpha } from './fixtures';
 
 describe('ECS basics (AC-08)', () => {
   it('creates and tracks entities with sequential ids', () => {
@@ -67,5 +67,28 @@ describe('ECS basics (AC-08)', () => {
     world.destroyEntity(entity.id);
 
     expect(() => world.addComponent(entity.id, new Position())).toThrow();
+  });
+
+  it('lists components in UTF-16 code-unit order, never locale order (ADR-001 R6)', () => {
+    // `listComponents` feeds `GameSimulator.snapshot()`, so its ordering must be
+    // environment independent. Under locale collation these two sort the other way
+    // round ('alpha' before 'Zebra'), which is exactly the cross-machine drift this
+    // test pins shut; the assertion below is on the code-unit result only, so the
+    // test itself stays environment independent.
+    expect('Zebra' < 'alpha').toBe(true);
+
+    const world = new World();
+    const entity = world.createEntity();
+    // Added lowercase-first so a locale sort would look "correct" here too; the
+    // assertion is on the code-unit result, not on insertion order.
+    world.addComponent(entity.id, new alpha());
+    world.addComponent(entity.id, new Zebra());
+    world.addComponent(entity.id, new Velocity());
+
+    expect(world.listComponents(entity.id).map((c) => c.constructor.name)).toEqual([
+      'Velocity',
+      'Zebra',
+      'alpha',
+    ]);
   });
 });

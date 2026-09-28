@@ -65,8 +65,9 @@ jobs:
       - name: Unit tests (Vitest, node environment)
         run: npm run test
 
-      # ADR-001 rules R1 + R2: the simulation core must stay headless and
-      # wall-clock free, otherwise determinism and replay silently break.
+      # ADR-001 rules R1 + R2 + R6: the simulation core must stay headless,
+      # wall-clock free and free of environment-dependent comparisons, otherwise
+      # determinism and replay silently break.
       #
       # M2-T02 tech-debt fix: this gate was previously a `grep -rnE` over src/ that
       # matched a REGEX against raw text. That false-positived on ordinary prose in
@@ -74,8 +75,8 @@ jobs:
       # gymnastics. It is now an ESLint AST gate (eslint.config.mjs) scoped to
       # `src/**/*.ts`: no-restricted-globals (window, document),
       # no-restricted-properties (Math.random, Date.now) and no-restricted-syntax
-      # (new Date()). AST nodes cannot be confused with comments, so the gate is
-      # both precise and false-positive free, while the four prohibitions are
-      # strictly preserved.
-      - name: Lint (ESLint AST gate — no DOM / wall-clock / randomness in src/)
+      # (new Date(), localeCompare, toLocale*, Intl). AST nodes cannot be confused
+      # with comments, so the gate is both precise and false-positive free, while
+      # every prohibition is strictly preserved.
+      - name: Lint (ESLint AST gate — no DOM / wall-clock / randomness / locale API in src/)
         run: npm run lint

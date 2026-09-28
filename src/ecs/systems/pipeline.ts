@@ -1,10 +1,11 @@
 /**
  * Canonical per-tick system pipeline.
  * See specs/02_dash_and_state_spec.md §5.1, specs/03_combat_hitbox_spec.md §5.4,
- * specs/04_combat_feedback_spec.md §5.2 and specs/05_boon_modifier_spec.md §5.2.
+ * specs/04_combat_feedback_spec.md §5.2, specs/05_boon_modifier_spec.md §5.2 and
+ * specs/07_enemy_ai_spec.md §5.2.
  *
  * Order (HARD CONTRACT):
- *   PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem
+ *   PlayerControllerSystem -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem
  *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
  *     -> ModifierSystem -> LifespanSystem.
  *
@@ -16,6 +17,15 @@
  *     "per-entity advance" system, letting hitstop suppress the whole tick.
  *     The relative order of the M1/M2 six segments (Movement .. Lifespan) is
  *     UNCHANGED and MUST NOT be reordered.
+ *  0b. AISystem is the M4-T01 INSERTION — the enemy half of the intent-generation
+ *     prologue (PlayerControllerSystem handles the player's hardware -> intent).
+ *     It sits AFTER FreezeSystem and BEFORE every advance system, and that exact
+ *     slot is the freeze-phase contract (spec 07 §5.2 rule 2): FreezeSystem
+ *     decrements `remainingTicks` first, and everything after it decides "am I
+ *     frozen this tick?" from the POST-decrement value. AISystem must see the same
+ *     verdict as the action systems it feeds, or an enemy would come out of hitstop
+ *     one tick later than the player. It changes no existing system's relative
+ *     position and LifespanSystem stays LAST.
  *  1. MovementSystem integrates position against the state decided on the PREVIOUS
  *     tick. Running it before the dash/state systems means a dash started this tick
  *     begins displacing on the next tick, giving exactly 15 movement ticks for a
@@ -56,13 +66,15 @@
  *     been collision-tested this tick — a hitbox gets its full `activeTicks` span.
  *
  * Reordering any of these systems changes observable behaviour and will break the
- * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6).
+ * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6,
+ * spec 07 §6).
  */
 
 import type { System } from '../System';
 import { EventQueue } from '../events';
 import { PlayerControllerSystem } from './PlayerControllerSystem';
 import { FreezeSystem } from './FreezeSystem';
+import { AISystem } from './AISystem';
 import { MovementSystem } from './MovementSystem';
 import { DashSystem } from './DashSystem';
 import { StateSystem } from './StateSystem';
@@ -85,6 +97,7 @@ export function createDefaultSystems(events: EventQueue = new EventQueue()): rea
   return [
     new PlayerControllerSystem(),
     new FreezeSystem(),
+    new AISystem(),
     new MovementSystem(),
     new DashSystem(),
     new StateSystem(),
