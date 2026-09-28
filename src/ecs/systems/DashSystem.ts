@@ -9,6 +9,11 @@
  *
  * All timing is measured in Ticks and driven by `ticksInState` / `cooldownRemaining`
  * on components — the system holds NO cross-tick hidden state (spec 00 §6.1).
+ *
+ * Trigger semantics (M2-T01 tech-debt fix): a dash fires on the RISING EDGE of the
+ * dash button (`buttonDashJustPressed`), never on the held level. Holding the key
+ * therefore cannot auto-repeat a dash as soon as the cooldown lapses; the player
+ * must release and press again. See specs/03_combat_hitbox_spec.md §4.3.
  */
 
 import type { System, SystemContext } from '../System';
@@ -55,7 +60,7 @@ export class DashSystem implements System {
         // then start a dash if requested and off cooldown.
         if (dash.cooldownRemaining > 0) dash.cooldownRemaining -= 1;
         velocity.speedMultiplier = 1;
-        if (input.buttonDash && dash.cooldownRemaining === 0) {
+        if (input.buttonDashJustPressed && dash.cooldownRemaining === 0) {
           this.startDash(world, id, state, dash, velocity, transform.facingRadians);
         }
       } else {

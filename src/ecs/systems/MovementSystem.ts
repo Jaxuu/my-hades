@@ -23,7 +23,7 @@ import { clampMagnitude } from '../../core/math';
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import { ActionState, StateComponent } from '../components/StateComponent';
-import { DASH_KEY, InputComponent } from '../components/InputComponent';
+import { ATTACK_KEY, DASH_KEY, InputComponent } from '../components/InputComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
 
@@ -39,42 +39,60 @@ export class MovementSystem implements System {
    * Phase 1 — bind the tick's input frame onto InputComponent.
    * `move` overwrites the stick vector; `keyDown`/`keyUp` maintain the held-key set.
    *
-   * When the tick has no events we return early and PRESERVE the previous
-   * `buttonDash`, so a held dash key keeps reading as pressed on empty ticks.
+   * Both LEVEL and EDGE flags are re-derived from the held-key set on EVERY tick,
+   * including ticks with an empty input frame:
+   *  - level (`buttonDash` / `buttonAttack`) mirrors `keysHeld`, so a held key keeps
+   *    reading as pressed on empty ticks — the previous value is preserved because
+   *    `keysHeld` is untouched when there are no events;
+   *  - edge (`buttonDashJustPressed` / `buttonAttackJustPressed`) is a transition of
+   *    the held-key set: released-before AND held-after. It is therefore true for
+   *    exactly one tick, which is what makes dash/attack fire once per press
+   *    (specs/03_combat_hitbox_spec.md §3.6, §4.3).
    */
   private bindInput(world: World, ctx: SystemContext): void {
-    if (ctx.input.length === 0) return;
-
     for (const id of world.query(InputComponent)) {
       const input = world.getComponent(id, InputComponent);
       if (input === undefined) continue;
 
-      let keysChanged = false;
-      for (const event of ctx.input) {
-        switch (event.kind) {
-          case 'move':
-            input.moveVector = event.vector;
-            break;
-          case 'keyDown':
-            if (!input.keysHeld.includes(event.key)) {
-              input.keysHeld.push(event.key);
-              keysChanged = true;
+      // Snapshot the held state BEFORE this tick's events, so the edge flags can
+      // be derived from the "released -> held" transition.
+      const wasDashHeld = input.keysHeld.includes(DASH_KEY);
+      const wasAttackHeld = input.keysHeld.includes(ATTACK_KEY);
+
+      if (ctx.input.length > 0) {
+        let keysChanged = false;
+        for (const event of ctx.input) {
+          switch (event.kind) {
+            case 'move':
+              input.moveVector = event.vector;
+              break;
+            case 'keyDown':
+              if (!input.keysHeld.includes(event.key)) {
+                input.keysHeld.push(event.key);
+                keysChanged = true;
+              }
+              break;
+            case 'keyUp': {
+              const at = input.keysHeld.indexOf(event.key);
+              if (at !== -1) {
+                input.keysHeld.splice(at, 1);
+                keysChanged = true;
+              }
+              break;
             }
-            break;
-          case 'keyUp': {
-            const at = input.keysHeld.indexOf(event.key);
-            if (at !== -1) {
-              input.keysHeld.splice(at, 1);
-              keysChanged = true;
-            }
-            break;
           }
         }
+        // Keep the held-key set ordered so snapshots stay deterministic.
+        if (keysChanged) input.keysHeld.sort();
       }
-      // Keep the held-key set ordered so snapshots stay deterministic.
-      if (keysChanged) input.keysHeld.sort();
-      // Derive the dash button edge from the held-key set (spec 02 §3.4).
-      input.buttonDash = input.keysHeld.includes(DASH_KEY);
+
+      const dashHeld = input.keysHeld.includes(DASH_KEY);
+      const attackHeld = input.keysHeld.includes(ATTACK_KEY);
+
+      input.buttonDash = dashHeld;
+      input.buttonDashJustPressed = dashHeld && !wasDashHeld;
+      input.buttonAttack = attackHeld;
+      input.buttonAttackJustPressed = attackHeld && !wasAttackHeld;
     }
   }
 

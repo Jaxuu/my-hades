@@ -11,9 +11,13 @@
  * Grouping:
  *   G0 · assembly + tuning constants (supports AC-01)
  *   G1 · invulnerability window                     (AC-03)
- *   G2 · cooldown gate                              (AC-04)
+ *   G2 · cooldown gate + rising-edge trigger        (AC-04, spec 03 §4.3)
  *   G3 · dash displacement / speed / direction lock (AC-05, AC-02)
  *   G4 · state machine + no-deadlock + determinism  (AC-01, AC-07, AC-06)
+ *
+ * M2-T01 revision: the dash trigger changed from the held level (`buttonDash`) to
+ * the rising edge (`buttonDashJustPressed`). G2 was updated accordingly — holding
+ * the dash key no longer auto-repeats a dash once the cooldown lapses.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -91,6 +95,12 @@ function tagsOf(rig: Rig): readonly string[] {
   return c.tags;
 }
 
+function inputOf(rig: Rig): InputComponent {
+  const c = rig.sim.world.getComponent(rig.player, InputComponent);
+  if (c === undefined) throw new Error('QA: player is missing InputComponent');
+  return c;
+}
+
 function isInvulnerable(rig: Rig): boolean {
   return hasTag(rig.sim.world, rig.player, INVULNERABLE_TAG);
 }
@@ -116,8 +126,26 @@ describe('G0 · assembly and tuning constants (AC-01 support)', () => {
     expect(isInvulnerable(rig)).toBe(false);
   });
 
-  it('exposes exactly the three ActionState values', () => {
-    expect(Object.values(ActionState).sort()).toEqual(['DASHING', 'IDLE', 'MOVING']);
+  it('exposes exactly the four ActionState values (M2-T01 adds ATTACKING)', () => {
+    expect(Object.values(ActionState).sort()).toEqual(['ATTACKING', 'DASHING', 'IDLE', 'MOVING']);
+  });
+
+  it('exposes a one-tick-wide dash edge flag next to the persistent held level', () => {
+    const rig = makeRig();
+    rig.sim.inject({ kind: 'keyDown', tick: 0, key: DASH_KEY });
+
+    rig.sim.step(1); // tick 0 — the press itself
+    expect(inputOf(rig).buttonDash).toBe(true);
+    expect(inputOf(rig).buttonDashJustPressed).toBe(true);
+
+    rig.sim.step(1); // tick 1 — still held, but the edge has already elapsed
+    expect(inputOf(rig).buttonDash).toBe(true);
+    expect(inputOf(rig).buttonDashJustPressed).toBe(false);
+
+    rig.sim.inject({ kind: 'keyUp', tick: 2, key: DASH_KEY });
+    rig.sim.step(2); // ticks 2..3 — released
+    expect(inputOf(rig).buttonDash).toBe(false);
+    expect(inputOf(rig).buttonDashJustPressed).toBe(false);
   });
 
   it('starts with the spec tuning constants (3 / 15 / 12 / 30 / 0)', () => {
@@ -216,7 +244,7 @@ describe('G2 · cooldown gate (AC-04)', () => {
     expect(dashOf(rig).cooldownRemaining).toBe(0);
   });
 
-  it('auto re-dashes on tick 30 while the dash key stays held', () => {
+  it('does NOT auto re-dash while the dash key stays held (rising-edge trigger)', () => {
     const rig = makeRig();
     rig.sim.inject({ kind: 'keyDown', tick: 0, key: DASH_KEY });
 
@@ -224,7 +252,30 @@ describe('G2 · cooldown gate (AC-04)', () => {
     expect(stateOf(rig).state).toBe(ActionState.IDLE);
     expect(dashOf(rig).cooldownRemaining).toBe(1);
 
-    rig.sim.step(1); // clock 31 — held button + zero cooldown => immediate re-dash
+    rig.sim.step(1); // clock 31 — cooldown reaches 0, but the key was never released
+    expect(dashOf(rig).cooldownRemaining).toBe(0);
+    expect(stateOf(rig).state).toBe(ActionState.IDLE);
+
+    // Holding for another 60 ticks must not produce a second dash: M2-T01 changed
+    // the trigger from the held level to the rising edge (spec 03 §4.3).
+    rig.sim.step(60); // clock 91
+    expect(stateOf(rig).state).toBe(ActionState.IDLE);
+    expectClose(transformOf(rig).x, DASH_DISTANCE);
+  });
+
+  it('re-dashes only after a release + fresh press (rising edge)', () => {
+    const rig = makeRig();
+    rig.sim.inject({ kind: 'keyDown', tick: 0, key: DASH_KEY });
+    rig.sim.step(31); // clock 31 — cooldown 0 while the key is still held: no re-dash
+    expect(dashOf(rig).cooldownRemaining).toBe(0);
+    expect(stateOf(rig).state).toBe(ActionState.IDLE);
+
+    rig.sim.inject({ kind: 'keyUp', tick: 31, key: DASH_KEY });
+    rig.sim.step(1); // clock 32 — released: still no dash
+    expect(stateOf(rig).state).toBe(ActionState.IDLE);
+
+    rig.sim.inject({ kind: 'keyDown', tick: 32, key: DASH_KEY });
+    rig.sim.step(1); // clock 33 — fresh rising edge => dash
     expect(stateOf(rig).state).toBe(ActionState.DASHING);
     expect(stateOf(rig).ticksInState).toBe(1);
     expect(dashOf(rig).cooldownRemaining).toBe(DEFAULT_DASH_COOLDOWN_TICKS);

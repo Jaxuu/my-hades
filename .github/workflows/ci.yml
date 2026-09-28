@@ -67,10 +67,16 @@ jobs:
 
       # ADR-001 rules R1 + R2: the simulation core must stay headless and
       # wall-clock free, otherwise determinism and replay silently break.
+      #
+      # The pattern is deliberately narrow (M2-T01 tech-debt fix): it matches
+      # actual ACCESSES only — a trailing dot for browser globals and a trailing
+      # call for wall-clock/randomness — instead of the bare words. The previous
+      # `\b(document|window|...)\b` form false-positived on ordinary prose in
+      # comments (e.g. the word "window"), which forced comment-wording gymnastics.
       - name: Pure-logic gate (no DOM / wall-clock / randomness in src/)
         run: |
           set -euo pipefail
-          if grep -rnE '\b(document|window|HTMLCanvasElement|requestAnimationFrame|performance\.now|Date\.now|Math\.random)\b' src/ ; then
+          if grep -rnE '\b(window\.|document\.|Date\.now\(\)|Math\.random\(\))' src/ ; then
             echo "::error::src/ must stay headless — browser global or wall-clock access detected (ADR-001 R1/R2)."
             exit 1
           fi

@@ -4,3 +4,7 @@ export * from './InputComponent';
 export * from './StateComponent';
 export * from './DashStatsComponent';
 export * from './TagComponent';
+export * from './HealthComponent';
+export * from './FactionComponent';
+export * from './HurtboxComponent';
+export * from './HitboxComponent';

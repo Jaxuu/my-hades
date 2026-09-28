@@ -13,7 +13,7 @@
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
-import { ActionState, StateComponent } from '../components/StateComponent';
+import { ActionState, DEFAULT_ATTACK_DURATION_TICKS, StateComponent } from '../components/StateComponent';
 import { DEFAULT_DASH_DURATION_TICKS, DashStatsComponent } from '../components/DashStatsComponent';
 import { InputComponent } from '../components/InputComponent';
 
@@ -33,6 +33,20 @@ export class StateSystem implements System {
         if (state.ticksInState >= durationTicks) {
           // Dash finished: hand control back to locomotion (still MOVING if the
           // stick is held, otherwise IDLE) and reset the tick counter.
+          state.state = moving ? ActionState.MOVING : ActionState.IDLE;
+          state.ticksInState = 0;
+        } else {
+          state.ticksInState += 1;
+        }
+        continue;
+      }
+
+      if (state.state === ActionState.ATTACKING) {
+        // Attack commitment window (spec 03 §5.4): the entity stays ATTACKING for
+        // DEFAULT_ATTACK_DURATION_TICKS, then hands control back to locomotion.
+        // CombatActionSystem cannot re-enter ATTACKING while this state is held,
+        // so one attack press yields exactly one attack.
+        if (state.ticksInState >= DEFAULT_ATTACK_DURATION_TICKS) {
           state.state = moving ? ActionState.MOVING : ActionState.IDLE;
           state.ticksInState = 0;
         } else {
