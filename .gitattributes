@@ -1,0 +1,12 @@
+# Normalize line endings so Windows/macOS/Linux checkouts stay byte-identical.
+# This repo is CI-portable by design (see specs/00_harness_spec.md).
+* text=auto eol=lf
+
+# Binary assets must never be line-ending translated.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
