@@ -19,10 +19,18 @@ export class VelocityComponent extends ComponentBase {
   /** Unit-length direction vector (magnitude 0 when idle, 1 when moving). */
   public directionVector: Vec2;
 
-  constructor(maxSpeed = 5, currentSpeed = 0, directionVector: Vec2 = vec2(0, 0)) {
+  /**
+   * Temporary multiplier applied to `maxSpeed` (specs/02 §3.5). `1` in normal
+   * locomotion; DashSystem sets it to the dash multiplier for the dash duration
+   * and resets it to `1` afterwards.
+   */
+  public speedMultiplier: number;
+
+  constructor(maxSpeed = 5, currentSpeed = 0, directionVector: Vec2 = vec2(0, 0), speedMultiplier = 1) {
     super();
     this.maxSpeed = maxSpeed;
     this.currentSpeed = currentSpeed;
     this.directionVector = directionVector;
+    this.speedMultiplier = speedMultiplier;
   }
 }

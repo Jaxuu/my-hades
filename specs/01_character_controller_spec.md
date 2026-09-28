@@ -87,7 +87,7 @@
 
 ### 4.1 每 Tick 积分公式（MUST）
 ```
-dir          = normalize(moveVector)                       // 零向量 → (0,0)
+dir          = clampMagnitude(moveVector, 1)              // 零向量 → (0,0)；|v|<=1 原样保留推力
 moving       = (dir.x !== 0 || dir.y !== 0)
 currentSpeed = moving ? maxSpeed : 0
 transform.x += dir.x * currentSpeed * fixedDeltaSeconds
@@ -95,10 +95,16 @@ transform.y += dir.y * currentSpeed * fixedDeltaSeconds
 if (moving) transform.facingRadians = atan2(dir.y, dir.x)
 ```
 
-### 4.2 归一化（MUST，对应 AC-03）
-- `moveVector` 归一化后，`|directionVector| === 1`（零向量除外）。
-- **斜向不得超速**：`normalize((1,1)) === (√2/2, √2/2) ≈ (0.7071, 0.7071)`。
-- 零向量 `normalize((0,0)) === (0,0)`，且 `currentSpeed === 0`。
+### 4.2 限幅（MUST，对应 AC-03；rev.2 起由「归一化」改为「限幅」）
+- `dir = clampMagnitude(moveVector, 1)`：**仅当 `|moveVector| > 1` 时**等比缩放到模长恰为 `1`；**`|moveVector| <= 1` 时原样返回**（保留推力大小，即模拟摇杆语义——半推慢走）。
+- **斜向不得超速**：`clampMagnitude((1,1), 1) === (√2/2, √2/2) ≈ (0.7071, 0.7071)`。
+- 零向量 `clampMagnitude((0,0), 1) === (0,0)`，且 `currentSpeed === 0`。
+- 数字输入（键盘 / 十字键）产生 `|v| ∈ {0, 1, √2}`，行为与旧版 `normalize` 完全一致，故 AC-03 用例仍全绿。
+- `maxLength` 非正 / 非有限 ⇒ 抛 `RangeError`（见 `src/core/math.ts`）。
+
+> **修订（rev.2）**：原 §4.2 要求「归一化」`normalize(moveVector)`。M2 接入模拟摇杆后，
+> 归一化会丢失推力大小（半推也被放大到满速），故改为限幅 `clampMagnitude(v, 1)`。
+> 对 M1 的数字输入语义**无行为差异**（`|v| <= 1` 原样、`|v| = √2` 缩放到 1），AC-03 判据不变。
 
 ### 4.3 零输入（MUST）
 `moveVector === (0,0)` ⇒ 坐标**不变**，`currentSpeed === 0`，`facingRadians` **保持不变**（不重置为 0）。
@@ -197,10 +203,19 @@ PlayerFactory.spawn(world: World, options?: PlayerSpawnOptions): EntityId
 
 ## 10. 已知取舍（Known Trade-offs）
 
-1. **归一化 vs 模拟量输入**：本 Spec 按 AC-03 采用 `normalize`（数字输入语义，键盘/十字键正确）。
-   若 M2 接入**模拟摇杆**并需要保留推力大小（半推慢走），应改为 `clampMagnitude(v, 1)`（仅当 `|v| > 1` 时缩放）——
-   届时须修订 AC-03 并补"半推"用例。
+1. **限幅 vs 归一化（已修订，rev.2）**：本 Spec 原按 AC-03 采用 `normalize`（数字输入语义，键盘/十字键正确）。
+   M2 接入**模拟摇杆**并需要保留推力大小（半推慢走）后，已改为 `clampMagnitude(v, 1)`（仅当 `|v| > 1` 时缩放）——
+   数字输入下与旧版行为等价，AC-03 判据不变；「半推」用例见 `specs/02_dash_and_state_spec.md` 后续里程碑。
 2. **输入绑定与运动学同处 `MovementSystem`**：M1 输入简单（仅 move + 按键记录），合并可避免冗余系统。
    当 M2 引入冲刺/技能/按键映射后，应抽取独立的 `InputSystem`，`MovementSystem` 只消费 `InputComponent`。
 3. **`directionVector` 为 `Vec2` 对象**：每 Tick 每实体一次小对象分配。M1 规模下可忽略；
    若 M3 性能剖析显示 GC 压力，可改为 `directionX/directionY` 两个标量。
+
+---
+
+## 11. 修订记录（Revision History）
+
+| 版本 | 日期 | 作者 | 变更 | 触发 |
+|---|---|---|---|---|
+| rev.1 | 2026-09-28 | 程基岩 | 初版（M1-T01）：归一化 `normalize`，AC-01…AC-07 | M1-T01 |
+| **rev.2** | 2026-09-28 | 程基岩 | §4.1/§4.2 由**归一化**改为**限幅** `clampMagnitude(v, 1)`；§10 取舍 1 标记为已修订。数字输入行为不变，AC-03 判据不变。新增 `src/core/math.ts::clampMagnitude`。 | M1-T02（模拟摇杆保留推力大小） |
