@@ -56,6 +56,10 @@
   `no-restricted-syntax`(new Date())。**旧的 `grep -rnE` 门已删除**——它会把注释里的普通英文名词
   （如句末的 `window.`）当违规，逼着人给注释"绕词"。AST 门对注释**零误报**，已用变异测试验证
   （真实访问 → 5 error；仅注释提及 → 0 error）。⇒ `src/` 注释现在**可以**自由使用 `window` / `document` 词面量。
+  **M4-T01 又补了 R6 三条 selector**：`CallExpression[callee.property.name="localeCompare"]`、
+  `[callee.property.name=/^toLocale/]`、`new Intl` ⇒ 变异测试 3 error、注释提及 0 误报。
+  `World.listComponents` 原用 `localeCompare` 排组件名（进入 `snapshot()`！）已改为
+  `compareComponentTypeName`（UTF-16 码元序），回归断言在 `tests/harness/ecs.test.ts`（夹具 `Zebra` / `alpha`）。
 - **`@typescript-eslint/no-unused-vars` 必须配 `argsIgnorePattern: '^_'`**：否则 `update(world, _ctx)`
   这种"故意不用"的参数会被默认的 `args: 'after-used'` 报错，`npm run lint` 不可能全绿。
 - **ESLint 版本钉在 9 线**：`@eslint/js@*` 会拉 10.x 与 eslint 9 冲突，须显式钉 `^9.x`。
@@ -76,19 +80,22 @@
 | M2-T01 | 基础战斗 / 圆碰撞 / 无敌帧消费（4 组件 + 3 系统 + `EnemyFactory`） | ✅ PASS（9 文件 / 86 用例全绿） |
 | M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**） |
 | M3-T01 | 变异引擎基础与事件拦截管道（`HitEvent` / `EventQueue` / `ModifierComponent` / `ModifierSystem` / Zeus Strike） | ✅ PASS（11 文件 / 143 用例全绿，已提交 `7f4bd93`） |
-| M3-T02 | 修饰器注册表 + 状态异常容器 + DoT（`ModifierRegistry` / `IModifierHandler` / `StatusEffectComponent` / `StatusEffectSystem` / `DionysusBlightModifier`） | ✅ PASS（12 文件 / **165 用例全绿**，未提交） |
+| M3-T02 | 修饰器注册表 + 状态异常容器 + DoT（`ModifierRegistry` / `IModifierHandler` / `StatusEffectComponent` / `StatusEffectSystem` / `DionysusBlightModifier`） | ✅ PASS（12 文件 / **165 用例全绿**，已提交 `02208b7`） |
+| M4-T01 | 敌方状态机 AI 与攻击预警（`AIControllerComponent` / `AIState` / `AISystem` / `IntentComponent.aimRadians` / `resolveAITuning`）+ 确定性技术债（`localeCompare` → 码元序，ADR-001 R6） | ✅ PASS（13 文件 / **186 用例全绿**，未提交） |
 
-- 规范管道（**硬契约，不得重排，10 段**）：
-  `PlayerControllerSystem → FreezeSystem → MovementSystem → DashSystem → StateSystem
+- 规范管道（**硬契约，不得重排，11 段**）：
+  `PlayerControllerSystem → FreezeSystem → AISystem → MovementSystem → DashSystem → StateSystem
    → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem → LifespanSystem`（`createDefaultSystems()`）。
   `PlayerControllerSystem`（硬件→意图）取代原 `MovementSystem.bindInput` 成为首段；
-  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`StatusEffectSystem` **必须在 `CollisionSystem` 之后
+  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；
+  `AISystem`（AI→意图，M4-T01）**必须在 `FreezeSystem` 之后、所有推进系统之前**——它要看到**递减后**的冻结判据，
+  否则顿帧恢复拍会与运动系统错开一拍（相位契约，不是风格）；`StatusEffectSystem` **必须在 `CollisionSystem` 之后
   且 `ModifierSystem` 之前**（DoT 相位契约的唯一实现手段，见下）；`ModifierSystem` **必须在 `CollisionSystem` 之后
   （读本 Tick 事件）、`LifespanSystem` 之前（注入的判定圆需被判定过才销毁）**；`LifespanSystem` **必须最后**
   （否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
 - 权威规格：`specs/00_harness_spec.md`、`specs/01_character_controller_spec.md`、`specs/02_dash_and_state_spec.md`、
   `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`、`specs/05_boon_modifier_spec.md`、
-  `specs/06_status_effect_and_dot_spec.md`。
+  `specs/06_status_effect_and_dot_spec.md`、`specs/07_enemy_ai_spec.md`。
 - **变异引擎（M3-T01）铁律**：
   - 事件总线 `EventQueue<T = HitEvent>` 由 `createDefaultSystems(events?)` **构造注入**（不塞 `SystemContext`、
     不挂 `World`）；`ModifierSystem` 每 Tick 全量 `drain()` ⇒ **Tick 边界 `size === 0`**（非隐藏状态）。
@@ -112,6 +119,26 @@
     不做冻结门控、不检查无敌帧**。写击退会覆盖清零基础命中；进 `HITSTUN` 会变硬直锁。
   - 状态结算**先于**到期判定（否则 `duration = k×interval` 时第 k 次结算消失）；`durationTicks` 取 `intervalTicks` 整数倍。
   - 状态列表按 id **升序唯一**（多样性走 `stacks`）；排序一律 UTF-16 码元序（`<`/`>`），**禁用 `localeCompare`**。
+- **敌方 AI（M4-T01）铁律**：
+  - `AISystem` **零字段**（除 `readonly name`）；FSM 全部状态落在 `AIControllerComponent`
+    （`state`/`ticksRemaining`/`lockedFacingRadians`/`targetEntityId`）。
+  - **AI 的输出只有 `IntentComponent`**（`moveVector` / `wantsToAttack` / `aimRadians`）：
+    不写 `Transform`/`Velocity`、不建实体、不调 `applyDamage`/`applyFreeze`、**不写 `wantsToDash`**。
+    前摇的「锁定出手朝向」经 `IntentComponent.aimRadians` 表达，由 `MovementSystem` 的**静止**分支落地——
+    保持「`facingRadians` 只有一个写入者」。`aimRadians === null` ⇒ 与 M1–M3 逐位等价。
+  - **门控顺序不可交换**：先判 `isFrozen`（顿帧 = **暂停**，`ticksRemaining` 原地冻结，不吞帧），
+    后判 `ActionState.HITSTUN`（硬直 = **打断**：重置 `IDLE`，被作废的前摇**不补触发**，恢复后重新评估）。
+    同一次命中同时写 hitstop + HITSTUN，先判硬直会把「暂停」降级成「打断」。
+  - **进入前摇那一拍不递减 `ticksRemaining`** ⇒ 前摇恰 `windupTicks` 拍，出手在「进入拍 + `windupTicks`」。
+    **冷却结束只回 `CHASING`/`IDLE`**（不直接进 `WINDUP`）⇒ 周期 = `windupTicks + cooldownTicks + 1`。
+  - **「发现」拍不移动**：`IDLE → CHASING` 只翻状态、不输出向量（1 Tick 反应延迟，也让两态行为真正不同）。
+    但 `IDLE` 的 `dist ≤ attackRadius` 分支**无**延迟，直接起前摇。
+  - **AI 挂载是可选能力**：`EnemyFactory.spawn` 默认**不挂** `AIControllerComponent`（默认挂会覆写 M1–M3
+    全部手写意图用例）；`ai` 与 `hardwareInput` 互斥（同时给出抛 `RangeError`）；`attackRadius > sightRadius` 抛 `RangeError`。
+  - **`wantsToAttack` 是单 Tick 脉冲且同拍被 `CombatActionSystem` 消费**：断言它必须把探针**插在 `AISystem` 正后方**
+    （`[...base.slice(0,3), probe, ...base.slice(3)]`），并以 `base[2].name === 'AISystem'` 钉住插入点。
+    判定圆在**出手同拍**生成（不是下一拍），并在下一拍仍存活。
+  - **自动索敌**：`query` 升序 + **严格 `<`** ⇒ 等距取较小 id；目标**粘性**（锁定后不换，除非失效）。
 - **"输入是全局帧"的局限已被根治**（M2-T02）：意图层解耦后敌人**不持有**硬件组件，
   同一 Tick 的按键事件只作用于玩家。残留局限：玩家键位仍是全局的（`DASH_KEY`/`ATTACK_KEY` 不按实体绑定），
   多玩家/重映射需在 `PlayerInputComponent` 上加 `dashKey`/`attackKey`（属 M3）。
