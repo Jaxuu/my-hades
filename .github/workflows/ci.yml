@@ -1,0 +1,77 @@
+name: CI
+
+# Enforces the architectural rules declared in docs/architecture/ADR-001-headless-ecs-foundation.md
+# and the acceptance criteria in specs/00_harness_spec.md + specs/01_character_controller_spec.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + tests + pure-logic gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci
+
+      # Guard against the M0 R1 defect class: `npm ci` is strictly lockfile-driven and
+      # SILENTLY SKIPS platform optional deps that are missing from the lockfile
+      # (exit code stays 0), after which vitest dies with MODULE_NOT_FOUND.
+      # See ADR-001 §6 and specs/00_harness_spec.md.
+      - name: Lockfile platform coverage guard
+        run: |
+          set -euo pipefail
+          missing=0
+          for pkg in "@esbuild/linux-x64" "@rollup/rollup-linux-x64-gnu"; do
+            if grep -q "\"node_modules/${pkg}\"" package-lock.json; then
+              echo "OK   ${pkg}"
+            else
+              echo "::error::package-lock.json is missing ${pkg} — npm ci would silently skip it."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Regenerate the lockfile in an isolated dir without node_modules (see ADR-001 §6)."
+            exit 1
+          fi
+
+      - name: Typecheck (TypeScript strict)
+        run: npm run typecheck
+
+      # Runs the whole suite, including the QA-owned adversarial suite
+      # tests/harness/independent-verify.test.ts (structural independence: own
+      # fixtures, own assertions — see ADR-001 §6.1).
+      - name: Unit tests (Vitest, node environment)
+        run: npm run test
+
+      # ADR-001 rules R1 + R2: the simulation core must stay headless and
+      # wall-clock free, otherwise determinism and replay silently break.
+      - name: Pure-logic gate (no DOM / wall-clock / randomness in src/)
+        run: |
+          set -euo pipefail
+          if grep -rnE '\b(document|window|HTMLCanvasElement|requestAnimationFrame|performance\.now|Date\.now|Math\.random)\b' src/ ; then
+            echo "::error::src/ must stay headless — browser global or wall-clock access detected (ADR-001 R1/R2)."
+            exit 1
+          fi
+          echo "OK: src/ contains no DOM, wall-clock or randomness access."

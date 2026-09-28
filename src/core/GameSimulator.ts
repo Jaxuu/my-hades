@@ -118,6 +118,7 @@ export class GameSimulator {
       const ctx: SystemContext = {
         tick: currentTick,
         elapsedSeconds: currentTick * this.clock.fixedDeltaSeconds,
+        fixedDeltaSeconds: this.clock.fixedDeltaSeconds,
         input: inputFrame,
       };
       this.scheduler.run(this.world, ctx);

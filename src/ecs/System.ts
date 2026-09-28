@@ -10,6 +10,12 @@ export interface SystemContext {
   readonly tick: number;
   /** Accumulated simulated seconds at the START of this tick. */
   readonly elapsedSeconds: number;
+  /**
+   * Simulated seconds per tick (= 1 / fps). Systems MUST integrate against this
+   * value instead of hard-coding 1/60, so behaviour is fps-independent.
+   * See specs/01_character_controller_spec.md §5.2 (AC-05).
+   */
+  readonly fixedDeltaSeconds: number;
   /** The input frame delivered for exactly this tick (FIFO order). */
   readonly input: ReadonlyArray<InputEvent>;
 }

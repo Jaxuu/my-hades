@@ -181,6 +181,7 @@ class World {
 interface SystemContext {
   readonly tick: number;
   readonly elapsedSeconds: number;
+  readonly fixedDeltaSeconds: number;        // = 1 / fps，本 Tick 的模拟步长（秒）
   readonly input: ReadonlyArray<InputEvent>; // 本 Tick 输入帧
 }
 
@@ -189,6 +190,11 @@ interface System {
   update(world: World, ctx: SystemContext): void;
 }
 ```
+
+> **修订记录（rev.2 · M1-T01）**：`SystemContext` 新增 `fixedDeltaSeconds`。
+> 理由：玩法系统（如 `MovementSystem`）必须基于模拟时钟步长积分，而**不得硬编码 `1/60` 或 `16.67ms`**；
+> 由 `GameSimulator` 统一注入，是唯一能保证"换 fps 后行为一致"的做法（见 `specs/01_character_controller_spec.md` AC-05）。
+> 影响面：`src/ecs/System.ts`（接口）、`src/core/GameSimulator.ts`（构造 ctx）、既有测试夹具（需补该字段）。
 
 ### 6.3 系统执行顺序（MUST）
 - 系统按注册顺序每 Tick 执行一次，顺序**确定**。
