@@ -74,16 +74,27 @@
 | M1-T01 | 基础移动控制（`MovementSystem` + 3 组件 + `PlayerFactory`） | ✅ |
 | M1-T02 | 冲刺 / 动作状态机 / 无敌帧（`DashSystem` + `StateSystem` + 管道） | ✅ PASS（8 文件 / 72 用例全绿） |
 | M2-T01 | 基础战斗 / 圆碰撞 / 无敌帧消费（4 组件 + 3 系统 + `EnemyFactory`） | ✅ PASS（9 文件 / 86 用例全绿） |
-| M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**，未提交） |
+| M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**） |
+| M3-T01 | 变异引擎基础与事件拦截管道（`HitEvent` / `EventQueue` / `ModifierComponent` / `ModifierSystem` / Zeus Strike） | ✅ PASS（11 文件 / **143 用例全绿**，未提交） |
 
 - 规范管道（**硬契约，不得重排**）：
   `PlayerControllerSystem → FreezeSystem → MovementSystem → DashSystem → StateSystem
-   → CombatActionSystem → CollisionSystem → LifespanSystem`（`createDefaultSystems()`）。
+   → CombatActionSystem → CollisionSystem → ModifierSystem → LifespanSystem`（`createDefaultSystems()`）。
   `PlayerControllerSystem`（硬件→意图）取代原 `MovementSystem.bindInput` 成为首段；
-  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`LifespanSystem` **必须最后**
+  `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；`ModifierSystem` **必须在 `CollisionSystem` 之后
+  （读本 Tick 事件）、`LifespanSystem` 之前（注入的判定圆需被判定过才销毁）**；`LifespanSystem` **必须最后**
   （否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
 - 权威规格：`specs/00_harness_spec.md`、`specs/01_character_controller_spec.md`、`specs/02_dash_and_state_spec.md`、
-  `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`。
+  `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`、`specs/05_boon_modifier_spec.md`。
+- **变异引擎（M3-T01）铁律**：
+  - 事件总线 `EventQueue<T = HitEvent>` 由 `createDefaultSystems(events?)` **构造注入**（不塞 `SystemContext`、
+    不挂 `World`）；`ModifierSystem` 每 Tick 全量 `drain()` ⇒ **Tick 边界 `size === 0`**（非隐藏状态）。
+  - 防递归门 `sourceModifier !== null` **必须在持有者判定之前**（否则 `1→2→4→…` 指数爆炸）。
+  - `ModifierSystem` **不跳过冻结实体**（顿帧与命中同 Tick 写入；跳过则 Zeus 永不触发）。
+  - **`ModifierSystem` 之后注入的判定圆，`activeTicks` 必须 ≥ 2**（当 Tick 不被判定，当 Tick 末即被
+    `LifespanSystem` 自减 ⇒ 写 1 会静默失效）。**"1 Tick 延迟"是架构固有属性。**
+  - 命中反馈写入**按需门控**：`hitstopTicks > 0 || knockbackForce > 0`。纯伤害判定圆两项皆 `0` ⇒
+    不延长顿帧、**不清零击退**（`KnockbackComponent` 是覆盖写）。
 - **"输入是全局帧"的局限已被根治**（M2-T02）：意图层解耦后敌人**不持有**硬件组件，
   同一 Tick 的按键事件只作用于玩家。残留局限：玩家键位仍是全局的（`DASH_KEY`/`ATTACK_KEY` 不按实体绑定），
   多玩家/重映射需在 `PlayerInputComponent` 上加 `dashKey`/`attackKey`（属 M3）。
