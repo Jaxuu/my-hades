@@ -6,8 +6,9 @@
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
  * canonical pipeline (PlayerControllerSystem -> FreezeSystem -> MovementSystem ->
  * DashSystem -> StateSystem -> CombatActionSystem -> CollisionSystem ->
- * LifespanSystem) and REAL prefab-assembled entities. Nothing is mocked, and ticks
- * are advanced one at a time so the timing contract is pinned per tick.
+ * ModifierSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is
+ * mocked, and ticks are advanced one at a time so the timing contract is pinned
+ * per tick.
  *
  * Hit geometry: player at (0, 0) facing +x attacks on tick 0; its hitbox is centred
  * at (0.75, 0) with radius 1.0, and the enemy (hurtbox radius 0.5) at (1.5, 0) is
@@ -520,7 +521,10 @@ describe('G3 · deterministic replay of the feedback path (AC-04)', () => {
  * G4 · pipeline order                                                 *
  * ------------------------------------------------------------------ */
 describe('G4 · canonical pipeline order (AC-07)', () => {
-  it('runs PlayerController -> Freeze -> Movement -> Dash -> State -> CombatAction -> Collision -> Lifespan', () => {
+  it('runs PlayerController -> Freeze -> Movement -> Dash -> State -> CombatAction -> Collision -> Modifier -> Lifespan', () => {
+    // M3-T01 (spec 05 §5.2) INSERTED ModifierSystem between CollisionSystem and
+    // LifespanSystem. The M1/M2 six-segment relative order is unchanged and
+    // LifespanSystem is still last — this assertion is the guard for both.
     expect(createDefaultSystems().map((system) => system.name)).toEqual([
       'PlayerControllerSystem',
       'FreezeSystem',
@@ -529,6 +533,7 @@ describe('G4 · canonical pipeline order (AC-07)', () => {
       'StateSystem',
       'CombatActionSystem',
       'CollisionSystem',
+      'ModifierSystem',
       'LifespanSystem',
     ]);
   });

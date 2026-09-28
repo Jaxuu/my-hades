@@ -80,6 +80,21 @@ export class HitboxComponent extends ComponentBase {
   /** Ids already struck by this hitbox, kept ascending for determinism. */
   public hitEntities: EntityId[];
 
+  /**
+   * Provenance of this hitbox (M3-T01). `null` means a base attack; a non-null
+   * value is the id of the MODIFIER that injected it (e.g. `'zeus_strike'`).
+   *
+   * Its ONLY purpose is anti-recursion: CollisionSystem copies it verbatim into
+   * the `HitEvent`, and ModifierSystem refuses to dispatch modifiers for a hit
+   * whose `sourceModifier` is non-null. Without it, a modifier-injected hitbox
+   * that itself lands a hit would re-trigger the modifier that created it,
+   * nesting without bound (spec 05 AC-04 / §4.5).
+   *
+   * Deliberately NOT overloaded with "this hit is pure damage" semantics —
+   * feedback is expressed by `hitstopTicks` / `knockbackForce` (spec 05 §3.4).
+   */
+  public sourceModifier: string | null;
+
   constructor(
     radius: number,
     damage: number,
@@ -89,6 +104,7 @@ export class HitboxComponent extends ComponentBase {
     hitstopTicks = DEFAULT_HITSTOP_TICKS,
     knockbackForce = DEFAULT_KNOCKBACK_FORCE,
     hitEntities: EntityId[] = [],
+    sourceModifier: string | null = null,
   ) {
     super();
     this.radius = radius;
@@ -99,5 +115,6 @@ export class HitboxComponent extends ComponentBase {
     this.hitstopTicks = hitstopTicks;
     this.knockbackForce = knockbackForce;
     this.hitEntities = hitEntities;
+    this.sourceModifier = sourceModifier;
   }
 }

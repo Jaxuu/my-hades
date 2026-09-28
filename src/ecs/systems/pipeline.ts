@@ -1,11 +1,12 @@
 /**
  * Canonical per-tick system pipeline.
- * See specs/02_dash_and_state_spec.md §5.1, specs/03_combat_hitbox_spec.md §5.4 and
- * specs/04_combat_feedback_spec.md §5.2.
+ * See specs/02_dash_and_state_spec.md §5.1, specs/03_combat_hitbox_spec.md §5.4,
+ * specs/04_combat_feedback_spec.md §5.2 and specs/05_boon_modifier_spec.md §5.2.
  *
  * Order (HARD CONTRACT):
  *   PlayerControllerSystem -> FreezeSystem -> MovementSystem -> DashSystem
- *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> LifespanSystem.
+ *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> ModifierSystem
+ *     -> LifespanSystem.
  *
  * Why this exact order:
  *  0. PlayerControllerSystem is the new FIRST segment (M2-T02): it replaces the old
@@ -34,16 +35,25 @@
  *  5. CollisionSystem runs after the hitboxes for this tick exist. It therefore sees
  *     the i-frame tag exactly as DashSystem left it this tick, which is what makes
  *     the invulnerability-consumption contract (spec 03 §4.4) tick-exact. It is also
- *     the hit-feedback write point: hitstop, HITSTUN and knockback are all written
- *     here, at the END of the tick, so they take effect from the NEXT tick.
- *  6. LifespanSystem runs LAST so it cannot destroy a hitbox before that hitbox has
+ *     the hit-feedback write point (hitstop, HITSTUN, knockback) AND, as of M3-T01,
+ *     the hit-EVENT publish point: every landed hit emits a `HitEvent` on the shared
+ *     bus. Feedback and events are both written at the END of the tick, so feedback
+ *     takes effect from the NEXT tick.
+ *  6. ModifierSystem is the M3-T01 INSERTION — it must sit after CollisionSystem (to
+ *     read this tick's events) and before LifespanSystem (an injected hitbox must not
+ *     be aged before it has ever been collision-tested, which is why a Zeus bolt has
+ *     `activeTicks = 2` for exactly one test tick — spec 05 §4.4). It deliberately
+ *     does NOT reorder anything: the six M1/M2 segments keep their relative order and
+ *     LifespanSystem stays LAST.
+ *  7. LifespanSystem runs LAST so it cannot destroy a hitbox before that hitbox has
  *     been collision-tested this tick — a hitbox gets its full `activeTicks` span.
  *
  * Reordering any of these systems changes observable behaviour and will break the
- * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6).
+ * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6).
  */
 
 import type { System } from '../System';
+import { EventQueue } from '../events';
 import { PlayerControllerSystem } from './PlayerControllerSystem';
 import { FreezeSystem } from './FreezeSystem';
 import { MovementSystem } from './MovementSystem';
@@ -51,10 +61,19 @@ import { DashSystem } from './DashSystem';
 import { StateSystem } from './StateSystem';
 import { CombatActionSystem } from './CombatActionSystem';
 import { CollisionSystem } from './CollisionSystem';
+import { ModifierSystem } from './ModifierSystem';
 import { LifespanSystem } from './LifespanSystem';
 
-/** Fresh instances of the canonical pipeline, in execution order. */
-export function createDefaultSystems(): readonly System[] {
+/**
+ * Fresh instances of the canonical pipeline, in execution order.
+ *
+ * @param events Event bus shared by CollisionSystem (producer) and ModifierSystem
+ *   (consumer). Defaults to a private queue, so existing `createDefaultSystems()`
+ *   callers are unaffected; tests may inject their own queue to observe the bus
+ *   (spec 05 §6.5). A fresh queue per call means two simulators can never share
+ *   events, which is what keeps replay deterministic (spec 05 §5.3).
+ */
+export function createDefaultSystems(events: EventQueue = new EventQueue()): readonly System[] {
   return [
     new PlayerControllerSystem(),
     new FreezeSystem(),
@@ -62,7 +81,8 @@ export function createDefaultSystems(): readonly System[] {
     new DashSystem(),
     new StateSystem(),
     new CombatActionSystem(),
-    new CollisionSystem(),
+    new CollisionSystem(events),
+    new ModifierSystem(events),
     new LifespanSystem(),
   ];
 }

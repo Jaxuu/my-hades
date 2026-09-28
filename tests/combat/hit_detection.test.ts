@@ -6,7 +6,7 @@
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
  * canonical pipeline (PlayerControllerSystem -> FreezeSystem -> MovementSystem ->
  * DashSystem -> StateSystem -> CombatActionSystem -> CollisionSystem ->
- * LifespanSystem) and REAL prefab-assembled entities (PlayerFactory /
+ * ModifierSystem -> LifespanSystem) and REAL prefab-assembled entities (PlayerFactory /
  * EnemyFactory). Nothing is mocked, and ticks are advanced one at a time so the
  * timing contract is pinned per tick rather than only at the end.
  *

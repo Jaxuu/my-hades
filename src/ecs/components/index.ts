@@ -11,3 +11,4 @@ export * from './HurtboxComponent';
 export * from './HitboxComponent';
 export * from './FreezeComponent';
 export * from './KnockbackComponent';
+export * from './ModifierComponent';

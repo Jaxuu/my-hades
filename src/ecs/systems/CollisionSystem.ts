@@ -14,17 +14,33 @@
  *  5. otherwise apply damage and record the target in `hitEntities`
  *  6. then write the hit FEEDBACK (M2-T02): hitstop on both sides, HITSTUN on the
  *     victim, and a knockback velocity pointing away from the hitbox centre.
+ *  7. then EMIT a `HitEvent` (M3-T01) on the shared event bus, carrying the
+ *     hitbox's `sourceModifier` verbatim so a modifier can never re-trigger
+ *     itself (spec 05 AC-04).
  *
  * Step 4 is the heart of the invulnerability contract: an i-frame hit is IGNORED
- * ENTIRELY — no damage AND no `hitEntities` entry. That is what lets the same
- * hitbox connect later, once the window has lapsed (spec 03 §4.4). The M2-T02
- * feedback (step 6) is likewise only written on a hit that actually LANDS, so an
- * i-frame hit does not freeze or knock back either.
+ * ENTIRELY — no damage, no `hitEntities` entry, no feedback AND no event. That is
+ * what lets the same hitbox connect later, once the window has lapsed (spec 03
+ * §4.4). The M2-T02 feedback (step 6) is likewise only written on a hit that
+ * actually LANDS, so an i-frame hit does not freeze or knock back either.
+ *
+ * Step 6 is GATED (M3-T01): a hitbox that requests NEITHER hitstop NOR knockback
+ * (both `0`) injects pure damage and writes no feedback at all. Modifier-injected
+ * hitboxes use this — a `zeus_strike` bolt must not extend the hitstop it lands
+ * during, nor overwrite (zero out) the knockback the triggering hit wrote, since
+ * `KnockbackComponent` is a last-writer-wins overwrite (spec 04 §4.4 / spec 05
+ * §4.6). Every pre-M3 configuration keeps at least one of the two fields > 0, so
+ * its behaviour is bit-for-bit unchanged.
+ *
+ * This system stays POLICY-FREE (spec 05 C8): it reports that a hit happened; it
+ * never decides what a boon should do about it.
  */
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import { normalizeVec2, scaleVec2, vec2 } from '../../core/math';
+import { EventQueue } from '../events';
+import type { HitEvent } from '../events';
 import { TransformComponent } from '../components/TransformComponent';
 import { HitboxComponent } from '../components/HitboxComponent';
 import { HurtboxComponent } from '../components/HurtboxComponent';
@@ -38,7 +54,18 @@ import { INVULNERABLE_TAG, hasTag } from '../components/TagComponent';
 export class CollisionSystem implements System {
   public readonly name = 'CollisionSystem';
 
-  public update(world: World, _ctx: SystemContext): void {
+  /**
+   * Tick-scoped event bus. Injected so the SAME queue instance is shared with
+   * ModifierSystem (see `createDefaultSystems`); the default keeps the system
+   * usable standalone, but a standalone instance's events are never drained.
+   */
+  private readonly events: EventQueue;
+
+  constructor(events: EventQueue = new EventQueue()) {
+    this.events = events;
+  }
+
+  public update(world: World, ctx: SystemContext): void {
     const hitboxIds = world.query(TransformComponent, HitboxComponent);
     if (hitboxIds.length === 0) return;
 
@@ -85,37 +112,59 @@ export class CollisionSystem implements System {
         hitbox.hitEntities.sort((a, b) => a - b);
 
         // --- M2-T02 hit feedback (only for a hit that actually landed) ---------
-
-        // Hitstop freezes BOTH sides for `hitstopTicks` ticks (spec 04 AC-01).
-        applyFreeze(world, targetId, hitbox.hitstopTicks);
-        if (world.isAlive(hitbox.ownerEntityId)) {
-          applyFreeze(world, hitbox.ownerEntityId, hitbox.hitstopTicks);
-        }
-
-        // The victim enters HITSTUN (spec 04 AC-03). Missing StateComponent => skip.
         //
-        // The counter is seeded at 1, not 0. HITSTUN is entered HERE, and
-        // CollisionSystem runs AFTER StateSystem, so tick `T` is never counted by the
-        // state machine. Seeding at 1 (mirroring how ATTACKING counts its own entry
-        // tick, which IS counted because CombatActionSystem runs before StateSystem)
-        // makes the observable stun span equal DEFAULT_HITSTUN_TICKS exactly.
-        const targetState = world.getComponent(targetId, StateComponent);
-        if (targetState !== undefined) {
-          targetState.state = ActionState.HITSTUN;
-          targetState.ticksInState = 1;
+        // Gated (M3-T01): feedback is what the hitbox ASKS for. A hitbox with
+        // neither hitstop nor knockback is a pure-damage tick and writes nothing
+        // — critically, it must not overwrite the victim's in-flight knockback.
+        if (hitbox.hitstopTicks > 0 || hitbox.knockbackForce > 0) {
+          // Hitstop freezes BOTH sides for `hitstopTicks` ticks (spec 04 AC-01).
+          applyFreeze(world, targetId, hitbox.hitstopTicks);
+          if (world.isAlive(hitbox.ownerEntityId)) {
+            applyFreeze(world, hitbox.ownerEntityId, hitbox.hitstopTicks);
+          }
+
+          // The victim enters HITSTUN (spec 04 AC-03). Missing StateComponent => skip.
+          //
+          // The counter is seeded at 1, not 0. HITSTUN is entered HERE, and
+          // CollisionSystem runs AFTER StateSystem, so tick `T` is never counted by the
+          // state machine. Seeding at 1 (mirroring how ATTACKING counts its own entry
+          // tick, which IS counted because CombatActionSystem runs before StateSystem)
+          // makes the observable stun span equal DEFAULT_HITSTUN_TICKS exactly.
+          const targetState = world.getComponent(targetId, StateComponent);
+          if (targetState !== undefined) {
+            targetState.state = ActionState.HITSTUN;
+            targetState.ticksInState = 1;
+          }
+
+          // Knockback direction = from the hitbox centre towards the victim centre.
+          // If that vector degenerates (centres coincide), fall back to the hitbox's
+          // own facing so the victim is still pushed somewhere deterministic.
+          const away = normalizeVec2(vec2(dx, dy));
+          const direction =
+            away.x === 0 && away.y === 0
+              ? vec2(Math.cos(hitboxTransform.facingRadians), Math.sin(hitboxTransform.facingRadians))
+              : away;
+
+          // Re-adding overwrites, so the LAST hit of a tick decides the knockback.
+          world.addComponent(targetId, new KnockbackComponent(scaleVec2(direction, hitbox.knockbackForce)));
         }
 
-        // Knockback direction = from the hitbox centre towards the victim centre.
-        // If that vector degenerates (centres coincide), fall back to the hitbox's
-        // own facing so the victim is still pushed somewhere deterministic.
-        const away = normalizeVec2(vec2(dx, dy));
-        const direction =
-          away.x === 0 && away.y === 0
-            ? vec2(Math.cos(hitboxTransform.facingRadians), Math.sin(hitboxTransform.facingRadians))
-            : away;
-
-        // Re-adding overwrites, so the LAST hit of a tick decides the knockback.
-        world.addComponent(targetId, new KnockbackComponent(scaleVec2(direction, hitbox.knockbackForce)));
+        // --- M3-T01 event hook (AC-01) ----------------------------------------
+        //
+        // Published AFTER the hit is fully resolved, so a consumer that reacts by
+        // injecting new entities sees a world in which the triggering hit has
+        // already taken effect. `sourceModifier` travels with the event so the
+        // consumer can refuse to re-enter modifier dispatch (spec 05 §4.5).
+        const event: HitEvent = {
+          tick: ctx.tick,
+          attackerId: hitbox.ownerEntityId,
+          targetId,
+          hitboxEntityId: hitboxId,
+          position: vec2(hitboxTransform.x, hitboxTransform.y),
+          damage: hitbox.damage,
+          sourceModifier: hitbox.sourceModifier,
+        };
+        this.events.emit(event);
       }
     }
   }
