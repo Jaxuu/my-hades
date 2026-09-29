@@ -25,6 +25,7 @@
 - `Death` 在所有伤害来源 + `Modifier` 后（先播完 Tick 再清点死者）；`Encounter` 在其后；`Reward` 紧随。
 - ⚠️ 改管道打断 **6 处钉桩**：`tests/combat/{feedback,boons,status_effects,death_and_encounter}.test.ts` + `tests/ai/enemy_fsm.test.ts`（5 处 `toEqual` 名数组 + 探针插入点）。探针一律按名 `findIndex`。
 - 新增事件类型配方：`events.ts` 加接口 → 新建 `EventQueue<T>` → 生产/消费方构造注入 → `createDefaultSystems` **尾部追加参数**。
+- **M7-T01 不动管道**：墙体解算 + 投射物自驱积分都挂在 `MovementSystem`(idx 4) 尾部 ⇒ 解算先于 `CollisionSystem`(8)（撞墙即销毁的投射物当拍不可能被测试）。**新增空间/物理相位一律走这条落法，不加第 16 段**（加段会打散 6 处管道钉桩的 `toEqual` 名数组，零收益）。
 
 ## 3. 测试
 - 浮点位移断言容差 `1e-9`；禁严格相等。用真实 `GameSimulator` + 系统，不许 mock；`step(1)` 逐 Tick 钉时序。
@@ -87,6 +88,12 @@
 - 冲刺词缀 `hitstopTicks = 0` + `knockbackForce > 0`：不冻冲刺者自己，但反馈门开 ⇒ 受击者进 `HITSTUN` 并被真正推开。
 - `armor` 是 `CombatantSpawnOptions` 的 opt-in 开关（同 `ai`），`0` 抛 `RangeError`；`EnemyFactory.spawnElite` = 填默认后转调 `spawn`（不重列组件）。本里程碑零管道改动；但 `status_effects.test.ts` G6 的 registry 钉桩（size 2→3）需同步。
 
+**M7-T01 空间边界 + 投射物 + 撞墙**：`resolveCircleAABB(cx,cy,r,aabbX,aabbY,w,h)` 纯函数（三段：分离 `distSq >= r²` ⇒ `[0,0]`（贴边不算碰）→ 圆心在盒外沿最近点推 `r - dist` → 圆心在盒内取**最近面**，平手 `-x,+x,-y,+y` 先到先得）。**圆心也必须查有限性**（`NaN` 圆心 ⇒ `NaN >= r²` 为 false ⇒ 掉进包含分支返回 `NaN` 毒值）。`WallComponent`（AABB，**不挂 `Transform`**，AABB 即本体）；`createWall` 装配前校验（`width/height` 正有限，失败不泄漏实体）。
+- `MovementSystem` 三相位：① `integrate`（意图驱动，逐字不变）② `integrateKinematic`（`ProjectileComponent` 自驱：`transform += directionVector * maxSpeed * dt`，用 `maxSpeed`；**不加死亡/冻结门**——投射物无 `HealthComponent`/`FreezeComponent`，加不能触发的门是死代码）③ `resolveWalls`。**解算目标集 = `Transform` + `Velocity` + 圆体半径**（`circleBodyRadius`：先 `Hurtbox` 后 `Hitbox`）；静止判定圆无 `Velocity` ⇒ 不参与；**不查冻结/硬直**（几何不变量）；查 `isDead`。**逐墙顺序推出**（每面墙重读已更新坐标 ⇒ 墙角单趟收敛），顺序 = 实体 id 升序 × 墙 id 升序。
+- **撞墙四条件**：`pushed` ∧ `HITSTUN` ∧ `KnockbackComponent` 非零 ∧ `dot(push, kb) < 0`。三写：`applyDamageWithArmor(12)` + `ticksInState = 0`（刷新）+ `kb.velocity = (0,0)`（**墙吸收击退**）。**必须要求 `HITSTUN`**（`KnockbackComponent` 永不删除 ⇒ 否则陈旧击退被走路撞墙重新引爆）；**必须 `dot < 0`**（贴墙滑行垂直 ⇒ 不算被阻挡）；**必须清零击退**（否则硬直每拍重复结算）。**刷新硬直种 `0`**：`MovementSystem` 在 `StateSystem` **之前** ⇒ 进入拍计入（`CollisionSystem` 种 `1` 是因为它在 `StateSystem` **之后**；两处相位相反）。撞墙实践上总落 HP（站立护甲豁免 `HITSTUN`，而撞墙前提就是 `HITSTUN`）；撞墙**不顿帧**。
+- 投射物 = `ProjectileComponent`（**零字段标记**）+ `Transform`/`Velocity`/`Hitbox`，`spawnProjectile` 单一装配点。**自驱判据必须肯定式**（有 `ProjectileComponent`），禁用「有速度但没意图」的否定式判据。**`hitstopTicks = 0` 是正确性**：`CollisionSystem` 冻结双方，投射物 owner 是远处施法者 ⇒ 非零顿帧会冻住射手；配 `knockbackForce = 6 > 0` 保持反馈门开。`destroyOnHit` ⇒ `CollisionSystem` 在伤害/反馈/`HitEvent` 全写完后 `destroyEntity` + `break`（一投射物一目标）；`destroyOnWall` ⇒ `MovementSystem` 解算中销毁（先于 `CollisionSystem`，不穿墙）。新动作脉冲 `wantsToCast` 走既有配方（`PlayerInputComponent` 加 `CAST_KEY`+level/edge → `PlayerControllerSystem` 两相位 → `Freeze`/`Death` 清 → `CombatActionSystem` **先消费后门控**；同拍 `wantsToAttack` 优先）。
+- ⚠️ **恒真断言陷阱**：`组件字段 === 构造它的那个常量` 永远为真，重调常量时测试与实现一起变 ⇒ 必须另配**字面量钉桩**或**行为断言**。M7-T01 的变异测试正是靠这条发现了一个测试空洞。
+
 ## 6. 编排约定
 - 先冻结、再评审、后修复（禁止在 QA 评审窗口内并发改写受审产物）。
 - 派单须带 Task ID / 角色 / 优先级 / 上下文 / Deliverables / Output Path / Handoff。
@@ -100,5 +107,6 @@
 | M5-T02 渲染插值 + 打击感 | ✅ 234（17 文件）· `bc91777`+`dcd9b25` |
 | M6-T01 PRNG + 词缀三选一 | ✅ 264（18 文件） |
 | M6-T02 精英霸体 + 冲刺词缀 | ✅ **285**（19 文件）· `efaca99` · test/lint/typecheck/build 全绿 |
+| M7-T01 空间边界 + 投射物 + 撞墙 | ✅ **336**（23 文件）· 管道仍 15 段 · 变异 7/7 捕获 · test/lint/typecheck 全绿 |
 
-- 权威规格：`specs/00`…`specs/12`。ADR：`ADR-001`（headless ECS）·`ADR-002`（渲染插值）·`ADR-004`（确定性 PRNG）。
+- 权威规格：`specs/00`…`specs/13`。ADR：`ADR-001`（headless ECS）·`ADR-002`（渲染插值）·`ADR-004`（确定性 PRNG）。

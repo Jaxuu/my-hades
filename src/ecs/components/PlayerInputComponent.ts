@@ -17,13 +17,14 @@
  *
  * Buttons come in two flavours, and the distinction matters:
  *
- *  - **level** (`buttonDash` / `buttonAttack`): PERSISTENT, derived by
- *    PlayerControllerSystem from `keysHeld`. It stays pressed across empty ticks
+ *  - **level** (`buttonDash` / `buttonAttack` / `buttonCast`): PERSISTENT, derived
+ *    by PlayerControllerSystem from `keysHeld`. It stays pressed across empty ticks
  *    until the key is released.
- *  - **edge** (`buttonDashJustPressed` / `buttonAttackJustPressed`): true for
- *    exactly ONE tick — the tick on which the key transitions from released to
- *    held. Actions that must not repeat while the key is held (dash, attack)
- *    read the edge flags only. See specs/03 §3.6 / §4.3.
+ *  - **edge** (`buttonDashJustPressed` / `buttonAttackJustPressed` /
+ *    `buttonCastJustPressed`): true for exactly ONE tick — the tick on which the key
+ *    transitions from released to held. Actions that must not repeat while the key
+ *    is held (dash, attack, cast) read the edge flags only. See specs/03 §3.6 /
+ *    §4.3.
  */
 
 import { ComponentBase } from '../Component';
@@ -35,6 +36,9 @@ export const DASH_KEY = 'dash';
 
 /** Canonical key name for the attack button (specs/03_combat_hitbox_spec.md §3.6). */
 export const ATTACK_KEY = 'attack';
+
+/** Canonical key name for the cast button (specs/13_arena_and_projectiles_spec.md §3.5). */
+export const CAST_KEY = 'cast';
 
 export class PlayerInputComponent extends ComponentBase {
   /** Raw, un-normalized virtual-stick vector for the current tick. */
@@ -55,6 +59,12 @@ export class PlayerInputComponent extends ComponentBase {
   /** Whether the attack button became held on THIS tick (rising edge, one tick wide). */
   public buttonAttackJustPressed: boolean;
 
+  /** Whether the cast button is held this tick (level; derived from `keysHeld`). */
+  public buttonCast: boolean;
+
+  /** Whether the cast button became held on THIS tick (rising edge, one tick wide). */
+  public buttonCastJustPressed: boolean;
+
   constructor(
     moveVector: Vec2 = vec2(0, 0),
     keysHeld: string[] = [],
@@ -62,6 +72,8 @@ export class PlayerInputComponent extends ComponentBase {
     buttonDashJustPressed = false,
     buttonAttack = false,
     buttonAttackJustPressed = false,
+    buttonCast = false,
+    buttonCastJustPressed = false,
   ) {
     super();
     this.moveVector = moveVector;
@@ -70,5 +82,7 @@ export class PlayerInputComponent extends ComponentBase {
     this.buttonDashJustPressed = buttonDashJustPressed;
     this.buttonAttack = buttonAttack;
     this.buttonAttackJustPressed = buttonAttackJustPressed;
+    this.buttonCast = buttonCast;
+    this.buttonCastJustPressed = buttonCastJustPressed;
   }
 }

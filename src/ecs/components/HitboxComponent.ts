@@ -95,6 +95,33 @@ export class HitboxComponent extends ComponentBase {
    */
   public sourceModifier: string | null;
 
+  /**
+   * Retire this hitbox the moment it lands a hit (M7-T01, spec 13 AC-04).
+   *
+   * `false` (the default, and every pre-M7 hitbox) keeps the historic behaviour: the
+   * circle persists for its whole `activeTicks` window and can strike every hostile
+   * target in it. `true` makes the hitbox PIERCELESS — it is destroyed as soon as one
+   * target has been settled, so it can never reach a second one. Cast projectiles use
+   * this; a melee swing must not.
+   */
+  public destroyOnHit: boolean;
+
+  /**
+   * Retire this hitbox the moment static geometry pushes it out (M7-T01, spec 13
+   * AC-04).
+   *
+   * Read by the wall-resolution pass in `MovementSystem`. `true` means "this thing
+   * never passes through a wall": it is destroyed on the tick it is pushed, which is
+   * strictly BEFORE `CollisionSystem` runs, so a wall-stopped projectile cannot also
+   * hit something behind the wall in the same tick.
+   *
+   * A hitbox with no `VelocityComponent` (melee / boon-injected circles) is never
+   * wall-resolved at all, so this flag is inert for them — which is why the default
+   * `false` is the right resting value rather than a behaviour switch anyone must
+   * remember to set.
+   */
+  public destroyOnWall: boolean;
+
   constructor(
     radius: number,
     damage: number,
@@ -105,6 +132,8 @@ export class HitboxComponent extends ComponentBase {
     knockbackForce = DEFAULT_KNOCKBACK_FORCE,
     hitEntities: EntityId[] = [],
     sourceModifier: string | null = null,
+    destroyOnHit = false,
+    destroyOnWall = false,
   ) {
     super();
     this.radius = radius;
@@ -116,5 +145,7 @@ export class HitboxComponent extends ComponentBase {
     this.knockbackForce = knockbackForce;
     this.hitEntities = hitEntities;
     this.sourceModifier = sourceModifier;
+    this.destroyOnHit = destroyOnHit;
+    this.destroyOnWall = destroyOnWall;
   }
 }

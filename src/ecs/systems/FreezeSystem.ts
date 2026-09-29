@@ -64,6 +64,7 @@ export class FreezeSystem implements System {
           intent.moveVector = vec2(0, 0);
           intent.wantsToDash = false;
           intent.wantsToAttack = false;
+          intent.wantsToCast = false;
         }
       }
     }

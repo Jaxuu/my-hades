@@ -36,7 +36,7 @@
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import { vec2 } from '../../core/math';
-import { ATTACK_KEY, DASH_KEY, PlayerInputComponent } from '../components/PlayerInputComponent';
+import { ATTACK_KEY, CAST_KEY, DASH_KEY, PlayerInputComponent } from '../components/PlayerInputComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { isDead } from '../components/DeadTagComponent';
 import { findRewardDraft } from '../components/EncounterStateComponent';
@@ -55,13 +55,14 @@ export class PlayerControllerSystem implements System {
    *
    * Both LEVEL and EDGE flags are re-derived from the held-key set on EVERY tick,
    * including ticks with an empty input frame:
-   *  - level (`buttonDash` / `buttonAttack`) mirrors `keysHeld`, so a held key keeps
-   *    reading as pressed on empty ticks — the previous value is preserved because
-   *    `keysHeld` is untouched when there are no events;
-   *  - edge (`buttonDashJustPressed` / `buttonAttackJustPressed`) is a transition of
-   *    the held-key set: released-before AND held-after. It is therefore true for
-   *    exactly one tick, which is what makes dash/attack fire once per press
-   *    (specs/03_combat_hitbox_spec.md §3.6, §4.3).
+   *  - level (`buttonDash` / `buttonAttack` / `buttonCast`) mirrors `keysHeld`, so a
+   *    held key keeps reading as pressed on empty ticks — the previous value is
+   *    preserved because `keysHeld` is untouched when there are no events;
+   *  - edge (`buttonDashJustPressed` / `buttonAttackJustPressed` /
+   *    `buttonCastJustPressed`) is a transition of the held-key set:
+   *    released-before AND held-after. It is therefore true for exactly one tick,
+   *    which is what makes dash/attack/cast fire once per press
+   *    (specs/03_combat_hitbox_spec.md §3.6, §4.3; specs/13 §3.5).
    */
   private bindHardwareInput(world: World, ctx: SystemContext): void {
     for (const id of world.query(PlayerInputComponent)) {
@@ -75,6 +76,7 @@ export class PlayerControllerSystem implements System {
       // be derived from the "released -> held" transition.
       const wasDashHeld = input.keysHeld.includes(DASH_KEY);
       const wasAttackHeld = input.keysHeld.includes(ATTACK_KEY);
+      const wasCastHeld = input.keysHeld.includes(CAST_KEY);
 
       if (ctx.input.length > 0) {
         let keysChanged = false;
@@ -105,21 +107,24 @@ export class PlayerControllerSystem implements System {
 
       const dashHeld = input.keysHeld.includes(DASH_KEY);
       const attackHeld = input.keysHeld.includes(ATTACK_KEY);
+      const castHeld = input.keysHeld.includes(CAST_KEY);
 
       input.buttonDash = dashHeld;
       input.buttonDashJustPressed = dashHeld && !wasDashHeld;
       input.buttonAttack = attackHeld;
       input.buttonAttackJustPressed = attackHeld && !wasAttackHeld;
+      input.buttonCast = castHeld;
+      input.buttonCastJustPressed = castHeld && !wasCastHeld;
     }
   }
 
   /**
    * Phase 2 — translate the player's hardware snapshot into logical intent.
    *
-   * `moveVector` is copied (persistent semantics); the dash / attack pulses are
-   * raised from the rising-edge flags only. Consumers clear the pulses after their
-   * gate check, so they are one-tick wide unless a freeze suppresses the consumer
-   * (in which case FreezeSystem clears them instead).
+   * `moveVector` is copied (persistent semantics); the dash / attack / cast pulses
+   * are raised from the rising-edge flags only. Consumers clear the pulses after
+   * their gate check, so they are one-tick wide unless a freeze suppresses the
+   * consumer (in which case FreezeSystem clears them instead).
    *
    * M6-T01 adds the DRAFT HOLD (spec 11 AC-02): while the room has an unsettled
    * reward draft open, the player's intent is zeroed instead of derived, so the
@@ -156,12 +161,14 @@ export class PlayerControllerSystem implements System {
         intent.moveVector = vec2(0, 0);
         intent.wantsToDash = false;
         intent.wantsToAttack = false;
+        intent.wantsToCast = false;
         continue;
       }
 
       intent.moveVector = input.moveVector;
       intent.wantsToDash = input.buttonDashJustPressed;
       intent.wantsToAttack = input.buttonAttackJustPressed;
+      intent.wantsToCast = input.buttonCastJustPressed;
     }
   }
 }

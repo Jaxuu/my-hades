@@ -21,13 +21,13 @@
  *  - `moveVector` is PERSISTENT, exactly like the old `InputComponent.moveVector`:
  *    an empty input frame leaves it untouched, so "hold the stick" is expressed by
  *    retaining the last vector.
- *  - `wantsToDash` / `wantsToAttack` are SINGLE-TICK PULSES (rising-edge semantics).
- *    The consumer (DashSystem / CombatActionSystem) sets them back to `false` after
- *    evaluating its gate. This preserves the "holding the dash key does not
- *    auto-repeat a dash once the cooldown lapses" contract (spec 03 §4.3): if the
- *    consumer were skipped (e.g. while frozen) the pulse stays set, which is why
- *    FreezeSystem explicitly clears the whole intent while an entity is frozen
- *    (spec 04 §4.3).
+ *  - `wantsToDash` / `wantsToAttack` / `wantsToCast` are SINGLE-TICK PULSES
+ *    (rising-edge semantics). The consumer (DashSystem / CombatActionSystem) sets
+ *    them back to `false` after evaluating its gate. This preserves the "holding
+ *    the dash key does not auto-repeat a dash once the cooldown lapses" contract
+ *    (spec 03 §4.3): if the consumer were skipped (e.g. while frozen) the pulse
+ *    stays set, which is why FreezeSystem explicitly clears the whole intent while
+ *    an entity is frozen (spec 04 §4.3).
  *  - `aimRadians` is PERSISTENT, like `moveVector`, and `null` means "this entity
  *    has no facing of its own". It exists so an entity can express "face THIS way
  *    without moving" through the intent seam instead of writing
@@ -60,17 +60,32 @@ export class IntentComponent extends ComponentBase {
    */
   public aimRadians: number | null;
 
+  /**
+   * Logical cast intent for this tick (single-tick pulse; consumer clears it).
+   *
+   * M7-T01 (spec 13 AC-03) adds the third action pulse alongside `wantsToDash` /
+   * `wantsToAttack`, and it follows their contract verbatim: a rising-edge flag
+   * copied by `PlayerControllerSystem`, read-and-cleared by `CombatActionSystem`
+   * BEFORE the state gate, so a pulse the gate rejects is DROPPED rather than
+   * buffered (spec 03 §4.3). `FreezeSystem` and `DeathSystem` clear it too, for the
+   * same reasons they clear the other two — a frozen or dead entity must not have an
+   * action waiting for it.
+   */
+  public wantsToCast: boolean;
+
   constructor(
     moveVector: Vec2 = vec2(0, 0),
     wantsToDash = false,
     wantsToAttack = false,
     aimRadians: number | null = null,
+    wantsToCast = false,
   ) {
     super();
     this.moveVector = moveVector;
     this.wantsToDash = wantsToDash;
     this.wantsToAttack = wantsToAttack;
     this.aimRadians = aimRadians;
+    this.wantsToCast = wantsToCast;
   }
 }
 

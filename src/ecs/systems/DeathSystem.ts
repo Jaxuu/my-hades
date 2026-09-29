@@ -32,8 +32,8 @@
  * write the corpse's intent again, so whatever it held at the moment of death
  * would otherwise stay frozen in the snapshot forever. Zeroing it here makes
  * AC-01's "不再输出意图" a directly observable fact (`moveVector === (0,0)`,
- * `wantsToDash === false`, `wantsToAttack === false`, `aimRadians === null`)
- * instead of an absence of writes that a test can only infer.
+ * `wantsToDash === false`, `wantsToAttack === false`, `wantsToCast === false`,
+ * `aimRadians === null`) instead of an absence of writes that a test can only infer.
  *
  * It does NOT destroy the entity. The corpse is RETAINED (spec 08 §10 trade-off 1):
  * the encounter scheduler must be able to distinguish "my wave member is dead" from
@@ -107,6 +107,7 @@ export class DeathSystem implements System {
     intent.moveVector = vec2(0, 0);
     intent.wantsToDash = false;
     intent.wantsToAttack = false;
+    intent.wantsToCast = false;
     intent.aimRadians = null;
   }
 }

@@ -11,6 +11,8 @@ export * from './ArmorComponent';
 export * from './FactionComponent';
 export * from './HurtboxComponent';
 export * from './HitboxComponent';
+export * from './ProjectileComponent';
+export * from './WallComponent';
 export * from './FreezeComponent';
 export * from './KnockbackComponent';
 export * from './ModifierComponent';

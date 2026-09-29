@@ -20,6 +20,10 @@
  *  7. then EMIT a `HitEvent` (M3-T01) on the shared event bus, carrying the
  *     hitbox's `sourceModifier` verbatim so a modifier can never re-trigger
  *     itself (spec 05 AC-04).
+ *  8. then RETIRE the hitbox if it is marked `destroyOnHit` (M7-T01, spec 13 AC-04):
+ *     the entity is destroyed and this hitbox's target loop ends, so a projectile can
+ *     never reach a second victim. Only `false` (every pre-M7 hitbox) keeps the
+ *     historic "the circle persists and may strike every hostile in it" behaviour.
  *
  * Step 4 is the heart of the invulnerability contract: an i-frame hit is IGNORED
  * ENTIRELY — no damage, no `hitEntities` entry, no feedback AND no event. That is
@@ -252,6 +256,21 @@ export class CollisionSystem implements System {
           sourceModifier: hitbox.sourceModifier,
         };
         this.events.emit(event);
+
+        // M7-T01 (spec 13 AC-04 / I5) — a PIERCELESS hitbox retires on its first
+        // landed hit. Destroying the entity here, rather than merely marking it, is
+        // what makes "one projectile, one victim" true by construction: the entity
+        // is gone, so no later pass can yield it again, and the `break` ends THIS
+        // hitbox's target loop so no second settlement can happen in the same tick.
+        //
+        // The order matters: the ledger entry (`hitEntities`) and the `HitEvent` are
+        // both written ABOVE, so a retired projectile still reports exactly what it
+        // struck on the tick it retired. `break` (not `continue`) because there is
+        // nothing left to test against.
+        if (hitbox.destroyOnHit) {
+          world.destroyEntity(hitboxId);
+          break;
+        }
       }
     }
   }

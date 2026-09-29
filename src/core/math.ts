@@ -60,3 +60,125 @@ export function clamp(value: number, min: number, max: number): number {
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
+
+/**
+ * Shortest translation that pushes a CIRCLE out of an axis-aligned box.
+ * See specs/13_arena_and_projectiles_spec.md §3.1 (M7-T01 AC-01).
+ *
+ * Pure arithmetic — no physics engine, no iteration, no randomness, no DOM. The
+ * whole of the arena's static geometry resolution is this one function plus a loop
+ * over the walls, which is what keeps the headless core deterministic (ADR-001 R2).
+ *
+ * The box is given by its top-left corner `(aabbX, aabbY)` and its positive extent
+ * `(aabbW, aabbH)`, so its four edges are `left = aabbX`, `top = aabbY`,
+ * `right = aabbX + aabbW`, `bottom = aabbY + aabbH`.
+ *
+ * Three cases, in this order:
+ *
+ *  1. **No overlap** — `dist² >= radius²` where `dist` is the distance from the
+ *     circle centre to the CLOSEST point of the box. Returns `[0, 0]`. The
+ *     comparison is deliberately the strict `<` of the overlap test (the same
+ *     predicate `CollisionSystem` uses for circle-vs-circle): a circle that merely
+ *     TOUCHES an edge is not overlapping, so a body sliding along a wall is left
+ *     exactly where it is instead of being nudged every tick.
+ *  2. **Centre outside the box** — push along the vector from the closest point to
+ *     the centre, far enough that the circle ends up exactly touching:
+ *     `push = radius - dist`. Because `dist > 0` here, no division guard is needed.
+ *  3. **Centre inside (or exactly on the boundary of) the box** — `dist === 0`, so
+ *     the closest-point vector carries no direction. Exit by the NEAREST FACE: the
+ *     four candidates are `-x`, `+x`, `-y`, `+y` with magnitudes
+ *     `(cx - left + radius)`, `(right - cx + radius)`, `(cy - top + radius)`,
+ *     `(bottom - cy + radius)`. The smallest wins; ties resolve in the fixed order
+ *     `-x, +x, -y, +y` so the result is byte-for-byte reproducible.
+ *
+ * Degenerate inputs (a non-finite centre, `radius <= 0`, `aabbW <= 0`, `aabbH <= 0`,
+ * or any `NaN`) return `[0, 0]`: there is no penetration to resolve, and refusing to
+ * guess keeps the function TOTAL — every `number` input has a defined answer. The
+ * finiteness guard is not belt-and-braces: with a `NaN` centre the closest-point
+ * vector is `NaN`, `NaN >= radius²` is `false`, and the function would otherwise fall
+ * through to the containment branch and return `NaN` — a poison value that would
+ * silently corrupt every position it touched. This is also what makes a zero-width
+ * wall mathematically incapable of pushing anything to infinity.
+ *
+ * @returns `[pushX, pushY]` — add it to the centre to exit the box. `[0, 0]` when
+ *   there is nothing to resolve.
+ */
+export function resolveCircleAABB(
+  cx: number,
+  cy: number,
+  radius: number,
+  aabbX: number,
+  aabbY: number,
+  aabbW: number,
+  aabbH: number,
+): [number, number] {
+  // Degenerate geometry: nothing to resolve. `!(x > 0)` also rejects `NaN`;
+  // `Number.isFinite` on the centre is what keeps `NaN` from reaching the arithmetic.
+  if (
+    !Number.isFinite(cx) ||
+    !Number.isFinite(cy) ||
+    !Number.isFinite(aabbX) ||
+    !Number.isFinite(aabbY) ||
+    !(radius > 0) ||
+    !(aabbW > 0) ||
+    !(aabbH > 0)
+  ) {
+    return [0, 0];
+  }
+
+  const left = aabbX;
+  const top = aabbY;
+  const right = aabbX + aabbW;
+  const bottom = aabbY + aabbH;
+
+  // Closest point on the box to the circle centre.
+  const nx = clamp(cx, left, right);
+  const ny = clamp(cy, top, bottom);
+  const dx = cx - nx;
+  const dy = cy - ny;
+  const distSq = dx * dx + dy * dy;
+
+  // Case 1 — separated (or exactly touching): the strict `<` matches the
+  // circle-vs-circle overlap predicate, so "touching" is never a collision.
+  if (distSq >= radius * radius) return [0, 0];
+
+  // Case 2 — centre outside: push straight out along the closest-point vector.
+  if (distSq > 0) {
+    const dist = Math.sqrt(distSq);
+    const push = radius - dist;
+    return [(dx / dist) * push, (dy / dist) * push];
+  }
+
+  // Case 3 — centre inside (or on the boundary): exit by the nearest face.
+  const pushLeft = -(cx - left + radius);
+  const pushRight = right - cx + radius;
+  const pushUp = -(cy - top + radius);
+  const pushDown = bottom - cy + radius;
+
+  // First-wins over the fixed order (-x, +x, -y, +y): deterministic tie-break.
+  let bestX = pushLeft;
+  let bestY = 0;
+  let bestAbs = Math.abs(pushLeft);
+
+  const absRight = Math.abs(pushRight);
+  if (absRight < bestAbs) {
+    bestX = pushRight;
+    bestY = 0;
+    bestAbs = absRight;
+  }
+
+  const absUp = Math.abs(pushUp);
+  if (absUp < bestAbs) {
+    bestX = 0;
+    bestY = pushUp;
+    bestAbs = absUp;
+  }
+
+  const absDown = Math.abs(pushDown);
+  if (absDown < bestAbs) {
+    bestX = 0;
+    bestY = pushDown;
+  }
+
+  return [bestX, bestY];
+}
