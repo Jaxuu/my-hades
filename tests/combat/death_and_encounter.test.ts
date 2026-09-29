@@ -4,10 +4,10 @@
  * contract) and §7 (AC-01 .. AC-10).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 13-segment pipeline (PlayerControllerSystem -> FreezeSystem -> AISystem
- * -> MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem ->
- * CollisionSystem -> StatusEffectSystem -> ModifierSystem -> DeathSystem ->
- * EncounterSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is
+ * canonical 14-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
+ * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
+ * DeathSystem -> EncounterSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is
  * mocked, and ticks are advanced one at a time so the timing contract is pinned per
  * tick.
  *
@@ -28,7 +28,7 @@
  *   G3 · a corpse produces no intent: AI path and player hardware path              (AC-01/AC-04)
  *   G4 · single-wave room: cleared on the tick the last member dies                 (AC-03)
  *   G5 · multi-wave scheduling: wave 2 spawns exactly `delayTicks` after the wipe   (AC-03)
- *   G6 · canonical 13-segment pipeline order                                        (AC-07)
+ *   G6 · canonical 14-segment pipeline order                                        (AC-07)
  *   G7 · deterministic replay of a full encounter script                            (AC-08)
  *   G8 · zero regression + the death bus is bounded to one tick                     (AC-09/AC-10)
  */
@@ -848,10 +848,11 @@ describe('G5 · wave 2 spawns exactly delayTicks after the wipe was detected (AC
 /* ========================================================================== *
  * G6 · pipeline order                                                        *
  * ========================================================================== */
-describe('G6 · canonical 13-segment pipeline order (AC-07)', () => {
+describe('G6 · canonical 14-segment pipeline order (AC-07)', () => {
   it('slots Death then Encounter after every damage source, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
+      'TransformSnapshotSystem',
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',

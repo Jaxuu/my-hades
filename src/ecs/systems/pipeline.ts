@@ -4,13 +4,25 @@
  * specs/04_combat_feedback_spec.md §5.2, specs/05_boon_modifier_spec.md §5.2,
  * specs/07_enemy_ai_spec.md §5.2 and specs/08_encounter_and_death_spec.md §5.2.
  *
- * Order (HARD CONTRACT):
- *   PlayerControllerSystem -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem
- *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
- *     -> ModifierSystem -> DeathSystem -> EncounterSystem -> LifespanSystem.
+ * Order (HARD CONTRACT, 14 segments):
+ *   TransformSnapshotSystem -> PlayerControllerSystem -> FreezeSystem -> AISystem
+ *     -> MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem
+ *     -> CollisionSystem -> StatusEffectSystem -> ModifierSystem -> DeathSystem
+ *     -> EncounterSystem -> LifespanSystem.
  *
  * Why this exact order:
- *  0. PlayerControllerSystem is the new FIRST segment (M2-T02): it replaces the old
+ * -1. TransformSnapshotSystem is the M5-T02 INSERTION and it sits AHEAD of every
+ *     other segment (index 0). It is the sole authority on "where each entity was
+ *     at the START of this tick": it hard-copies `TransformComponent` into
+ *     `PreviousTransformComponent` so the render layer can interpolate between two
+ *     logic ticks (specs/10_render_juice_spec.md §4, ADR-002). It MUST run before
+ *     every displacement writer (MovementSystem, DashSystem and any future one),
+ *     otherwise it would snapshot a partially-advanced position and the render
+ *     layer would interpolate between two already-moved points. It is a PURE
+ *     OBSERVER: it writes a component no gameplay system reads and never mutates
+ *     `TransformComponent`, so it changes no existing system's relative order — the
+ *     M1–M4 contract below holds verbatim, and LifespanSystem stays LAST.
+ *  0. PlayerControllerSystem is the new FIRST gameplay segment (M2-T02): it replaces the old
  *     MovementSystem.bindInput phase and is the hardware -> intent seam. Running it
  *     first means every later system reads a fully-populated `IntentComponent` for
  *     this tick. FreezeSystem follows immediately so a freeze is applied before ANY
@@ -102,6 +114,7 @@ import { ModifierSystem } from './ModifierSystem';
 import { DeathSystem } from './DeathSystem';
 import { EncounterSystem } from './EncounterSystem';
 import { LifespanSystem } from './LifespanSystem';
+import { TransformSnapshotSystem } from './TransformSnapshotSystem';
 
 /**
  * Fresh instances of the canonical pipeline, in execution order.
@@ -122,6 +135,7 @@ export function createDefaultSystems(
   deathEvents: EventQueue<EntityDeathEvent> = new EventQueue<EntityDeathEvent>(),
 ): readonly System[] {
   return [
+    new TransformSnapshotSystem(),
     new PlayerControllerSystem(),
     new FreezeSystem(),
     new AISystem(),

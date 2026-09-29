@@ -11,6 +11,12 @@
  * frames, stalls or a backgrounded tab must never change the simulation result.
  * The catch-up cap is what enforces that — it discards the render-frame budget on
  * overflow instead of spiralling.
+ *
+ * M5-T02 adds one thing after the catch-up loop: the leftover accumulator is
+ * handed to the renderer as `alpha`, the interpolation factor between the tick we
+ * just finished (`PreviousTransformComponent`) and the tick we are now in
+ * (`TransformComponent`). It is a READ-ONLY projection of render timing — it never
+ * touches logic state (specs/10_render_juice_spec.md §4.1, ADR-002).
  */
 
 import type { Ticker } from 'pixi.js';
@@ -82,6 +88,14 @@ export class GameLoop {
       this.accumulatorMs = 0;
     }
 
-    this.renderer.syncWorld(this.sim.world);
+    // The leftover accumulator is "how far we have already walked INTO the next
+    // tick", which is exactly the prev -> curr interpolation factor (ADR-002). On
+    // the overflow path above it is 0, so alpha falls out to 0 naturally. Clamped
+    // to [0, 1] because a tiny negative remainder from float subtraction must
+    // never make the renderer extrapolate past the current tick.
+    const alpha =
+      tickDurationMs > 0 ? Math.min(1, Math.max(0, this.accumulatorMs / tickDurationMs)) : 0;
+
+    this.renderer.syncWorld(this.sim.world, alpha);
   }
 }

@@ -4,10 +4,10 @@
  * §7 (AC-01 .. AC-10).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 13-segment pipeline (PlayerControllerSystem -> FreezeSystem -> AISystem
- * -> MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem ->
- * CollisionSystem -> StatusEffectSystem -> ModifierSystem -> DeathSystem ->
- * EncounterSystem -> LifespanSystem) and
+ * canonical 14-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
+ * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
+ * DeathSystem -> EncounterSystem -> LifespanSystem) and
  * REAL prefab-assembled entities. Nothing is mocked, and ticks are advanced one at
  * a time so the timing contract is pinned per tick.
  *
@@ -36,7 +36,7 @@
  *   G4 · full attack cycle timing + facing lock                          (AC-04/AC-05)
  *   G5 · hitstun interrupts the windup; hitstop only pauses it           (AC-06)
  *   G6 · hitstop pauses the cooldown without eating frames               (AC-06)
- *   G7 · canonical 13-segment pipeline order                             (AC-07)
+ *   G7 · canonical 14-segment pipeline order                             (AC-07)
  *   G8 · deterministic replay of a full AI script                        (AC-09)
  *   G9 · zero regression for entities without an AI controller           (AC-08)
  */
@@ -119,7 +119,7 @@ function buildRig(systems: readonly System[], options: AirOptions): AIRig {
   return { sim, player, enemy };
 }
 
-/** The canonical 13-segment pipeline. */
+/** The canonical 14-segment pipeline. */
 function makeAIRig(options: AirOptions = {}): AIRig {
   return buildRig(createDefaultSystems(), options);
 }
@@ -134,10 +134,12 @@ function makeAIRig(options: AirOptions = {}): AIRig {
  */
 function makeProbedRig(probe: IntentProbe, options: AirOptions = {}): AIRig {
   const base = createDefaultSystems();
-  // Pin the splice point: if the pipeline ever moves AISystem, fail loudly here
-  // rather than silently probing the wrong segment.
-  expect(base[2]?.name).toBe('AISystem');
-  return buildRig([...base.slice(0, 3), probe, ...base.slice(3)], options);
+  // Pin the splice point BY NAME: if the pipeline ever moves AISystem, fail loudly
+  // here rather than silently probing the wrong segment (mirrors the
+  // `CollisionSystem` lookup in tests/combat/death_and_encounter.test.ts).
+  const aiIndex = base.findIndex((system) => system.name === 'AISystem');
+  if (aiIndex === -1) throw new Error('QA: the canonical pipeline has no AISystem');
+  return buildRig([...base.slice(0, aiIndex + 1), probe, ...base.slice(aiIndex + 1)], options);
 }
 
 /* --- component accessors -------------------------------------------------- */
@@ -688,10 +690,11 @@ describe('G6 · hitstop pauses the FSM without eating frames (AC-06)', () => {
 /* ========================================================================== *
  * G7 · pipeline order                                                        *
  * ========================================================================== */
-describe('G7 · canonical 13-segment pipeline order (AC-07)', () => {
+describe('G7 · canonical 14-segment pipeline order (AC-07)', () => {
   it('slots AISystem between the freeze gate and the advance systems', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
+      'TransformSnapshotSystem',
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',

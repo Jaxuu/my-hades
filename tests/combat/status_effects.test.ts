@@ -742,10 +742,11 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
 /* ------------------------------------------------------------------ *
  * G7 · pipeline order + determinism                                   *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 13-segment pipeline and deterministic replay (AC-08/09)', () => {
+describe('G7 · canonical 14-segment pipeline and deterministic replay (AC-08/09)', () => {
   it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
+      'TransformSnapshotSystem',
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',

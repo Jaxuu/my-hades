@@ -1,4 +1,5 @@
 export * from './TransformComponent';
+export * from './PreviousTransformComponent';
 export * from './VelocityComponent';
 export * from './PlayerInputComponent';
 export * from './IntentComponent';

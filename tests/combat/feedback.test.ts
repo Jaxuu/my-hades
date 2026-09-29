@@ -520,16 +520,18 @@ describe('G3 · deterministic replay of the feedback path (AC-04)', () => {
 /* ------------------------------------------------------------------ *
  * G4 · pipeline order                                                 *
  * ------------------------------------------------------------------ */
-describe('G4 · canonical pipeline order (AC-07)', () => {
-  it('runs PlayerController -> Freeze -> AI -> Movement -> Dash -> State -> CombatAction -> Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan', () => {
+describe('G4 · canonical 14-segment pipeline order (AC-07)', () => {
+  it('runs TransformSnapshot -> PlayerController -> Freeze -> AI -> Movement -> Dash -> State -> CombatAction -> Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan', () => {
     // M3-T01 (spec 05 §5.2) INSERTED ModifierSystem between CollisionSystem and
     // LifespanSystem; M3-T02 (spec 06 §5.2) INSERTED StatusEffectSystem between
     // CollisionSystem and ModifierSystem; M4-T01 (spec 07 §5.2) INSERTED AISystem
     // between FreezeSystem and MovementSystem; M4-T02 (spec 08 §5.2) INSERTED
-    // DeathSystem and EncounterSystem between ModifierSystem and LifespanSystem.
+    // DeathSystem and EncounterSystem between ModifierSystem and LifespanSystem;
+    // M5-T02 (spec 10 §3.2) PREPENDED TransformSnapshotSystem as segment 0.
     // The M1/M2 six-segment relative order is unchanged and LifespanSystem is still
-    // last — this is the guard for all six insertions.
+    // last — this is the guard for all seven insertions.
     expect(createDefaultSystems().map((system) => system.name)).toEqual([
+      'TransformSnapshotSystem',
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',

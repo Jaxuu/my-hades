@@ -1,3 +1,4 @@
+export * from './TransformSnapshotSystem';
 export * from './PlayerControllerSystem';
 export * from './FreezeSystem';
 export * from './AISystem';
