@@ -36,6 +36,7 @@ import {
 } from '../components/AIControllerComponent';
 import { Faction, FactionComponent } from '../components/FactionComponent';
 import { DEFAULT_MAX_HP, HealthComponent } from '../components/HealthComponent';
+import { ArmorComponent } from '../components/ArmorComponent';
 import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxComponent';
 
 /** Default locomotion speed in world units per second for any combatant. */
@@ -120,6 +121,19 @@ export interface CombatantSpawnOptions {
   readonly hp?: number;
   readonly maxHp?: number;
   readonly hurtboxRadius?: number;
+  /**
+   * Armor pool (M6-T02). When present, an `ArmorComponent` is mounted with
+   * `current = max = armor`, turning the entity into an "elite": it soaks damage
+   * BEFORE its HP and cannot be staggered while the armor stands (spec 12 AC-01 /
+   * AC-02). Must be a positive finite number — `0` is a config bug, not a legal
+   * "no armor" (omit the field instead).
+   *
+   * Omit it and NO armor component is mounted at all, so every pre-M6 combatant is
+   * assembled exactly as before. Like `ai`, this is a CAPABILITY SWITCH rather than
+   * an elite-only channel: the component set stays defined in this one place, so
+   * the player and enemy prefabs still cannot drift apart (spec 12 §3.2).
+   */
+  readonly armor?: number;
   /**
    * AI tuning (M4-T01). When present, an `AIControllerComponent` is mounted and the
    * entity becomes AI-driven. When absent, NO AI component is mounted at all — the
@@ -212,14 +226,15 @@ export function resolveAITuning(options: AITuningOptions = {}): ResolvedAITuning
  * component list) preserves the "assembly lives in exactly one place" invariant, so
  * the player and enemy prefabs can never drift apart.
  *
- * The component set above is the MANDATORY one. `PlayerInputComponent` (hardware)
- * and `AIControllerComponent` (M4-T01) are the two OPT-IN extras, and they are
- * mutually exclusive: the player gets the device, an AI-driven enemy gets the FSM,
- * and a plain script-driven enemy gets neither.
+ * The component set above is the MANDATORY one. `PlayerInputComponent` (hardware),
+ * `AIControllerComponent` (M4-T01) and `ArmorComponent` (M6-T02) are the three
+ * OPT-IN extras. Input and AI are mutually exclusive (the player gets the device,
+ * an AI-driven enemy gets the FSM, a plain script-driven enemy gets neither);
+ * armor is orthogonal to both — any combatant may carry it.
  *
- * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` is not a positive
- *   finite number, if `hp` falls outside `[0, maxHp]`, if any dash override is
- *   invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
+ * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` / `armor` is not a
+ *   positive finite number, if `hp` falls outside `[0, maxHp]`, if any dash override
+ *   is invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
  *   {@link resolveAITuning}), or if AI tuning is combined with `hardwareInput`.
  */
 export function spawnCombatant(
@@ -240,6 +255,12 @@ export function spawnCombatant(
 
   const hurtboxRadius = options.hurtboxRadius ?? DEFAULT_HURTBOX_RADIUS;
   assertPositiveFinite(hurtboxRadius, 'hurtboxRadius');
+
+  // Armor is an OPT-IN capability (M6-T02): validated here, mounted below. `0` is
+  // rejected rather than treated as "no armor" so a mis-specified elite fails at
+  // the seam instead of silently shipping as a plain enemy.
+  const armor = options.armor;
+  if (armor !== undefined) assertPositiveFinite(armor, 'armor');
 
   const dash = resolveDashTuning(options.dash);
 
@@ -281,6 +302,9 @@ export function spawnCombatant(
   world.addComponent(entity.id, new FactionComponent(faction));
   world.addComponent(entity.id, new HealthComponent(hp, maxHp));
   world.addComponent(entity.id, new HurtboxComponent(hurtboxRadius));
+  if (armor !== undefined) {
+    world.addComponent(entity.id, new ArmorComponent(armor, armor));
+  }
   if (ai !== undefined) {
     world.addComponent(
       entity.id,

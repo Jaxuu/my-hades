@@ -1,5 +1,6 @@
 /**
- * Modifier (boon) behaviour table. See specs/06_status_effect_and_dot_spec.md §3.5.
+ * Modifier (boon) behaviour table. See specs/06_status_effect_and_dot_spec.md §3.5
+ * and specs/12_armor_and_dash_boons_spec.md §3.5.
  *
  * `createDefaultModifierRegistry()` is the single place that knows which boons
  * exist. `createDefaultSystems()` calls it once per pipeline, so the registry —
@@ -9,10 +10,12 @@
 import { ModifierRegistry } from './ModifierRegistry';
 import { ZeusStrikeModifier } from './ZeusStrikeModifier';
 import { DionysusBlightModifier } from './DionysusBlightModifier';
+import { PoseidonDashModifier } from './PoseidonDashModifier';
 
 export * from './ModifierRegistry';
 export * from './ZeusStrikeModifier';
 export * from './DionysusBlightModifier';
+export * from './PoseidonDashModifier';
 
 /**
  * A registry holding every shipped boon behaviour.
@@ -25,5 +28,6 @@ export function createDefaultModifierRegistry(): ModifierRegistry {
   const registry = new ModifierRegistry();
   registry.register(new ZeusStrikeModifier());
   registry.register(new DionysusBlightModifier());
+  registry.register(new PoseidonDashModifier());
   return registry;
 }

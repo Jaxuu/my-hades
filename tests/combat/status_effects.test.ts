@@ -77,8 +77,10 @@ import {
   MovementSystem,
   POISON_STATUS_ID,
   POISON_STATUS_SPEC,
+  POSEIDON_DASH_MODIFIER,
   PlayerControllerSystem,
   PlayerFactory,
+  PoseidonDashModifier,
   StateComponent,
   StateSystem,
   StatusEffectComponent,
@@ -611,11 +613,19 @@ describe('G5 · the DoT applies damage and NOTHING else (AC-03)', () => {
 describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
   it('registers the shipped boons and exposes them in a stable order', () => {
     const registry = createDefaultModifierRegistry();
-    expect(registry.size).toBe(2);
-    expect(registry.ids).toEqual([DIONYSUS_BLIGHT_MODIFIER, ZEUS_STRIKE_MODIFIER]); // ascending
+    // M6-T02 grew the shipped set from two to three: Poseidon Dash is the first
+    // `onDash`-driven boon, so it belongs in this pin alongside the two hit-driven
+    // ones (spec 12 §3.5).
+    expect(registry.size).toBe(3);
+    expect(registry.ids).toEqual([
+      DIONYSUS_BLIGHT_MODIFIER,
+      POSEIDON_DASH_MODIFIER,
+      ZEUS_STRIKE_MODIFIER,
+    ]); // ascending
     expect(registry.has(ZEUS_STRIKE_MODIFIER)).toBe(true);
     expect(registry.get(ZEUS_STRIKE_MODIFIER)).toBeInstanceOf(ZeusStrikeModifier);
     expect(registry.get(DIONYSUS_BLIGHT_MODIFIER)).toBeInstanceOf(DionysusBlightModifier);
+    expect(registry.get(POSEIDON_DASH_MODIFIER)).toBeInstanceOf(PoseidonDashModifier);
     expect(registry.get('no_such_boon')).toBeUndefined();
 
     // A duplicate registration is a wiring bug, so it fails loudly.

@@ -27,7 +27,7 @@
 
 import type { SystemContext } from '../System';
 import type { World } from '../World';
-import type { HitEvent } from '../events';
+import type { DashEvent, HitEvent } from '../events';
 
 /**
  * The context a modifier handler acts in.
@@ -47,8 +47,19 @@ export interface ModifierContext extends SystemContext {
  * One boon behaviour, keyed by modifier id.
  *
  * Handlers are STATELESS with respect to ticks: everything a handler needs to
- * remember must live on a component (spec 00 §6.1). The two shipped handlers are
+ * remember must live on a component (spec 00 §6.1). The shipped handlers are
  * therefore `const`-like classes with no fields other than their id.
+ *
+ * Two hooks, both about "a FACT just happened in the world this tick":
+ *
+ *  - `onHit`  — a hit landed, and the holder was the ATTACKER.
+ *  - `onDash` — the holder entered `DASHING` (M6-T02).
+ *
+ * They are deliberately independent, and `onHit` stays REQUIRED while `onDash` is
+ * optional: the two shipped hit-driven boons keep their contract untouched, and a
+ * dash-only boon is expected to supply an explicit no-op `onHit` rather than have
+ * the interface loosen a rule both existing implementations already honour
+ * (spec 12 §10 trade-off 2).
  */
 export interface IModifierHandler {
   /** Modifier id this handler serves (e.g. `'zeus_strike'`). */
@@ -60,6 +71,24 @@ export interface IModifierHandler {
    * never reaches dispatch, which is what bounds nesting depth at 1.
    */
   onHit(event: HitEvent, context: ModifierContext): void;
+  /**
+   * Called once per DASH ENTRY, for every modifier the DASHING entity holds
+   * (M6-T02, spec 12 AC-03). Optional: a boon that only reacts to hits simply does
+   * not implement it, and the dispatcher skips it with a `?.` call.
+   *
+   * `event` describes the dash that JUST STARTED this tick — the very tick the
+   * entity entered `DASHING`. `DashSystem` runs BEFORE `ModifierSystem` in the
+   * pipeline, so the event reaches this hook within the SAME tick, and anything it
+   * injects is collision-tested on the NEXT tick (never this one) — the identical
+   * one-tick phase an `onHit` injection has, because `ModifierSystem` sits after
+   * `CollisionSystem`.
+   *
+   * Unlike `onHit` there is NO anti-recursion gate here, and none is needed: a
+   * `DashEvent` has no provenance field because a modifier-injected entity is
+   * always a hitbox, and a hitbox owns no `IntentComponent`, so it can never enter
+   * `DASHING`. Nesting depth is structurally 1 (spec 12 §4.3).
+   */
+  onDash?(event: DashEvent, context: ModifierContext): void;
 }
 
 /**

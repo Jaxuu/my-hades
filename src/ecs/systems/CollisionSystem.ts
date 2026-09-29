@@ -11,9 +11,12 @@
  *  2. skip if same faction                                 -> AC-01 no friendly fire
  *  3. skip if circles do not overlap                       -> AC-03 circle test
  *  4. skip if the target carries the Invulnerable tag      -> AC-04 i-frame consumption
- *  5. otherwise apply damage and record the target in `hitEntities`
+ *  5. otherwise settle the damage — through ARMOR first (M6-T02), so only the
+ *     overflow reaches HP — and record the target in `hitEntities`
  *  6. then write the hit FEEDBACK (M2-T02): hitstop on both sides, HITSTUN on the
- *     victim, and a knockback velocity pointing away from the hitbox centre.
+ *     victim, and a knockback velocity pointing away from the hitbox centre. The
+ *     hitstop is unconditional; HITSTUN + knockback are SKIPPED while the target's
+ *     armor stands (M6-T02).
  *  7. then EMIT a `HitEvent` (M3-T01) on the shared event bus, carrying the
  *     hitbox's `sourceModifier` verbatim so a modifier can never re-trigger
  *     itself (spec 05 AC-04).
@@ -60,6 +63,24 @@
  * AC-01 constrains "from the NEXT tick onwards", and a mutual kill on the same tick
  * is two simultaneous hits, not corpse-whipping (spec 08 §8).
  *
+ * ARMOR (M6-T02, spec 12 AC-01 / AC-02). Damage no longer goes straight to HP: the
+ * settlement routes through `applyDamageWithArmor`, which drains an entity's armor
+ * FIRST and only lets the overflow reach HP. The same call reports whether the
+ * target was `armoredThrough` — armor standing before the hit and surviving it —
+ * and that single boolean splits the hit FEEDBACK in two:
+ *
+ *  - **Hitstop is NEVER gated by armor.** Hitstop is juice, not a reaction: an
+ *    armored enemy that eats a hit without flinching must still feel like it was
+ *    hit (spec 12 I3). `applyFreeze` therefore stays outside the armor gate, for
+ *    both the victim and the attacker.
+ *  - **`HITSTUN` and knockback ARE gated.** While the armor stands the target keeps
+ *    its action state and its plan, so an enemy's windup survives a non-breaking
+ *    hit — which is the entire point of the mechanic. The hit that BREAKS the armor
+ *    (`armoredThrough === false`) staggers normally, and so does every hit after it.
+ *
+ * An entity with no `ArmorComponent`, or one whose armor is already broken, reports
+ * `armoredThrough === false` and takes exactly the pre-M6 path (spec 12 I4).
+ *
  * This system stays POLICY-FREE (spec 05 C8): it reports that a hit happened; it
  * never decides what a boon should do about it.
  */
@@ -73,7 +94,8 @@ import { TransformComponent } from '../components/TransformComponent';
 import { HitboxComponent } from '../components/HitboxComponent';
 import { HurtboxComponent } from '../components/HurtboxComponent';
 import { FactionComponent, areHostile } from '../components/FactionComponent';
-import { HealthComponent, applyDamage } from '../components/HealthComponent';
+import { HealthComponent } from '../components/HealthComponent';
+import { applyDamageWithArmor } from '../components/ArmorComponent';
 import { ActionState, StateComponent } from '../components/StateComponent';
 import { applyFreeze } from '../components/FreezeComponent';
 import { KnockbackComponent } from '../components/KnockbackComponent';
@@ -158,7 +180,11 @@ export class CollisionSystem implements System {
         // AC-04 — invulnerability consumption: ignore the collision completely.
         if (hasTag(world, targetId, INVULNERABLE_TAG)) continue;
 
-        applyDamage(world, targetId, hitbox.damage);
+        // Damage settlement, routed through armor FIRST (M6-T02, spec 12 AC-02):
+        // armor soaks `min(current, damage)` and only the overflow reaches HP.
+        // `armoredThrough` is the hit-feedback switch below: true means "armor was
+        // standing and survived this hit", i.e. the target shrugs it off.
+        const armorResult = applyDamageWithArmor(world, targetId, hitbox.damage);
         hitbox.hitEntities.push(targetId);
         hitbox.hitEntities.sort((a, b) => a - b);
 
@@ -169,35 +195,45 @@ export class CollisionSystem implements System {
         // — critically, it must not overwrite the victim's in-flight knockback.
         if (hitbox.hitstopTicks > 0 || hitbox.knockbackForce > 0) {
           // Hitstop freezes BOTH sides for `hitstopTicks` ticks (spec 04 AC-01).
+          //
+          // DELIBERATELY OUTSIDE the armor gate (M6-T02, spec 12 I3): armor blocks
+          // the target's REACTION, never the juice. An armored enemy that eats a hit
+          // without flinching must still read as "hit" to both players' hands.
           applyFreeze(world, targetId, hitbox.hitstopTicks);
           if (world.isAlive(hitbox.ownerEntityId)) {
             applyFreeze(world, hitbox.ownerEntityId, hitbox.hitstopTicks);
           }
 
-          // The victim enters HITSTUN (spec 04 AC-03). Missing StateComponent => skip.
-          //
-          // The counter is seeded at 1, not 0. HITSTUN is entered HERE, and
-          // CollisionSystem runs AFTER StateSystem, so tick `T` is never counted by the
-          // state machine. Seeding at 1 (mirroring how ATTACKING counts its own entry
-          // tick, which IS counted because CombatActionSystem runs before StateSystem)
-          // makes the observable stun span equal DEFAULT_HITSTUN_TICKS exactly.
-          const targetState = world.getComponent(targetId, StateComponent);
-          if (targetState !== undefined) {
-            targetState.state = ActionState.HITSTUN;
-            targetState.ticksInState = 1;
+          // Armor gate (M6-T02, spec 12 AC-01): while the target's armor STANDS it
+          // is immune to hitstun AND knockback — it keeps its action state and its
+          // plan. The hit that BREAKS the armor reports `armoredThrough === false`,
+          // so it staggers normally (spec 12 AC-02), as does every later hit.
+          if (!armorResult.armoredThrough) {
+            // The victim enters HITSTUN (spec 04 AC-03). Missing StateComponent => skip.
+            //
+            // The counter is seeded at 1, not 0. HITSTUN is entered HERE, and
+            // CollisionSystem runs AFTER StateSystem, so tick `T` is never counted by the
+            // state machine. Seeding at 1 (mirroring how ATTACKING counts its own entry
+            // tick, which IS counted because CombatActionSystem runs before StateSystem)
+            // makes the observable stun span equal DEFAULT_HITSTUN_TICKS exactly.
+            const targetState = world.getComponent(targetId, StateComponent);
+            if (targetState !== undefined) {
+              targetState.state = ActionState.HITSTUN;
+              targetState.ticksInState = 1;
+            }
+
+            // Knockback direction = from the hitbox centre towards the victim centre.
+            // If that vector degenerates (centres coincide), fall back to the hitbox's
+            // own facing so the victim is still pushed somewhere deterministic.
+            const away = normalizeVec2(vec2(dx, dy));
+            const direction =
+              away.x === 0 && away.y === 0
+                ? vec2(Math.cos(hitboxTransform.facingRadians), Math.sin(hitboxTransform.facingRadians))
+                : away;
+
+            // Re-adding overwrites, so the LAST hit of a tick decides the knockback.
+            world.addComponent(targetId, new KnockbackComponent(scaleVec2(direction, hitbox.knockbackForce)));
           }
-
-          // Knockback direction = from the hitbox centre towards the victim centre.
-          // If that vector degenerates (centres coincide), fall back to the hitbox's
-          // own facing so the victim is still pushed somewhere deterministic.
-          const away = normalizeVec2(vec2(dx, dy));
-          const direction =
-            away.x === 0 && away.y === 0
-              ? vec2(Math.cos(hitboxTransform.facingRadians), Math.sin(hitboxTransform.facingRadians))
-              : away;
-
-          // Re-adding overwrites, so the LAST hit of a tick decides the knockback.
-          world.addComponent(targetId, new KnockbackComponent(scaleVec2(direction, hitbox.knockbackForce)));
         }
 
         // --- M3-T01 event hook (AC-01) ----------------------------------------

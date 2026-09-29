@@ -33,12 +33,25 @@
  * cooldown. The death gate precedes the freeze gate because death is permanent
  * while a freeze lapses — an ordering that matters the moment a corpse dies with a
  * freeze still armed.
+ *
+ * DASH EVENT (M6-T02, spec 12 AC-03). Entering `DASHING` is itself a FACT other
+ * systems may want to react to, so `startDash` publishes a {@link DashEvent} on the
+ * injected dash bus in the same call that flips the state — the event describes
+ * "this entity really started dashing", never "this entity wanted to". A pulse the
+ * entry gate REJECTS therefore publishes nothing, which keeps the event honest.
+ *
+ * The event is produced here and consumed by `ModifierSystem`, which runs LATER IN
+ * THE SAME TICK (DashSystem is index 5, ModifierSystem index 10), so an `onDash`
+ * hook never needs a cross-tick buffer. Emission order is the loop order — entity
+ * id ascending — so the injected-entity sequence stays reproducible.
  */
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import type { EntityId } from '../Entity';
 import { vec2 } from '../../core/math';
+import { EventQueue } from '../events';
+import type { DashEvent } from '../events';
 import { ActionState, StateComponent } from '../components/StateComponent';
 import { DashStatsComponent } from '../components/DashStatsComponent';
 import { IntentComponent } from '../components/IntentComponent';
@@ -51,7 +64,18 @@ import { VelocityComponent } from '../components/VelocityComponent';
 export class DashSystem implements System {
   public readonly name = 'DashSystem';
 
-  public update(world: World, _ctx: SystemContext): void {
+  /**
+   * Tick-scoped dash bus. Injected so the SAME queue instance is shared with
+   * ModifierSystem (see `createDefaultSystems`); the default keeps the system
+   * usable standalone, but a standalone instance's events are never drained.
+   */
+  private readonly dashEvents: EventQueue<DashEvent>;
+
+  constructor(dashEvents: EventQueue<DashEvent> = new EventQueue<DashEvent>()) {
+    this.dashEvents = dashEvents;
+  }
+
+  public update(world: World, ctx: SystemContext): void {
     const ids = world.query(
       IntentComponent,
       StateComponent,
@@ -96,7 +120,7 @@ export class DashSystem implements System {
         const inLocomotion =
           state.state === ActionState.IDLE || state.state === ActionState.MOVING;
         if (wantsToDash && inLocomotion && dash.cooldownRemaining === 0) {
-          this.startDash(world, id, state, dash, velocity, transform.facingRadians);
+          this.startDash(world, id, state, dash, velocity, transform, ctx.tick);
         }
       } else {
         // Dashing: keep the cooldown ticking, and hold the invulnerability tag for
@@ -114,6 +138,11 @@ export class DashSystem implements System {
   /**
    * Enter DASHING: lock the current facing into the velocity direction (so input
    * can no longer steer), apply the dash speed multiplier and grant i-frames.
+   *
+   * The {@link DashEvent} is published at the END of this method — after the state
+   * flip — so a consumer that reacts by reading the world sees the entity already
+   * `DASHING`, and so "the event means the dash started" is true by construction
+   * rather than by convention (spec 12 AC-03).
    */
   private startDash(
     world: World,
@@ -121,9 +150,10 @@ export class DashSystem implements System {
     state: StateComponent,
     dash: DashStatsComponent,
     velocity: VelocityComponent,
-    facingRadians: number,
+    transform: TransformComponent,
+    tick: number,
   ): void {
-    const lockedDir = vec2(Math.cos(facingRadians), Math.sin(facingRadians));
+    const lockedDir = vec2(Math.cos(transform.facingRadians), Math.sin(transform.facingRadians));
 
     state.state = ActionState.DASHING;
     state.ticksInState = 0;
@@ -132,5 +162,12 @@ export class DashSystem implements System {
     velocity.directionVector = lockedDir;
     velocity.currentSpeed = velocity.maxSpeed * dash.speedMultiplier;
     addTag(world, id, INVULNERABLE_TAG);
+
+    this.dashEvents.emit({
+      tick,
+      entityId: id,
+      position: vec2(transform.x, transform.y),
+      direction: lockedDir,
+    });
   }
 }

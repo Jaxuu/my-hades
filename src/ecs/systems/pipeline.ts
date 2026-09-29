@@ -105,6 +105,15 @@
  *     tick, so the deeper wave spawns one tick after the choice — the same one-tick
  *     phase the rest of the engine treats as an architectural property.
  *
+ * 12. M6-T02 (spec 12) adds NO segment. It extends two EXISTING ones instead, which
+ *     is why the order above is untouched and the six pinning tests keep passing:
+ *     `DashSystem` now publishes a `DashEvent` on a third injected bus, and
+ *     `ModifierSystem` drains that bus too and invokes the optional `onDash` hook.
+ *     The existing DashSystem (index 5) < ModifierSystem (index 10) slot is what
+ *     makes the event reach its consumer within the same tick, and the existing
+ *     ModifierSystem > CollisionSystem (index 8) slot is what gives an injected
+ *     blast its collision test on the FOLLOWING tick (spec 12 §5.2 / §4.4).
+ *
  * Reordering any of these systems changes observable behaviour and will break the
  * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6,
  * spec 07 §6, spec 08 §6, spec 11 §6).
@@ -112,7 +121,8 @@
 
 import type { System } from '../System';
 import { EventQueue } from '../events';
-import type { EntityDeathEvent } from '../events';
+import type { DashEvent, EntityDeathEvent } from '../events';
+import { createDefaultModifierRegistry } from '../modifiers/index';
 import { PlayerControllerSystem } from './PlayerControllerSystem';
 import { FreezeSystem } from './FreezeSystem';
 import { AISystem } from './AISystem';
@@ -142,10 +152,18 @@ import { TransformSnapshotSystem } from './TransformSnapshotSystem';
  *   content is exactly "the deaths of the tick just processed"). Defaults to a
  *   private queue, so callers that do not care about deaths need no change; tests
  *   inject one to observe `EntityDeathEvent` (spec 08 §6.1).
+ * @param dashEvents Dash bus shared by DashSystem (producer) and ModifierSystem
+ *   (consumer) — the M6-T02 addition (spec 12 §5.3). Both ends sit in the same tick
+ *   (DashSystem is index 5, ModifierSystem index 10), so the bus is a within-tick
+ *   wire exactly like the hit bus, and ModifierSystem's full drain keeps it empty at
+ *   every tick boundary. Defaults to a private queue, so the two pre-existing
+ *   `createDefaultSystems` call shapes are unchanged; tests inject one to observe
+ *   `DashEvent`.
  */
 export function createDefaultSystems(
   events: EventQueue = new EventQueue(),
   deathEvents: EventQueue<EntityDeathEvent> = new EventQueue<EntityDeathEvent>(),
+  dashEvents: EventQueue<DashEvent> = new EventQueue<DashEvent>(),
 ): readonly System[] {
   return [
     new TransformSnapshotSystem(),
@@ -153,12 +171,12 @@ export function createDefaultSystems(
     new FreezeSystem(),
     new AISystem(),
     new MovementSystem(),
-    new DashSystem(),
+    new DashSystem(dashEvents),
     new StateSystem(),
     new CombatActionSystem(),
     new CollisionSystem(events),
     new StatusEffectSystem(),
-    new ModifierSystem(events),
+    new ModifierSystem(events, createDefaultModifierRegistry(), dashEvents),
     new DeathSystem(deathEvents),
     new EncounterSystem(),
     new RewardSystem(),

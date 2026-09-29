@@ -1,29 +1,31 @@
 /**
- * Tick-scoped event buses. See specs/05_boon_modifier_spec.md §3.1 / §3.2 / §4.1
- * and specs/08_encounter_and_death_spec.md §3.3.
+ * Tick-scoped event buses. See specs/05_boon_modifier_spec.md §3.1 / §3.2 / §4.1,
+ * specs/08_encounter_and_death_spec.md §3.3 and
+ * specs/12_armor_and_dash_boons_spec.md §3.3 / §4.3.
  *
  * This is the seam that turns "a hit happened" (and, as of M4-T02, "an entity
- * died") from an internal side effect of a system into an explicit, observable
- * FACT that any later system can react to. The M3-T01 modifier engine
- * (ModifierSystem) is the first consumer; future hooks (OnKill, OnDash, ...)
- * reuse the same queue with a different payload type — the generic parameter is
- * the whole extension story. M4-T02 cashes that in with a SECOND payload type on
- * its own bus ({@link EntityDeathEvent}), which is why the two shipped buses are
- * separate instances rather than one `HitEvent | EntityDeathEvent` queue: a
- * consumer of one must never have to discriminate the other.
+ * died", and as of M6-T02, "an entity started dashing") from an internal side
+ * effect of a system into an explicit, observable FACT that any later system can
+ * react to. The M3-T01 modifier engine (ModifierSystem) is the first consumer; the
+ * generic parameter is the whole extension story. It has now been cashed in twice:
+ * M4-T02 added a SECOND payload type on its own bus ({@link EntityDeathEvent}), and
+ * M6-T02 a THIRD ({@link DashEvent}) — which is why the shipped buses are separate
+ * instances rather than one `HitEvent | EntityDeathEvent | DashEvent` queue: a
+ * consumer of one must never have to discriminate the others.
  *
- * NOT cross-tick state: the queue is a WIRE between systems within a single tick.
- * Each bus has exactly one drainer (ModifierSystem for the hit bus, DeathSystem's
- * `clear()` for the death bus), so its observable state at a tick boundary is
- * bounded and deterministic. It lives here rather than on `World` so the generic
- * ECS layer stays free of game concepts, and it is passed by constructor
- * injection rather than through `SystemContext` so the frozen harness contracts
- * (clock / step / SystemContext) are left untouched (spec 05 C6 / §5.3).
+ * NOT cross-tick state: each queue is a WIRE between systems within a single tick.
+ * Every bus has exactly one drainer (ModifierSystem for the hit and dash buses,
+ * DeathSystem's `clear()` for the death bus), so its observable state at a tick
+ * boundary is bounded and deterministic. They live here rather than on `World` so
+ * the generic ECS layer stays free of game concepts, and they are passed by
+ * constructor injection rather than through `SystemContext` so the frozen harness
+ * contracts (clock / step / SystemContext) are left untouched (spec 05 C6 / §5.3).
  *
  * Determinism: `emit` order is the production order (CollisionSystem iterates
  * hitboxes and targets by ascending id; DeathSystem iterates dying entities by
- * ascending id), and `drain` preserves that FIFO order, so the sequence of
- * injected entities is reproducible tick for tick.
+ * ascending id; DashSystem iterates dashing entities by ascending id), and `drain`
+ * preserves that FIFO order, so the sequence of injected entities is reproducible
+ * tick for tick.
  */
 
 import type { EntityId } from './Entity';
@@ -94,6 +96,46 @@ export interface EntityDeathEvent {
   readonly tick: number;
   /** The entity that died. Still ALIVE in the world — death is a state, not a delete. */
   readonly entityId: EntityId;
+}
+
+/**
+ * A dash ENTRY, as a pure fact (M6-T02). See
+ * specs/12_armor_and_dash_boons_spec.md §3.3 / §4.3.
+ *
+ * Emitted by `DashSystem` on the tick an entity ENTERS `DASHING` — the tick the
+ * dash DECISION is taken, not the first tick of its displacement (MovementSystem
+ * runs before DashSystem, so the body starts moving on the NEXT tick; the event is
+ * about the decision, not the motion).
+ *
+ * Exactly ONE event per dash entry, ever: the producer emits inside the same
+ * `startDash` call that flips the state, and `DASHING` cannot be re-entered without
+ * leaving it first (spec 02 §4.1). A dash pulse that the entry gate REJECTS (stunned
+ * / mid-swing / on cooldown / frozen) publishes nothing — the event describes "this
+ * entity really started dashing", never "this entity wanted to".
+ *
+ * Carries no policy, exactly like {@link HitEvent}: it says WHO dashed, FROM WHERE
+ * and WHICH WAY — never what should happen as a result. "Therefore blast everything
+ * around me" is `PoseidonDashModifier`'s business, not this type's.
+ *
+ * `position` is the entity's origin at the moment of entry, which is what makes a
+ * SELF-CENTRED effect (a shockwave) expressible without the consumer re-reading the
+ * transform — and correct even though the body will have moved by the time the
+ * injected entity is collision-tested.
+ *
+ * `direction` is the LOCKED dash direction — the unit vector `DashSystem` just wrote
+ * onto `VelocityComponent.directionVector`. Carrying it means a consumer never has
+ * to re-derive "which way is this dash going" from `facingRadians`, so that
+ * conversion keeps exactly one home in the engine.
+ */
+export interface DashEvent {
+  /** Tick the dash started on (`SystemContext.tick` of the producer). */
+  readonly tick: number;
+  /** The entity that entered `DASHING`. */
+  readonly entityId: EntityId;
+  /** The entity's origin at dash entry, in world space. */
+  readonly position: Vec2;
+  /** The locked dash direction (unit vector). */
+  readonly direction: Vec2;
 }
 
 /**

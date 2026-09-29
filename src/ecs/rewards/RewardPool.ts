@@ -14,7 +14,11 @@
  */
 
 import type { Random } from '../../core/Random';
-import { DIONYSUS_BLIGHT_MODIFIER, ZEUS_STRIKE_MODIFIER } from '../components/ModifierComponent';
+import {
+  DIONYSUS_BLIGHT_MODIFIER,
+  POSEIDON_DASH_MODIFIER,
+  ZEUS_STRIKE_MODIFIER,
+} from '../components/ModifierComponent';
 
 /** Reward id for the flat health reward (the one non-modifier grant). */
 export const REWARD_HP_UP = 'hp_up';
@@ -62,10 +66,16 @@ export interface RewardDefinition {
  *
  * Ordered deterministically (and kept short) so the draw sequence for a given seed
  * is reproducible and easy to reason about in tests.
+ *
+ * M6-T02 adds `poseidon_dash` (spec 12 §3.6) and that is the WHOLE change needed to
+ * ship a new boon reward: it is a modifier reward, so `grantReward` mounts its id
+ * through the same generic branch every other boon uses, and `RewardSystem` never
+ * has to learn about it (spec 12 §10 trade-off 1).
  */
 export const REWARD_POOL: readonly RewardDefinition[] = [
   { id: ZEUS_STRIKE_MODIFIER, label: 'Zeus Strike' },
   { id: DIONYSUS_BLIGHT_MODIFIER, label: 'Dionysus Blight' },
+  { id: POSEIDON_DASH_MODIFIER, label: 'Poseidon Dash' },
   { id: REWARD_HP_UP, label: `Max HP +${String(HP_UP_AMOUNT)}` },
   { id: REWARD_DASH_UP, label: `Dash CD -${String(DASH_UP_COOLDOWN_REDUCTION)}` },
 ];

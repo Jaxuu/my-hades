@@ -33,6 +33,65 @@ export const ZEUS_STRIKE_MODIFIER = 'zeus_strike';
 export const DIONYSUS_BLIGHT_MODIFIER = 'dionysus_strike';
 
 /**
+ * Poseidon Dash (M6-T02): the holder's DASH ENTRY detonates a self-centred
+ * shockwave — a large-radius, high-knockback, low-damage burst that exists for a
+ * single active tick (spec 12 AC-04).
+ *
+ * The first boon driven by the `onDash` hook rather than `onHit`: it demonstrates
+ * that the modifier engine is about EVENTS, not specifically about hits.
+ */
+export const POSEIDON_DASH_MODIFIER = 'poseidon_dash';
+
+/**
+ * Radius of the Poseidon Dash shockwave, in world units. Deliberately LARGE —
+ * roughly 3x a melee hitbox — because "dash through a crowd and scatter it" is the
+ * fantasy, not "poke one enemy in front of you".
+ */
+export const DEFAULT_POSEIDON_DASH_RADIUS = 3;
+
+/**
+ * Damage of the Poseidon Dash shockwave. Deliberately LOW: this is a MOBILITY boon,
+ * so its payoff is displacement, not damage.
+ */
+export const DEFAULT_POSEIDON_DASH_DAMAGE = 5;
+
+/**
+ * Knockback speed of the Poseidon Dash shockwave, in world units per second.
+ * Deliberately HIGH (well above `DEFAULT_KNOCKBACK_FORCE = 12`) — being blown away
+ * IS the effect.
+ *
+ * Being `> 0` is also what opens `CollisionSystem`'s feedback gate, which is how the
+ * victims enter `HITSTUN` and therefore how `MovementSystem` comes to integrate the
+ * knockback at all (spec 04 AC-03): knockback only displaces during hitstun.
+ */
+export const DEFAULT_POSEIDON_DASH_KNOCKBACK = 40;
+
+/**
+ * Hitstop of the Poseidon Dash shockwave: `0`, i.e. none.
+ *
+ * A dash boon must not clip the dasher's own mobility, and `CollisionSystem` freezes
+ * BOTH sides of a hit. Zero hitstop (with a non-zero knockback) keeps the feedback
+ * gate open for the victims while leaving the dasher unfrozen.
+ */
+export const DEFAULT_POSEIDON_DASH_HITSTOP_TICKS = 0;
+
+/**
+ * Lifetime of the Poseidon Dash shockwave, in ticks.
+ *
+ * MUST be >= 2, for exactly the pipeline-phase reason the Zeus bolt has (see
+ * {@link DEFAULT_ZEUS_STRIKE_LIFESPAN_TICKS}): the blast is injected by
+ * `ModifierSystem`, which runs AFTER `CollisionSystem`, so it cannot be
+ * collision-tested on its spawn tick, and `LifespanSystem` (which runs LAST) ages it
+ * at the end of that same tick. A lifetime of 1 would destroy it before it was ever
+ * tested — a silent no-op.
+ *
+ * `2` therefore yields exactly ONE collision test, on the tick after the dash. That
+ * single active tick IS the spec's "exists for 1 tick": the blast is a burst, not a
+ * lingering field (spec 12 §4.4).
+ */
+export const DEFAULT_POSEIDON_DASH_LIFESPAN_TICKS = 2;
+
+/**
  * Fixed bonus damage of the Zeus Strike lightning bolt. Deliberately a CONSTANT
  * rather than a function of the attack's damage: AC-03 asks for "extra FIXED
  * damage", and a constant keeps the tick-by-tick assertions exact.
