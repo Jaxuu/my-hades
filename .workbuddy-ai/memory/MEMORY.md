@@ -45,9 +45,10 @@
 - **`export type { X } from './y'` 不会把 `X` 带进本地作用域**，工厂内部使用还需 `import type`。
 - 远端仓库 https://github.com/Jaxuu/my-hades（PUBLIC，默认 `main`）——**切勿提交密钥**。
 
-## 5. 规范管道（硬契约，13 段，不得重排）
-`PlayerControllerSystem → FreezeSystem → AISystem → MovementSystem → DashSystem → StateSystem → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem → DeathSystem → EncounterSystem → LifespanSystem`
-（`createDefaultSystems(events?, deathEvents?)`）。M1/M2 六段相对顺序**一字不改**。
+## 5. 规范管道（硬契约，**14 段**，不得重排）
+`TransformSnapshotSystem → PlayerControllerSystem → FreezeSystem → AISystem → MovementSystem → DashSystem → StateSystem → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem → DeathSystem → EncounterSystem → LifespanSystem`
+（`createDefaultSystems(events?, deathEvents?)`）。M1/M2 六段相对顺序**一字不改**；`LifespanSystem` 恒 LAST。
+- **`TransformSnapshotSystem` 必须是 index 0**（M5-T02）：它是"上一帧状态"的唯一权威，任何位移写入都必须发生在它之后。它只写 `PreviousTransformComponent`、只读 `TransformComponent`，下游系统观测到的世界与它不存在时逐位相同。**改管道会打断 6 处钉桩测试**（见 §6 末条）。
 - `FreezeSystem` 必须在所有"逐实体推进"系统之前；`AISystem` 必须在 `FreezeSystem` **之后**（要看到递减后的冻结判据，否则顿帧恢复错拍）。
 - `StatusEffectSystem` 必须在 `CollisionSystem` 之后、`ModifierSystem` **之前**（DoT 相位契约的唯一实现手段）。
 - `ModifierSystem` 必须在 `CollisionSystem` 之后（读本 Tick 事件）、`DeathSystem` 之前。
@@ -87,6 +88,18 @@
 - **`GameRenderer` 的 `retired: Set<EntityId>` 不可删**：尸体**永不销毁**（spec 08 §4.4）⇒ 死亡 FX 播完回收视图后，下一帧会被 `createMissingViews` 重建、FX 无限重播（P0 缺陷，实测 `viewCount` 呈 `2,…,2,1,2,…,2,1` 周期振荡）。**只在「FX 播完」路径退役**；`recycleDestroyed` 路径**不退役**（自纠正，且误退役会在 id 复用时永久隐藏合法实体）。安全性依赖 **`World.nextId` 单调递增、id 永不复用**。
 - **pixi.js 的 `Container`/`Graphics` 在 node 下可直接构造**（无需 jsdom / 真浏览器）⇒ 用鸭子类型假 `Application`（`{ stage: new Container(), ticker: { deltaMS, add, remove } }`）即可对渲染桥接做**逐帧回归测试**。见 `tests/render/renderer_bridge.test.ts`。
 
+**渲染插值与打击感（M5-T02）**：
+- **`PreviousTransformComponent` 是「渲染支撑组件」**：只由 `TransformSnapshotSystem` 写、只由渲染层读，**任何玩法系统不得读写**；丢弃它不改变模拟。**惰性挂载**（首见实体以当前 Transform 播种）⇒ 无需改 `spawnCombatant` 的组件契约，运行中生成的判定圆自动覆盖。
+- **插值语义**：`syncWorld(world, alpha)`，alpha clamp `[0,1]`；`renderX = (prevX + (currX-prevX)*alpha) * PX_PER_UNIT`；rotation 走 `shortestArcDelta`，值域 **`[-π, π]` 两端都闭**（`-π ≡ π`）。**alpha 默认 `1`** 是刻意向后兼容（`alpha=1 ⇒ renderX=currX`，逐位等价 M5-T01，冻结的 `renderer_bridge.test.ts` 单参调用原样通过）。
+- **`GameLoop` alpha**：追帧 `while` **之后**（累加器已扣减）算 `clamp(accumulatorMs / tickDurationMs, 0, 1)`——余数即插值系数。代价是恒定 **+1 Tick（≈16.7ms）视觉延迟**（ADR-002 显式取舍）。
+- **`fxLayer` 必须是 root 的最后一个子节点**：`init()` 先挂 `fxLayer`，实体视图用 `addChildAt(view, children.length - 1)` 插到它**之下** ⇒ FX 在最上层，同时保住 `root.children[0]/[1]` 升序实体视图的 M5-T01 冻结索引契约。**不要改成 `addChild`。**
+- **受击闪烁用 `tint`、不新增系统**：`isFrozen || state===HITSTUN` ⇒ `tint=0xff0000`，否则 `0xffffff`。PixiJS `tint` 是**乘法**、**无法"变白"**（白恰是 NO_TINT）故选纯红。染色在 `syncTransforms` 的 `isDying` 提前 `continue` **之后**，不与死亡 FX 抢 `tint`。
+- **伤害跳字**：`EntityView.lastHp` 在**视图创建时播种**（否则首帧误报）；`hp < lastHp` ⇒ `-(lastHp-hp)` 挂 `fxLayer`，1000ms 后销毁。HP **上升**不得触发。用真实帧时间推进，**不得回流逻辑**。
+- ⚠️ **PixiJS v8 在纯 Node（无 DOM）**：`new Text({ text, style })` **可构造**、`.text/.x/.y/.alpha` **可读**、是 `Container` 子类；**但读 `.width`/`.height`/bounds 抛 `document is not defined`**（惰性测量需 canvas）⇒ 断言只能碰 `.text`/坐标/alpha/父子关系。**位置参数形式 `new Text(t, style)` 已废弃会打警告**，必须用对象形式。假 `Application` 无 `renderer`。
+- ⚠️ **改管道会打断 6 处钉桩**：`tests/combat/feedback.test.ts`、`tests/ai/enemy_fsm.test.ts`、`tests/combat/boons.test.ts`、`tests/combat/status_effects.test.ts`、`tests/combat/death_and_encounter.test.ts`（5 处 `toEqual` 名数组）+ `enemy_fsm.test.ts` 的探针插入点。**探针插入点一律按名 `findIndex` 定位，禁硬编码索引。**
+- **已知问题（登记未修）**：`syncWorld(world, NaN)` 穿透 clamp（`Math.min(1,Math.max(0,NaN))===NaN`）⇒ `container.x/y` 变 `NaN`、实体**静默消失**；`Infinity`/`-Infinity` 正常 clamp，**只有 `NaN` 穿透**；当前调用链不可达。已固化进 `tests/render/juice-verify.test.ts` 并在 spec 10 §10 登记。缓解（未实施）：入口加 `Number.isFinite(alpha)`。
+- **验证方法（可复用）**：① **变异测试是"必须最先执行"这类门控的唯一硬证据**——把 `TransformSnapshotSystem` 移到 `MovementSystem` 之后，`prevX` 会从 0 变 1 而断言失败；去掉 alpha clamp，alpha=2 会外推。② **只读契约对抗性证法**——`step` 后取 `snapshot()`，连跑 60 帧 `syncWorld(world, 0.37)`（触发建视图/插值/跳字/闪白/死亡 FX/回收全路径），再取 `snapshot()` 断言 `toEqual` + `entityCount`/`listEntities()` 不变。③ **精确性陷阱**：验证插值别用速度积分（`600*(1/60)=9.999999999999998`），用探针直接写 `transform.x`。
+
 ## 7. 编排约定（工作室流程）
 - **先冻结、再评审、后修复**：禁止在 QA 评审窗口内并发改写受审产物。
 - 派单必须带：Task ID / 角色 / 优先级 / 上下文 / Deliverables / **Output Path** / Handoff 指令。
@@ -106,5 +119,6 @@
 | M4-T01 敌方 AI + 攻击预警 | ✅ 186 用例 · `f2ea2fc` |
 | M4-T02 死亡生命周期 + 房间波次 | ✅ 209 用例 · `25bd435` |
 | M5-T01 渲染表现层基建 + PixiJS 桥接 | ✅ 212 用例 · `d9aef43` · CI 全绿 |
+| M5-T02 渲染插值 + 视觉打击感（跳字/闪白） | ✅ **234 用例**（17 文件）· 未提交（待审批）· lint/typecheck/build 全绿 |
 
 - 权威规格：`specs/00_harness_spec.md` … `specs/08_encounter_and_death_spec.md`（+ M5 的 `specs/09_renderer_bridge_spec.md`）。
