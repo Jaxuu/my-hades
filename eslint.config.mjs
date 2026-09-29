@@ -10,6 +10,14 @@
 // The pure-logic prohibitions (window, document, Math.random, Date.now) and, as of
 // M4-T01, the environment-dependent-comparison prohibitions (localeCompare, the
 // toLocale* family, Intl) are scoped to `src/**/*.ts` ONLY and MUST NOT be relaxed.
+//
+// M5-T01 (specs/09_renderer_bridge_spec.md AC-01) adds the ENFORCED one-way
+// dependency gate: `src/**/*.ts` may not import the render layer. `client/` is the
+// opposite side of that gate — it is ALLOWED to touch DOM / BOM (window, document,
+// canvas, requestAnimationFrame) and to import pixi.js, because it is the
+// presentation layer. None of the `src/` rule blocks below apply to `client/**` or
+// `vite.config.ts`; that is exactly the intent. Do NOT widen any `src/` block to
+// cover `client/`, and do NOT weaken a `src/` block to accommodate the renderer.
 
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -111,6 +119,44 @@ export default tseslint.config(
           // `Intl` is locale/ICU-backed by definition.
           selector: 'NewExpression[callee.object.name="Intl"], NewExpression[callee.name="Intl"]',
           message: 'src/ must stay environment-independent — no `Intl` (ADR-001 R6).',
+        },
+      ],
+      // AC-01 one-way dependency gate (specs/09_renderer_bridge_spec.md): the
+      // render layer may import `src/`, but `src/` may NEVER import the render
+      // layer or any browser/graphics runtime. This is the machine-executable form
+      // of ADR-001 R1 (headless core) applied to the new `client/` directory.
+      //
+      // `paths` catches the bare package specifier; `patterns` catches the
+      // relative shapes that point at the sibling `client/` tree. `..` is a
+      // "dot" path segment, so a bare `**/client/**` glob does NOT match
+      // `../client/x`; the explicit relative groups below close that gap.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'pixi.js',
+              message:
+                'src/ must stay renderer-free — never import the render layer or its libraries (ADR-001 R1, spec 09 AC-01).',
+            },
+          ],
+          patterns: [
+            {
+              group: [
+                'pixi.js/*',
+                '**/client',
+                '**/client/**',
+                '../client',
+                '../client/**',
+                '../../client',
+                '../../client/**',
+                '../../../client',
+                '../../../client/**',
+              ],
+              message:
+                'src/ must stay renderer-free — never import from client/ (ADR-001 R1, spec 09 AC-01).',
+            },
+          ],
         },
       ],
     },

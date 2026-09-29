@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>my-hades · renderer bridge (M5-T01)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #14161c;
+        color: #e6e6e6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      #app {
+        position: absolute;
+        inset: 0;
+      }
+
+      #app canvas {
+        display: block;
+      }
+
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.55);
+        font-size: 13px;
+        line-height: 1.5;
+        pointer-events: none;
+        white-space: pre;
+      }
+
+      #keys {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.55);
+        font-size: 13px;
+        line-height: 1.5;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud"></div>
+    <div id="keys">
+      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺
+    </div>
+    <script type="module" src="/client/main.ts"></script>
+  </body>
+</html>
