@@ -4,10 +4,10 @@
  * §7 (AC-01 .. AC-10).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 14-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * canonical 15-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
  * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
  * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
- * DeathSystem -> EncounterSystem -> LifespanSystem) and
+ * DeathSystem -> EncounterSystem -> RewardSystem -> LifespanSystem) and
  * REAL prefab-assembled entities. Nothing is mocked, and ticks are advanced one at
  * a time so the timing contract is pinned per tick.
  *
@@ -36,7 +36,7 @@
  *   G4 · full attack cycle timing + facing lock                          (AC-04/AC-05)
  *   G5 · hitstun interrupts the windup; hitstop only pauses it           (AC-06)
  *   G6 · hitstop pauses the cooldown without eating frames               (AC-06)
- *   G7 · canonical 14-segment pipeline order                             (AC-07)
+ *   G7 · canonical 15-segment pipeline order                             (AC-07)
  *   G8 · deterministic replay of a full AI script                        (AC-09)
  *   G9 · zero regression for entities without an AI controller           (AC-08)
  */
@@ -119,7 +119,7 @@ function buildRig(systems: readonly System[], options: AirOptions): AIRig {
   return { sim, player, enemy };
 }
 
-/** The canonical 14-segment pipeline. */
+/** The canonical 15-segment pipeline. */
 function makeAIRig(options: AirOptions = {}): AIRig {
   return buildRig(createDefaultSystems(), options);
 }
@@ -690,7 +690,7 @@ describe('G6 · hitstop pauses the FSM without eating frames (AC-06)', () => {
 /* ========================================================================== *
  * G7 · pipeline order                                                        *
  * ========================================================================== */
-describe('G7 · canonical 14-segment pipeline order (AC-07)', () => {
+describe('G7 · canonical 15-segment pipeline order (AC-07)', () => {
   it('slots AISystem between the freeze gate and the advance systems', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
@@ -707,6 +707,7 @@ describe('G7 · canonical 14-segment pipeline order (AC-07)', () => {
       'ModifierSystem',
       'DeathSystem',
       'EncounterSystem',
+      'RewardSystem',
       'LifespanSystem',
     ]);
 

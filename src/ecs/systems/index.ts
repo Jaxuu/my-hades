@@ -11,5 +11,6 @@ export * from './StatusEffectSystem';
 export * from './ModifierSystem';
 export * from './DeathSystem';
 export * from './EncounterSystem';
+export * from './RewardSystem';
 export * from './LifespanSystem';
 export * from './pipeline';

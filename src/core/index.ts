@@ -1,5 +1,6 @@
 export * from './math';
 export * from './clock';
+export * from './Random';
 export * from './input';
 export * from './scheduler';
 export * from './snapshot-utils';

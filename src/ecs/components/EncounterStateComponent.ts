@@ -1,5 +1,6 @@
 /**
- * Room / encounter state. See specs/08_encounter_and_death_spec.md §3.2 / §4.3.
+ * Room / encounter state. See specs/08_encounter_and_death_spec.md §3.2 / §4.3 and
+ * specs/11_roguelike_loop_spec.md §3.1.
  *
  * POD component: data only, no behaviour. Every state transition lives in
  * `EncounterSystem`; this component is the WHOLE scheduler state, so the machine
@@ -9,11 +10,15 @@
  * Mounted on a GLOBAL SINGLETON entity — a bare "world entity" that owns nothing
  * else. It is deliberately NOT a spatial entity: a room has no position, no
  * hurtbox and no lifespan. `EncounterFactory.spawn` is the only writer of the
- * initial state; `EncounterSystem` is the only writer afterwards.
+ * initial state; `EncounterSystem` is the only writer afterwards, EXCEPT for the
+ * reward settlement hand-off (M6-T01): `RewardSystem` clears `pendingRewards` and
+ * descends the room (spec 11 AC-04). Those two systems are the only writers, and
+ * they write disjoint transitions.
  *
- * The `isWaveCleared` helper below is a FREE FUNCTION (not a component method), so
- * the "components carry no behaviour" contract (spec 00 §6.1) stays intact — the
- * same shape `TagComponent.hasTag` and `HealthComponent.isAlive` follow.
+ * The `isWaveCleared` / `findRewardDraft` helpers below are FREE FUNCTIONS (not
+ * component methods), so the "components carry no behaviour" contract (spec 00
+ * §6.1) stays intact — the same shape `TagComponent.hasTag` and
+ * `HealthComponent.isAlive` follow.
  */
 
 import { ComponentBase } from '../Component';
@@ -111,12 +116,47 @@ export class EncounterStateComponent extends ComponentBase {
    */
   public trackedEntityIds: EntityId[];
 
+  /**
+   * How many times the player has DESCENDED past a cleared room (M6-T01).
+   *
+   * Starts at `0` and is incremented once per settled reward draft (spec 11 AC-04).
+   * It is the roguelike loop's difficulty dial: `EncounterSystem` spawns
+   * `depth` extra enemies on top of each configured wave, so the same room
+   * configuration becomes progressively harder without a second config table.
+   *
+   * Deliberately NOT `currentWaveIndex`: that resets to `0` on every descent, so it
+   * cannot express "how far into the run are we".
+   */
+  public depth: number;
+
+  /**
+   * The pending boon draft, or `null` when there is nothing to choose (M6-T01).
+   *
+   * Written ONCE, by `EncounterSystem`, on the tick the room transitions to
+   * `ROOM_CLEARED` — three distinct reward ids drawn from the global pool with the
+   * world's seeded PRNG (spec 11 AC-01). Consumed by `RewardSystem`, which clears it
+   * back to `null` and descends the room (AC-04).
+   *
+   * INVARIANT: `pendingRewards !== null` implies `state === ROOM_CLEARED`. A draft
+   * exists only in the room's terminal state, and settling it leaves that state in
+   * the same write — so "the room is inert" and "a draft is pending" are two views
+   * of the same fact, and no system needs a separate "is a draft open?" gate to
+   * know the scheduler is idle.
+   *
+   * While it is non-null the room WAITS: time keeps flowing, but the scheduler does
+   * not spawn and the player is held (spec 11 AC-02). A `null` here is therefore the
+   * only state in which a `selectReward` intent is meaningful.
+   */
+  public pendingRewards: string[] | null;
+
   constructor(
     waves: readonly EncounterWaveConfig[],
     state = EncounterState.IN_PROGRESS,
     currentWaveIndex = 0,
     nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED,
     trackedEntityIds: EntityId[] = [],
+    depth = 0,
+    pendingRewards: string[] | null = null,
   ) {
     super();
     this.waves = waves;
@@ -124,6 +164,8 @@ export class EncounterStateComponent extends ComponentBase {
     this.currentWaveIndex = currentWaveIndex;
     this.nextSpawnTick = nextSpawnTick;
     this.trackedEntityIds = trackedEntityIds;
+    this.depth = depth;
+    this.pendingRewards = pendingRewards;
   }
 }
 
@@ -147,4 +189,28 @@ export function isWaveCleared(world: World, trackedEntityIds: readonly EntityId[
     if (!gone) return false;
   }
   return true;
+}
+
+/**
+ * The room component currently holding an UNSETTLED reward draft, or `undefined`.
+ *
+ * The single read-side accessor for the draft, shared by its three consumers:
+ * `RewardSystem` (settles it), `PlayerControllerSystem` (holds the player while it
+ * is open, spec 11 AC-02) and the presentation layer (renders the buttons, spec 11
+ * §4.5). One helper rather than three inline scans keeps the "which room, and what
+ * counts as pending" rule in exactly one place.
+ *
+ * Returns the LIVE component (not a copy) so the logic-layer callers can write back
+ * through it. The render layer's read-only contract (spec 09 AC-01) is what stops
+ * the UI from mutating it — the same discipline every other component read follows.
+ *
+ * Deterministic and side-effect free: it only reads the world, iterating ids in
+ * ascending order (`World.query`).
+ */
+export function findRewardDraft(world: World): EncounterStateComponent | undefined {
+  for (const id of world.query(EncounterStateComponent)) {
+    const encounter = world.getComponent(id, EncounterStateComponent);
+    if (encounter !== undefined && encounter.pendingRewards !== null) return encounter;
+  }
+  return undefined;
 }

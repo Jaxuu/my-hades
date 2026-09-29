@@ -31,7 +31,7 @@
  *   G4 · no-boon control: one settlement, zero bolts                     (AC-03/C9)
  *   G5 · the bolt is a PURE-DAMAGE tick: feedback timeline is untouched  (AC-03)
  *   G6 · EventQueue contract: FIFO, copy-on-drain, empty at tick bounds  (AC-07)
- *   G7 · canonical 14-segment pipeline order                            (AC-08)
+ *   G7 · canonical 15-segment pipeline order                            (AC-08)
  *   G8 · deterministic replay of the injection path                      (AC-06)
  */
 
@@ -722,8 +722,8 @@ describe('G6 · EventQueue is a FIFO, copy-on-drain, tick-scoped wire (AC-07)', 
 /* ------------------------------------------------------------------ *
  * G7 · canonical pipeline order                                       *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 14-segment pipeline order (AC-08)', () => {
-  it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan, keeping Lifespan last', () => {
+describe('G7 · canonical 15-segment pipeline order (AC-08)', () => {
+  it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Reward -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'TransformSnapshotSystem',
@@ -739,6 +739,7 @@ describe('G7 · canonical 14-segment pipeline order (AC-08)', () => {
       'ModifierSystem',
       'DeathSystem',
       'EncounterSystem',
+      'RewardSystem',
       'LifespanSystem',
     ]);
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-hades · renderer bridge (M5-T01)</title>
+    <title>my-hades · roguelike loop (M6-T01)</title>
     <style>
       html,
       body {
@@ -47,10 +47,61 @@
         line-height: 1.5;
         pointer-events: none;
       }
+
+      /* M6-T01 · boon-draft overlay. Hidden unless a draft is pending; the
+         UIManager toggles `is-visible`. It covers the whole viewport so a click
+         can never fall through to the canvas while the player is choosing. */
+      #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: rgba(8, 10, 14, 0.62);
+        font-family: inherit;
+      }
+
+      #ui-layer.is-visible {
+        display: flex;
+      }
+
+      #ui-layer h2 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 600;
+        color: #e6e6e6;
+        letter-spacing: 0.06em;
+      }
+
+      .reward-button {
+        min-width: 220px;
+        padding: 12px 20px;
+        border: 1px solid #4da3ff;
+        border-radius: 8px;
+        background: rgba(77, 163, 255, 0.14);
+        color: #e6e6e6;
+        font: inherit;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+
+      .reward-button:hover {
+        background: rgba(77, 163, 255, 0.32);
+        transform: translateY(-1px);
+      }
+
+      .reward-button:active {
+        transform: translateY(0);
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="ui-layer"></div>
     <div id="hud"></div>
     <div id="keys">
       W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺

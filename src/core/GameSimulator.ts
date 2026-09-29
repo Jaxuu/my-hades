@@ -20,6 +20,14 @@ export interface GameSimulatorOptions {
   readonly fps?: number;
   /** Systems to register up-front, in execution order. */
   readonly systems?: readonly System[];
+  /**
+   * Seed for the world's deterministic PRNG (M6-T01). Defaults to
+   * `DEFAULT_RANDOM_SEED`, so a simulator built without a seed is reproducible —
+   * which is what makes test suites and replays stable. A real roguelike run
+   * passes a varied seed here; that choice belongs to the caller, never to the
+   * logic layer (ADR-004 §Decision 3).
+   */
+  readonly seed?: number;
 }
 
 export interface ComponentSnapshot {
@@ -47,7 +55,11 @@ export class GameSimulator {
 
   constructor(options: GameSimulatorOptions = {}) {
     this.clock = new FixedClock(options.fps !== undefined ? { fps: options.fps } : {});
-    this.world = new World();
+    // The seed is forwarded to the World, which owns the ONE PRNG stream every
+    // randomness consumer shares (M6-T01, ADR-004). Guarded rather than passed
+    // through directly because `exactOptionalPropertyTypes` forbids handing an
+    // explicit `undefined` to an optional property.
+    this.world = options.seed !== undefined ? new World({ seed: options.seed }) : new World();
     this.input = new InputQueue();
     this.scheduler = new Scheduler();
     for (const system of options.systems ?? []) {

@@ -4,12 +4,12 @@
  * contract) and §7 (AC-01 .. AC-10).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 14-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * canonical 15-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
  * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
  * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
- * DeathSystem -> EncounterSystem -> LifespanSystem) and REAL prefab-assembled entities. Nothing is
- * mocked, and ticks are advanced one at a time so the timing contract is pinned per
- * tick.
+ * DeathSystem -> EncounterSystem -> RewardSystem -> LifespanSystem) and REAL
+ * prefab-assembled entities. Nothing is mocked, and ticks are advanced one at a
+ * time so the timing contract is pinned per tick.
  *
  * TICK NUMBERING (the classic off-by-one trap — spec 08 §6):
  *   `sim.step(n)` processes processed-ticks `0 .. n-1`, leaving `sim.tick === n`.
@@ -28,7 +28,7 @@
  *   G3 · a corpse produces no intent: AI path and player hardware path              (AC-01/AC-04)
  *   G4 · single-wave room: cleared on the tick the last member dies                 (AC-03)
  *   G5 · multi-wave scheduling: wave 2 spawns exactly `delayTicks` after the wipe   (AC-03)
- *   G6 · canonical 14-segment pipeline order                                        (AC-07)
+ *   G6 · canonical 15-segment pipeline order                                        (AC-07)
  *   G7 · deterministic replay of a full encounter script                            (AC-08)
  *   G8 · zero regression + the death bus is bounded to one tick                     (AC-09/AC-10)
  */
@@ -848,7 +848,7 @@ describe('G5 · wave 2 spawns exactly delayTicks after the wipe was detected (AC
 /* ========================================================================== *
  * G6 · pipeline order                                                        *
  * ========================================================================== */
-describe('G6 · canonical 14-segment pipeline order (AC-07)', () => {
+describe('G6 · canonical 15-segment pipeline order (AC-07)', () => {
   it('slots Death then Encounter after every damage source, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
@@ -865,6 +865,7 @@ describe('G6 · canonical 14-segment pipeline order (AC-07)', () => {
       'ModifierSystem',
       'DeathSystem',
       'EncounterSystem',
+      'RewardSystem',
       'LifespanSystem',
     ]);
 
@@ -875,6 +876,9 @@ describe('G6 · canonical 14-segment pipeline order (AC-07)', () => {
     expect(names.indexOf('DeathSystem')).toBeGreaterThan(names.indexOf('ModifierSystem'));
     // EncounterSystem's whole input is the death tag DeathSystem just wrote.
     expect(names.indexOf('EncounterSystem')).toBeGreaterThan(names.indexOf('DeathSystem'));
+    // RewardSystem settles the draft EncounterSystem rolls, so it must sit after it
+    // (spec 11 §5.2) and still before LifespanSystem, which stays LAST.
+    expect(names.indexOf('RewardSystem')).toBeGreaterThan(names.indexOf('EncounterSystem'));
     // LifespanSystem still runs LAST: a hitbox must never be aged before it has been
     // collision-tested this tick.
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);

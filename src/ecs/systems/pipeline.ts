@@ -2,13 +2,14 @@
  * Canonical per-tick system pipeline.
  * See specs/02_dash_and_state_spec.md §5.1, specs/03_combat_hitbox_spec.md §5.4,
  * specs/04_combat_feedback_spec.md §5.2, specs/05_boon_modifier_spec.md §5.2,
- * specs/07_enemy_ai_spec.md §5.2 and specs/08_encounter_and_death_spec.md §5.2.
+ * specs/07_enemy_ai_spec.md §5.2, specs/08_encounter_and_death_spec.md §5.2 and
+ * specs/11_roguelike_loop_spec.md §5.2.
  *
- * Order (HARD CONTRACT, 14 segments):
+ * Order (HARD CONTRACT, 15 segments):
  *   TransformSnapshotSystem -> PlayerControllerSystem -> FreezeSystem -> AISystem
  *     -> MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem
  *     -> CollisionSystem -> StatusEffectSystem -> ModifierSystem -> DeathSystem
- *     -> EncounterSystem -> LifespanSystem.
+ *     -> EncounterSystem -> RewardSystem -> LifespanSystem.
  *
  * Why this exact order:
  * -1. TransformSnapshotSystem is the M5-T02 INSERTION and it sits AHEAD of every
@@ -92,10 +93,21 @@
  *     come before LifespanSystem, which stays LAST. Consequence, documented rather
  *     than accidental: a wave spawned on tick `T` first ACTS on `T+1`, because every
  *     per-entity system has already run this tick (spec 08 §6.2).
+ * 11. RewardSystem is the M6-T01 INSERTION — the third segment of the "room is
+ *     finished" prologue. It sits immediately AFTER EncounterSystem because
+ *     EncounterSystem is what ROLLS the boon draft on the `ROOM_CLEARED` transition
+ *     (spec 11 AC-01), while RewardSystem is the other half of the loop: it SETTLES
+ *     a selection and descends the room (spec 11 AC-04). Keeping them adjacent makes
+ *     "roll, then settle" readable in one place, and it guarantees the settle is
+ *     evaluated against THIS tick's draft rather than last tick's. It must come
+ *     before LifespanSystem, which stays LAST. Consequence, documented rather than
+ *     accidental: the descended room is picked up by EncounterSystem on the NEXT
+ *     tick, so the deeper wave spawns one tick after the choice — the same one-tick
+ *     phase the rest of the engine treats as an architectural property.
  *
  * Reordering any of these systems changes observable behaviour and will break the
  * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6,
- * spec 07 §6, spec 08 §6).
+ * spec 07 §6, spec 08 §6, spec 11 §6).
  */
 
 import type { System } from '../System';
@@ -113,6 +125,7 @@ import { StatusEffectSystem } from './StatusEffectSystem';
 import { ModifierSystem } from './ModifierSystem';
 import { DeathSystem } from './DeathSystem';
 import { EncounterSystem } from './EncounterSystem';
+import { RewardSystem } from './RewardSystem';
 import { LifespanSystem } from './LifespanSystem';
 import { TransformSnapshotSystem } from './TransformSnapshotSystem';
 
@@ -148,6 +161,7 @@ export function createDefaultSystems(
     new ModifierSystem(events),
     new DeathSystem(deathEvents),
     new EncounterSystem(),
+    new RewardSystem(),
     new LifespanSystem(),
   ];
 }

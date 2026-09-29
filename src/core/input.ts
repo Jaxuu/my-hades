@@ -23,7 +23,37 @@ export interface KeyUpEvent {
   readonly key: string;
 }
 
-export type InputEvent = MoveEvent | KeyDownEvent | KeyUpEvent;
+/**
+ * A reward selection made in the presentation layer (M6-T01, spec 11 AC-03).
+ *
+ * This is the "UI -> logic" seam for the boon draft. A DOM button click is an
+ * EXTERNAL, tick-aligned command exactly like a key press, so it rides the SAME
+ * deterministic FIFO queue instead of inventing a parallel bus. That choice is
+ * load-bearing (spec 11 §10 trade-off 1):
+ *
+ *  - the queue already guarantees "delivered on exactly tick T, in enqueue order",
+ *    which is the whole of AC-03's determinism requirement;
+ *  - `GameSimulator.inject` already owns the "no past ticks" rule, so a stale click
+ *    fails loudly instead of silently corrupting a replay;
+ *  - `GameLoop` already flushes input immediately BEFORE `step`, so a selection
+ *    lands on the tick the player saw it on;
+ *  - a second queue would need its own injection API, its own drain point and its
+ *    own ordering discipline — three chances to desynchronise a replay, bought for
+ *    nothing.
+ *
+ * It carries an ID, not an index: the UI must never be able to select "option 1 of
+ * whatever is on screen". The logic layer re-validates the id against the pending
+ * draft it rolled itself, so a forged or stale id is simply ignored
+ * (spec 11 AC-03 / §4.3).
+ */
+export interface SelectRewardEvent {
+  readonly kind: 'selectReward';
+  readonly tick: number;
+  /** Id of the reward the player picked (e.g. `'zeus_strike'`). */
+  readonly rewardId: string;
+}
+
+export type InputEvent = MoveEvent | KeyDownEvent | KeyUpEvent | SelectRewardEvent;
 
 export function assertValidTick(tick: number): void {
   if (!Number.isInteger(tick) || tick < 0) {

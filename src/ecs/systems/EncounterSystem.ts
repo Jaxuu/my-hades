@@ -35,8 +35,10 @@
  * of "the same tick", and it keeps the two decisions from interleaving.
  *
  * Holds NO cross-tick hidden state: `state` / `currentWaveIndex` / `nextSpawnTick` /
- * `trackedEntityIds` all live on `EncounterStateComponent` (spec 00 §6.1). The only
- * thing this class owns is its name.
+ * `trackedEntityIds` / `depth` / `pendingRewards` all live on
+ * `EncounterStateComponent` (spec 00 §6.1). The only thing this class owns is its
+ * name — and, as of M6-T01, the PRNG draw it performs through `world.rng` (the
+ * generator itself is owned by the World, so no state is hidden here either).
  */
 
 import type { System, SystemContext } from '../System';
@@ -50,6 +52,46 @@ import {
 } from '../components/EncounterStateComponent';
 import { EnemyFactory } from '../prefabs/EnemyFactory';
 import type { EnemySpawnOptions } from '../prefabs/spawn-helpers';
+import { draftRewards } from '../rewards/RewardPool';
+
+/**
+ * Extra world units of separation between a wave's configured enemies and the
+ * copies added by depth (M6-T01, spec 11 AC-04).
+ *
+ * A CONSTANT, not a random offset: escalation must be reproducible, and the copies
+ * must not spawn on top of each other (overlapping hurtboxes would make the extra
+ * difficulty read as "one enemy" to the player and to a collision assertion).
+ */
+export const DEPTH_SPAWN_SPACING_UNITS = 1.5;
+
+/**
+ * Expand a wave's configured roster for the current depth.
+ *
+ * The base enemies are returned UNTOUCHED and in config order; then `depth` extra
+ * copies are appended, each cloned from a config entry (round-robin) and offset
+ * along +x so it does not stack on its template. `depth = 0` returns the config
+ * verbatim, which is what keeps every M4 encounter behaving bit-for-bit as it did
+ * before M6 — the escalation is purely additive.
+ *
+ * Pure and exported so the growth rule is testable without standing up a room.
+ */
+export function buildWaveRoster(
+  enemies: readonly EnemySpawnOptions[],
+  depth: number,
+): EnemySpawnOptions[] {
+  const roster: EnemySpawnOptions[] = [...enemies];
+  if (depth <= 0) return roster;
+
+  for (let i = 0; i < depth; i += 1) {
+    const template = enemies[i % enemies.length];
+    // Unreachable for a validated wave (a wave must declare at least one enemy,
+    // spec 08 §3.4), but `noUncheckedIndexedAccess` makes the read `T | undefined`
+    // and an empty roster must not become an infinite loop.
+    if (template === undefined) break;
+    roster.push({ ...template, x: (template.x ?? 0) + DEPTH_SPAWN_SPACING_UNITS * (i + 1) });
+  }
+  return roster;
+}
 
 export class EncounterSystem implements System {
   public readonly name = 'EncounterSystem';
@@ -60,6 +102,10 @@ export class EncounterSystem implements System {
       if (encounter === undefined) continue;
 
       // 1. A finished room is inert: no spawn, no wipe check, no state churn.
+      //    This is ALSO the "a reward draft is open" case (M6-T01): a draft only
+      //    ever exists in ROOM_CLEARED (see the invariant on `pendingRewards`), so
+      //    this one gate covers AC-02's "the scheduler is held while the player
+      //    chooses" without a second, redundant check.
       if (encounter.state === EncounterState.ROOM_CLEARED) continue;
 
       // 2. Nothing spawned for the current wave yet => pending spawn.
@@ -70,7 +116,7 @@ export class EncounterSystem implements System {
 
       // 3. A live wave: advance only once every tracked member is gone.
       if (!isWaveCleared(world, encounter.trackedEntityIds)) continue;
-      this.advance(ctx.tick, encounter);
+      this.advance(world, ctx.tick, encounter);
     }
   }
 
@@ -98,13 +144,27 @@ export class EncounterSystem implements System {
    *
    * `ROOM_CLEARED` on the very tick the last wave was detected cleared — the room is
    * not "waiting for a wave that will never come", it is DONE (spec 08 AC-03).
+   *
+   * M6-T01 adds the reward draft to that terminal transition: the room is done, so
+   * the player has EARNED a boon (spec 11 AC-01). The draft is rolled here — and
+   * only here — because this is the single place that knows "the run just cleared a
+   * room", and it uses the world's seeded PRNG so the same seed always produces the
+   * same three options (ADR-004).
+   *
+   * The tracked roster is still RETAINED on this transition (spec 08 §4.4): an empty
+   * roster means "not spawned yet", which would be a lie about a room that has been
+   * fought. Only a promotion to a next wave empties it.
    */
-  private advance(tick: number, encounter: EncounterStateComponent): void {
+  private advance(world: World, tick: number, encounter: EncounterStateComponent): void {
     const nextIndex = encounter.currentWaveIndex + 1;
     const nextWave = encounter.waves[nextIndex];
 
     if (nextWave === undefined) {
       encounter.state = EncounterState.ROOM_CLEARED;
+      // Roll the draft ONCE per clear. `pendingRewards` is null here by construction
+      // (a draft only exists in ROOM_CLEARED, and this branch is the only way in), so
+      // there is no re-roll to guard against.
+      encounter.pendingRewards = draftRewards(world.rng);
       return;
     }
 
@@ -119,10 +179,14 @@ export class EncounterSystem implements System {
   }
 
   /**
-   * Spawn a wave's enemies IN CONFIG ORDER and adopt the resulting ids as the
-   * tracked roster. `EnemyFactory.spawn` is the only assembly path — this system
-   * never touches components directly, so a new enemy variant needs no change here
-   * (spec 08 AC-05).
+   * Spawn a wave's enemies IN CONFIG ORDER (expanded for the current depth) and
+   * adopt the resulting ids as the tracked roster. `EnemyFactory.spawn` is the only
+   * assembly path — this system never touches components directly, so a new enemy
+   * variant needs no change here (spec 08 AC-05).
+   *
+   * Depth escalation (M6-T01, spec 11 AC-04) is applied by `buildWaveRoster`, which
+   * is a pure expansion of the configured roster — the factory still receives plain
+   * `EnemySpawnOptions` and knows nothing about depth.
    */
   private spawnWave(
     world: World,
@@ -130,7 +194,7 @@ export class EncounterSystem implements System {
     enemies: readonly EnemySpawnOptions[],
   ): void {
     const spawned: EntityId[] = [];
-    for (const enemy of enemies) {
+    for (const enemy of buildWaveRoster(enemies, encounter.depth)) {
       spawned.push(EnemyFactory.spawn(world, enemy));
     }
     encounter.trackedEntityIds = spawned;

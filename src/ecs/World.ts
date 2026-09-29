@@ -3,6 +3,7 @@
  * See specs/00_harness_spec.md §6.
  */
 
+import { DEFAULT_RANDOM_SEED, Random } from '../core/Random';
 import type { Component, ComponentCtor } from './Component';
 import { Entity } from './Entity';
 import type { EntityId } from './Entity';
@@ -26,10 +27,40 @@ function compareComponentTypeName(a: Component, b: Component): number {
   return 0;
 }
 
+/** Construction options for a {@link World}. */
+export interface WorldOptions {
+  /**
+   * Seed for the world's deterministic PRNG (M6-T01). Defaults to
+   * {@link DEFAULT_RANDOM_SEED}, so an unconfigured world is reproducible.
+   * See docs/architecture/ADR-004-deterministic-prng.md.
+   */
+  readonly seed?: number;
+}
+
 export class World {
+  /**
+   * The world's ONE deterministic random source (M6-T01, ADR-004).
+   *
+   * Mounted on `World` rather than threaded through `SystemContext` because the
+   * context is a frozen harness contract (spec 00 §6.1, spec 05 C6) that both
+   * `SystemContext` consumers and `ModifierContext` extensions rely on verbatim,
+   * and rather than injected per-system because every randomness consumer must
+   * share ONE stream — two generators seeded alike would draw the same numbers
+   * twice, which is a subtle determinism bug, not a feature.
+   *
+   * The logic layer READS this; it never reseeds it. Choosing the seed is the
+   * caller's job (`new GameSimulator({ seed })`), which is what keeps the wall
+   * clock out of `src/` (ADR-004 §Decision 3).
+   */
+  public readonly rng: Random;
+
   private nextId: EntityId = 0;
   private readonly alive = new Set<EntityId>();
   private readonly stores = new Map<ComponentCtor, Map<EntityId, Component>>();
+
+  constructor(options: WorldOptions = {}) {
+    this.rng = new Random(options.seed ?? DEFAULT_RANDOM_SEED);
+  }
 
   public get entityCount(): number {
     return this.alive.size;

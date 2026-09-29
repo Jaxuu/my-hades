@@ -35,9 +35,11 @@
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
+import { vec2 } from '../../core/math';
 import { ATTACK_KEY, DASH_KEY, PlayerInputComponent } from '../components/PlayerInputComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { isDead } from '../components/DeadTagComponent';
+import { findRewardDraft } from '../components/EncounterStateComponent';
 
 export class PlayerControllerSystem implements System {
   public readonly name = 'PlayerControllerSystem';
@@ -118,8 +120,28 @@ export class PlayerControllerSystem implements System {
    * raised from the rising-edge flags only. Consumers clear the pulses after their
    * gate check, so they are one-tick wide unless a freeze suppresses the consumer
    * (in which case FreezeSystem clears them instead).
+   *
+   * M6-T01 adds the DRAFT HOLD (spec 11 AC-02): while the room has an unsettled
+   * reward draft open, the player's intent is zeroed instead of derived, so the
+   * player stands still and cannot dash or attack until the choice is made.
+   *
+   * Three things about that gate are deliberate:
+   *  - It is here, at the SINGLE intent-generation choke point, rather than as a
+   *    per-system gate in Movement / Dash / CombatAction. One write point cannot be
+   *    half-applied, and no consumer needs to learn about encounters.
+   *  - It suppresses ONLY phase 2. The device snapshot (phase 1) keeps tracking
+   *    held keys, so releasing the stick mid-draft is still observed and the player
+   *    does not lurch when the draft closes.
+   *  - It is evaluated ONCE per tick, before the loop, so the verdict cannot differ
+   *    between two entities within the same tick.
+   *
+   * The gate cannot deadlock the player: `pendingRewards` is cleared by
+   * `RewardSystem` in the SAME tick it settles a selection, so the hold lasts
+   * exactly as long as the draft is genuinely open.
    */
   private deriveIntent(world: World): void {
+    const held = findRewardDraft(world) !== undefined;
+
     for (const id of world.query(PlayerInputComponent, IntentComponent)) {
       // A corpse must not have its neutralised intent re-derived from the device
       // (spec 08 §4.2) — otherwise "dead entities output no intent" would last
@@ -129,6 +151,13 @@ export class PlayerControllerSystem implements System {
       const input = world.getComponent(id, PlayerInputComponent);
       const intent = world.getComponent(id, IntentComponent);
       if (input === undefined || intent === undefined) continue;
+
+      if (held) {
+        intent.moveVector = vec2(0, 0);
+        intent.wantsToDash = false;
+        intent.wantsToAttack = false;
+        continue;
+      }
 
       intent.moveVector = input.moveVector;
       intent.wantsToDash = input.buttonDashJustPressed;
