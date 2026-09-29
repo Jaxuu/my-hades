@@ -99,6 +99,6 @@
 | M5-T01 渲染基建 + PixiJS 桥接 | ✅ 212 · `d9aef43` |
 | M5-T02 渲染插值 + 打击感 | ✅ 234（17 文件）· `bc91777`+`dcd9b25` |
 | M6-T01 PRNG + 词缀三选一 | ✅ 264（18 文件） |
-| M6-T02 精英霸体 + 冲刺词缀 | ✅ **285**（19 文件）· test/lint/typecheck/build 全绿 |
+| M6-T02 精英霸体 + 冲刺词缀 | ✅ **285**（19 文件）· `efaca99` · test/lint/typecheck/build 全绿 |
 
 - 权威规格：`specs/00`…`specs/12`。ADR：`ADR-001`（headless ECS）·`ADR-002`（渲染插值）·`ADR-004`（确定性 PRNG）。
