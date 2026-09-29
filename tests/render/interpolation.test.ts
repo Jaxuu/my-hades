@@ -33,6 +33,7 @@ import { PreviousTransformComponent } from '../../src/ecs/components/PreviousTra
 import { applyDamage } from '../../src/ecs/components/HealthComponent';
 import { applyFreeze } from '../../src/ecs/components/FreezeComponent';
 import { GameRenderer } from '../../client/GameRenderer';
+import { testEnemy } from '../harness/config-fixtures';
 
 /** Expected tint values, mirrored from spec 10 §3.3 (public contract). */
 const NO_TINT = 0xffffff;
@@ -243,7 +244,7 @@ describe('render juice (spec 10)', () => {
   it('AC-02: a dropped HP spawns a rising "-N" floater', () => {
     const { app } = makeApp(20);
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const enemyId = EnemyFactory.spawn(sim.world, { x: 3, y: 0, hp: 100, maxHp: 100 });
+    const enemyId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0, hp: 100, maxHp: 100 }));
     sim.step(1);
 
     const renderer = new GameRenderer(app);
@@ -265,7 +266,7 @@ describe('render juice (spec 10)', () => {
   it('AC-02: a floater is destroyed once its 1000ms lifetime elapses', () => {
     const { app } = makeApp(20);
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const enemyId = EnemyFactory.spawn(sim.world, { x: 0, y: 0, hp: 100, maxHp: 100 });
+    const enemyId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, hp: 100, maxHp: 100 }));
     sim.step(1);
 
     const renderer = new GameRenderer(app);

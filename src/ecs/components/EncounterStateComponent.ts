@@ -59,10 +59,11 @@ export const ENCOUNTER_WAVE_UNSCHEDULED = -1;
 /**
  * One wave: how long to wait before it spawns, and what it spawns.
  *
- * `enemies` holds full `EnemySpawnOptions` (not a bare count), so a wave can place
- * and tune each enemy individually — the encounter layer is pure scheduling and
- * never re-implements entity assembly (spec 08 AC-05). Each entry is handed
- * verbatim to `EnemyFactory.spawn`.
+ * `enemies` holds full `EnemySpawnSpec` entries — an enemy TYPE id plus that
+ * entity's placement (M10-T01) — so a wave can place each enemy individually while
+ * every balance number still comes from one config table. The encounter layer is
+ * pure scheduling and never re-implements entity assembly (spec 08 AC-05); each
+ * entry is handed verbatim to `EnemyFactory.spawn`.
  */
 export interface EncounterWaveConfig {
   /**

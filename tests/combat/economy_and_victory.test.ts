@@ -102,6 +102,8 @@ import type {
   SystemContext,
   World,
 } from '../../src';
+import { SchemaError } from '../../src';
+import { testEnemy, testEnemyRef } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
@@ -275,10 +277,10 @@ describe('G0 · pickup assembly and its structural invisibility (AC-01/AC-02)', 
 
   it('the `loot` spawn option is a capability switch, not a new default', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
-    const plain = EnemyFactory.spawn(sim.world, {});
-    const dropper = EnemyFactory.spawn(sim.world, {
+    const plain = EnemyFactory.spawn(sim.world, ...testEnemy({}));
+    const dropper = EnemyFactory.spawn(sim.world, ...testEnemy({
       loot: [{ kind: PickupKind.GOLD, amount: 3 }, { kind: PickupKind.HEAL }],
-    });
+    }));
 
     // Omit it and the component set is untouched (spec 15 AC-10 zero regression).
     expect(sim.world.getComponent(plain, LootComponent)).toBeUndefined();
@@ -300,14 +302,11 @@ describe('G0 · pickup assembly and its structural invisibility (AC-01/AC-02)', 
       lifespanTicks: DEFAULT_PICKUP_LIFESPAN_TICKS,
     });
 
-    // Validation happens at the assembly seam, like every other opt-in capability.
-    expect(() => EnemyFactory.spawn(sim.world, { loot: [] })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawn(sim.world, { loot: [{ kind: PickupKind.GOLD, amount: 0 }] })).toThrow(
-      RangeError,
-    );
-    expect(() =>
-      EnemyFactory.spawn(sim.world, { loot: [{ kind: PickupKind.GOLD, lifespanTicks: -1 }] }),
-    ).toThrow(RangeError);
+    // Validation happens when the config is registered (M10-T01) — the same
+    // "fail loudly" rule as the pre-M10 assembly seam, one phase earlier.
+    expect(() => testEnemy({ loot: [] })).toThrow(SchemaError);
+    expect(() => testEnemy({ loot: [{ kind: PickupKind.GOLD, amount: 0 }] })).toThrow(SchemaError);
+    expect(() => testEnemy({ loot: [{ kind: PickupKind.GOLD, lifespanTicks: -1 }] })).toThrow(SchemaError);
     expect(sim.world.entityCount).toBe(2);
   });
 
@@ -319,7 +318,7 @@ describe('G0 · pickup assembly and its structural invisibility (AC-01/AC-02)', 
   it('the wallet rides with the device: the player has one, an enemy does not', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
     const player = PlayerFactory.spawn(sim.world, {});
-    const enemy = EnemyFactory.spawn(sim.world, {});
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({}));
 
     expect(inventoryOf(sim, player).gold).toBe(0);
     expect(sim.world.getComponent(enemy, InventoryComponent)).toBeUndefined();
@@ -350,7 +349,7 @@ describe('G0 · pickup assembly and its structural invisibility (AC-01/AC-02)', 
   it('a world with no pickups is never touched by PickupSystem', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    EnemyFactory.spawn(sim.world, { x: 3, y: 0 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0 }));
     const before = sim.world.entityCount;
 
     sim.step(30);
@@ -367,13 +366,13 @@ describe('G1 · a death drops one pickup per declared drop, at the corpse (AC-01
   it('spawns the drops on the killing tick, spaced along +x, and not before', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 6,
       y: 2,
       maxHp: 10,
       hp: 10,
       loot: [{ kind: PickupKind.GOLD, amount: 5 }, { kind: PickupKind.HEAL, amount: 20 }],
-    });
+    }));
 
     sim.step(1); // tick 0 — nothing has died, so nothing has dropped
     expect(pickupsOf(sim)).toEqual([]);
@@ -411,7 +410,7 @@ describe('G1 · a death drops one pickup per declared drop, at the corpse (AC-01
 
   it('an enemy with no loot table drops nothing (the M1-M8 behaviour)', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 6, y: 0, maxHp: 10, hp: 10 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 6, y: 0, maxHp: 10, hp: 10 }));
 
     applyDamage(sim.world, enemy, 999);
     sim.step(1);
@@ -606,7 +605,7 @@ describe('G4 · taking a pickup is not a hit (AC-05)', () => {
     // swing that connects freezes BOTH sides, so the ATTACKER is frozen here.
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 1, y: 0, maxHp: 100, hp: 100 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1, y: 0, maxHp: 100, hp: 100 }));
 
     sim.inject({ kind: 'move', tick: 0, vector: vec2(0, 0) });
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -686,10 +685,10 @@ describe('G4 · a pickup does not block movement and does not absorb projectiles
  * G5 · the run                                                               *
  * ========================================================================== */
 const ROOM_A: readonly EncounterWaveConfig[] = [
-  { delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: 100, hp: 100 }] },
+  { delayTicks: 0, enemies: [testEnemyRef({ x: 6, y: 0, maxHp: 100, hp: 100 })] },
 ];
 const ROOM_B: readonly EncounterWaveConfig[] = [
-  { delayTicks: 0, enemies: [{ x: -6, y: 0, maxHp: 200, hp: 200 }] },
+  { delayTicks: 0, enemies: [testEnemyRef({ x: -6, y: 0, maxHp: 200, hp: 200 })] },
 ];
 
 /** Kill every member of the current wave and advance one tick, so the wipe resolves. */
@@ -754,15 +753,20 @@ describe('G5 · the room table and the final-room predicate (AC-03)', () => {
     // is a bug that shows up ten minutes into play.
     expect(() => resolveEncounterRooms({ waves: ROOM_A, rooms: [[]] })).toThrow(RangeError);
     expect(() =>
-      resolveEncounterRooms({ waves: ROOM_A, rooms: [[{ delayTicks: -1, enemies: [{}] }]] }),
+      resolveEncounterRooms({ waves: ROOM_A, rooms: [[{ delayTicks: -1, enemies: [testEnemyRef({})] }]] }),
     ).toThrow(RangeError);
     expect(() =>
       resolveEncounterRooms({ waves: ROOM_A, rooms: [[{ delayTicks: 0, enemies: [] }]] }),
     ).toThrow(RangeError);
     // A malformed enemy spec is caught by dry-run assembly in the far room too.
+    // M10-T01: "malformed" now means an unknown enemy TYPE — a malformed CONFIG is
+    // rejected by the schema at Bootstrap, long before a room is assembled.
     expect(() =>
-      resolveEncounterRooms({ waves: ROOM_A, rooms: [[{ delayTicks: 0, enemies: [{ maxHp: -1 }] }]] }),
-    ).toThrow(RangeError);
+      resolveEncounterRooms({
+        waves: ROOM_A,
+        rooms: [[{ delayTicks: 0, enemies: [{ enemyId: 'no_such_enemy' }] }]],
+      }),
+    ).toThrow(SchemaError);
   });
 
   it('a room that is NOT final rolls a draft; the final room never does', () => {
@@ -962,7 +966,7 @@ describe('G5 · clearing the FINAL room wins the run, with no draft (AC-04)', ()
  * G6 · restartRun                                                            *
  * ========================================================================== */
 const RUN_WAVES: readonly EncounterWaveConfig[] = [
-  { delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: 100, hp: 100 }] },
+  { delayTicks: 0, enemies: [testEnemyRef({ x: 6, y: 0, maxHp: 100, hp: 100 })] },
 ];
 
 /** The run shape every restart test uses: two one-wave rooms, so one full run wins. */
@@ -1118,13 +1122,13 @@ describe('G7 · pipeline slot and zero regression (AC-09/AC-10)', () => {
     // the corpse takes the coin on the very tick the enemy dies.
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 0,
       y: 0,
       maxHp: 10,
       hp: 10,
       loot: [{ kind: PickupKind.GOLD, amount: 5 }],
-    });
+    }));
 
     applyDamage(sim.world, enemy, 999);
     sim.step(1); // tick 0 — the enemy dies, drops, and the coin is taken
@@ -1139,7 +1143,7 @@ describe('G7 · pipeline slot and zero regression (AC-09/AC-10)', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
     // No `loot` at all: an enemy that drops nothing, i.e. every pre-M9 enemy.
-    EnemyFactory.spawn(sim.world, { x: 6, y: 0, maxHp: 100, hp: 100 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: 6, y: 0, maxHp: 100, hp: 100 }));
     const before = sim.world.entityCount;
 
     sim.step(20);

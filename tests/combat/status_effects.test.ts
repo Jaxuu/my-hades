@@ -93,6 +93,7 @@ import {
   applyStatusEffect,
   createDefaultModifierRegistry,
   createDefaultSystems,
+  DataManager,
   getStatusEffect,
   hasStatusEffect,
   isFrozen,
@@ -110,6 +111,7 @@ import type {
   SystemContext,
   World,
 } from '../../src';
+import { testEnemy } from '../harness/config-fixtures';
 
 const FPS = 60;
 const ENEMY_X = 1.5;
@@ -141,7 +143,7 @@ interface RigOptions {
 function makeRig(options: RigOptions = {}): Rig {
   const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
   const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-  const enemy = EnemyFactory.spawn(sim.world, {
+  const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
     x: ENEMY_X,
     y: 0,
     facingRadians: 0,
@@ -152,7 +154,7 @@ function makeRig(options: RigOptions = {}): Rig {
       ? {}
       : { hurtboxRadius: options.enemyHurtboxRadius }),
     ...(options.enemyMaxHp === undefined ? {} : { maxHp: options.enemyMaxHp }),
-  });
+  }));
   addModifier(sim.world, player, DIONYSUS_BLIGHT_MODIFIER);
   if (options.alsoZeus ?? false) addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
   return { sim, player, enemy };
@@ -389,7 +391,7 @@ describe('G1 · Dionysus Blight poisons the victim on a landed hit (AC-02)', () 
   it('does not poison when the ATTACKER lacks the boon', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 }));
     addModifier(sim.world, enemy, DIONYSUS_BLIGHT_MODIFIER); // the VICTIM holds it
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -589,7 +591,7 @@ describe('G5 · the DoT applies damage and NOTHING else (AC-03)', () => {
     const tap = new HitEventTap(events);
     const sim = makeTapSim(events, tap);
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 }));
     addModifier(sim.world, player, DIONYSUS_BLIGHT_MODIFIER);
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -629,7 +631,7 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
     expect(registry.get('no_such_boon')).toBeUndefined();
 
     // A duplicate registration is a wiring bug, so it fails loudly.
-    expect(() => registry.register(new ZeusStrikeModifier())).toThrow(/already registered/);
+    expect(() => registry.register(new ZeusStrikeModifier(DataManager.getModifierConfig(ZEUS_STRIKE_MODIFIER)))).toThrow(/already registered/);
 
     // Two registries are independent instances (never shared between simulators).
     expect(createDefaultModifierRegistry()).not.toBe(registry);
@@ -638,7 +640,7 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
   it('calls the registered handler with the event and a context carrying the world', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 }));
     addModifier(sim.world, player, 'test_boon');
 
     const handler = new RecordingHandler('test_boon');
@@ -669,7 +671,7 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
   it('keeps the ANTI-RECURSION gate FIRST: a tagged event never reaches a handler', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 }));
     addModifier(sim.world, player, 'test_boon'); // the holder DOES own the boon
 
     const handler = new RecordingHandler('test_boon');
@@ -708,7 +710,7 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
   it('skips an unregistered modifier id silently, and is a strict no-op on an empty queue', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: 5 }));
     addModifier(sim.world, player, 'boon_from_a_future_build');
 
     const events = new EventQueue();
@@ -800,13 +802,13 @@ describe('G7 · canonical 17-segment pipeline and deterministic replay (AC-08/09
         facingRadians: 0,
         maxSpeed: 5,
       });
-      EnemyFactory.spawn(sim.world, {
+      EnemyFactory.spawn(sim.world, ...testEnemy({
         x: ENEMY_X,
         y: 0,
         facingRadians: 0,
         maxSpeed: 5,
         hurtboxRadius: 30,
-      });
+      }));
       addModifier(sim.world, player, DIONYSUS_BLIGHT_MODIFIER);
       addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
       addModifier(sim.world, player, 'athena_dash');

@@ -47,17 +47,9 @@ import {
   DASH_KEY,
   DEFAULT_ARMOR,
   DEFAULT_ATTACK_DAMAGE,
-  DEFAULT_ELITE_ARMOR,
-  DEFAULT_ELITE_HURTBOX_RADIUS,
-  DEFAULT_ELITE_MAX_HP,
   DEFAULT_HITSTOP_TICKS,
   DEFAULT_KNOCKBACK_FORCE,
   DEFAULT_MAX_HP,
-  DEFAULT_POSEIDON_DASH_DAMAGE,
-  DEFAULT_POSEIDON_DASH_HITSTOP_TICKS,
-  DEFAULT_POSEIDON_DASH_KNOCKBACK,
-  DEFAULT_POSEIDON_DASH_LIFESPAN_TICKS,
-  DEFAULT_POSEIDON_DASH_RADIUS,
   EnemyFactory,
   EventQueue,
   Faction,
@@ -79,11 +71,33 @@ import {
   vec2,
 } from '../../src';
 import type { DashEvent, EntityDeathEvent, EntityId, System } from '../../src';
+import { SchemaError } from '../../src';
+import { testEnemy, testElite } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
 /** Per-tick integration accumulates float rounding; measured drift is ~1e-15. */
 const TOLERANCE = 1e-9;
+
+/*
+ * M10-T01 · the balance numbers this suite pins.
+ *
+ * These used to be exported by `EnemyFactory` (`DEFAULT_ELITE_*`) and
+ * `ModifierComponent` (`DEFAULT_POSEIDON_DASH_*`). They now live in
+ * `assets/data/enemies.json` / `assets/data/modifiers.json`, and are restated here
+ * as LITERALS on purpose: an assertion of the form "the field equals the constant
+ * that built it" is tautological, so a re-tuned JSON would silently redefine what
+ * every expectation below means. Spelling the numbers out is what makes this file
+ * fail when the data moves.
+ */
+const DEFAULT_ELITE_MAX_HP = 300;
+const DEFAULT_ELITE_ARMOR = 60;
+const DEFAULT_ELITE_HURTBOX_RADIUS = 0.8;
+const DEFAULT_POSEIDON_DASH_RADIUS = 3;
+const DEFAULT_POSEIDON_DASH_DAMAGE = 5;
+const DEFAULT_POSEIDON_DASH_KNOCKBACK = 40;
+const DEFAULT_POSEIDON_DASH_HITSTOP_TICKS = 0;
+const DEFAULT_POSEIDON_DASH_LIFESPAN_TICKS = 2;
 
 /** Elite spawn X: 0.75 < 2.55 reach, so the base swing lands on the tick it is thrown. */
 const ELITE_X = 1.5;
@@ -178,7 +192,7 @@ function makeEliteRig(options: { armor: number }): EliteRig {
     facingRadians: 0,
     maxSpeed: MAX_SPEED,
   });
-  const elite = EnemyFactory.spawnElite(sim.world, {
+  const elite = EnemyFactory.spawnElite(sim.world, ...testElite({
     x: ELITE_X,
     y: 0,
     facingRadians: 0,
@@ -191,7 +205,7 @@ function makeEliteRig(options: { armor: number }): EliteRig {
       windupTicks: 30,
       cooldownTicks: 60,
     },
-  });
+  }));
   return { sim, player, elite };
 }
 
@@ -352,12 +366,12 @@ describe('G1 · super armor absorbs a non-breaking hit and keeps the plan (AC-01
   it('is a bit-identical no-op for an enemy with no armour component', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: ELITE_X,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
     expect(sim.world.hasComponent(enemy, ArmorComponent)).toBe(false);
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -452,12 +466,12 @@ describe('G3 · Poseidon Dash detonates a self-centred shockwave on dash entry (
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
     });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 2,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
     addModifier(sim.world, player, POSEIDON_DASH_MODIFIER);
     return { sim, player, enemy };
   }
@@ -537,12 +551,12 @@ describe('G3 · Poseidon Dash detonates a self-centred shockwave on dash entry (
     // Control: the SAME script with no boon injects nothing at all.
     const plain = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(plain.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(plain.world, {
+    const enemy = EnemyFactory.spawn(plain.world, ...testEnemy({
       x: 2,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
     const before = plain.world.entityCount;
     plain.inject({ kind: 'keyDown', tick: 0, key: DASH_KEY });
     plain.step(5);
@@ -559,12 +573,12 @@ describe('G3 · Poseidon Dash detonates a self-centred shockwave on dash entry (
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
     });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: ELITE_X,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
     addModifier(sim.world, player, POSEIDON_DASH_MODIFIER);
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -741,7 +755,7 @@ describe('G5 · pipeline unchanged, zero regression, elite assembly (AC-05 / AC-
 
   it('assembles an elite with standing armour, a bigger body and a bigger pool', () => {
     const sim = new GameSimulator();
-    const elite = EnemyFactory.spawnElite(sim.world, { x: 0, y: 0 });
+    const elite = EnemyFactory.spawnElite(sim.world, ...testElite({ x: 0, y: 0 }));
 
     const armor = armorOf(sim, elite);
     expect(armor.current).toBe(DEFAULT_ELITE_ARMOR);
@@ -751,31 +765,35 @@ describe('G5 · pipeline unchanged, zero regression, elite assembly (AC-05 / AC-
     expect(isArmored(sim.world, elite)).toBe(true);
 
     // Every elite default is overridable, and a plain enemy stays un-armoured.
-    const light = EnemyFactory.spawnElite(sim.world, {
+    const light = EnemyFactory.spawnElite(sim.world, ...testElite({
       x: 0,
       y: 0,
       armor: 12,
       maxHp: 40,
       hurtboxRadius: 0.5,
-    });
+    }));
     expect(armorOf(sim, light).current).toBe(12);
     expect(hpOf(sim, light)).toBe(40);
     expect(hurtboxOf(sim, light).radius).toBe(0.5);
 
-    expect(sim.world.hasComponent(EnemyFactory.spawn(sim.world, { x: 0, y: 0 }), ArmorComponent)).toBe(
+    expect(sim.world.hasComponent(EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0 })), ArmorComponent)).toBe(
       false,
     );
   });
 
   it('rejects a non-positive armour instead of shipping a silent plain enemy', () => {
+    // M10-T01: the rejection MOVED, and this is the stronger form of it. Before
+    // M10 a bad armour value was caught at the assembly seam (RangeError) — after
+    // the entity had been half-built. It is now caught by the schema when the
+    // config is registered, i.e. before any entity exists at all, so the same
+    // mistake can no longer reach a running simulation.
     const sim = new GameSimulator();
-    expect(() => EnemyFactory.spawnElite(sim.world, { armor: 0 })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawnElite(sim.world, { armor: -1 })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawnElite(sim.world, { armor: Number.NaN })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawnElite(sim.world, { armor: Number.POSITIVE_INFINITY })).toThrow(
-      RangeError,
-    );
-    // The failed assembly must not have leaked an entity into the world.
+    expect(() => testElite({ armor: 0 })).toThrow(SchemaError);
+    expect(() => testElite({ armor: -1 })).toThrow(SchemaError);
+    expect(() => testElite({ armor: Number.NaN })).toThrow(SchemaError);
+    expect(() => testElite({ armor: Number.POSITIVE_INFINITY })).toThrow(SchemaError);
+
+    // Nothing was assembled at all — there is not even a half-built entity to leak.
     expect(sim.world.entityCount).toBe(0);
   });
 });

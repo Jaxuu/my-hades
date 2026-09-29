@@ -183,19 +183,56 @@ export interface CombatantSpawnOptions {
 }
 
 /**
- * The spec an encounter wave hands to `EnemyFactory.spawn` (spec 08 §3.2).
+ * Where an enemy is put and what it hunts — the per-INSTANCE half of an enemy
+ * spec (M10-T01).
  *
- * Declared HERE (rather than next to `EnemyFactory`) because it is the shared
- * assembly vocabulary: `EncounterStateComponent` must be able to describe a wave's
- * roster without the components layer depending on the prefabs layer. `EnemyFactory`
- * re-exports it, so `import { EnemySpawnOptions } from './EnemyFactory'` keeps
- * working — it is the same declaration, not a copy.
+ * Everything here is a fact about THIS entity rather than about its TYPE, which
+ * is why none of it lives in `assets/data/enemies.json`:
  *
- * Structurally identical to {@link CombatantSpawnOptions} today. Kept as its own
- * name because a wave's roster is an ENEMY roster: the day enemies gain a field the
- * player must not have, the narrowing belongs here and no call site changes.
+ *  - `x` / `y` / `facingRadians` are placement — two enemies of the same type
+ *    stand in different places;
+ *  - `targetEntityId` is an `EntityId`, and ids are neither stable across a
+ *    restart nor expressible in JSON at all.
+ *
+ * The per-TYPE half — health, speed, body size, armour, AI tuning, hazard
+ * tuning, loot — is a `EnemyConfig` in the data table, resolved by `EnemyFactory`
+ * through `DataManager`. Splitting the two is what lets the same enemy type be
+ * placed twenty times without repeating a single balance number.
  */
-export type EnemySpawnOptions = CombatantSpawnOptions;
+export interface EnemyPlacement {
+  readonly x?: number;
+  readonly y?: number;
+  readonly facingRadians?: number;
+  /**
+   * Explicit AI target. Omit (or pass `null`) to let the FSM auto-acquire the
+   * nearest hostile at run time — which is the only option that survives a
+   * restart, since the player's id changes.
+   *
+   * Ignored when the enemy's config declares no `ai`: a script-driven enemy has
+   * no controller to hand a target to.
+   */
+  readonly targetEntityId?: EntityId | null;
+}
+
+/**
+ * The spec an encounter wave hands to `EnemyFactory.spawn` (spec 08 §3.2,
+ * reshaped by M10-T01).
+ *
+ * A wave roster is a list of these: which TYPE to spawn, and where. Declared
+ * HERE (rather than next to `EnemyFactory`) because it is the shared assembly
+ * vocabulary — `EncounterStateComponent` must be able to describe a wave's
+ * roster without the components layer depending on the prefabs layer.
+ *
+ * `EnemySpawnOptions` is kept as an alias so the name every spec and doc already
+ * uses keeps resolving to the same declaration (not a copy — they cannot drift).
+ */
+export interface EnemySpawnSpec extends EnemyPlacement {
+  /** Id of the enemy TYPE to assemble, as keyed in `assets/data/enemies.json`. */
+  readonly enemyId: string;
+}
+
+/** Legacy name for {@link EnemySpawnSpec}; same declaration, not a copy. */
+export type EnemySpawnOptions = EnemySpawnSpec;
 
 /** Optional AI tuning overrides; every field defaults to its `AIControllerComponent` default. */
 export interface AITuningOptions {

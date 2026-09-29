@@ -1,0 +1,49 @@
+{
+  "grunt": {
+    "maxHp": 100,
+    "maxSpeed": 5,
+    "hurtboxRadius": 0.5
+  },
+  "elite": {
+    "maxHp": 100,
+    "maxSpeed": 5,
+    "hurtboxRadius": 0.5,
+    "elite": {
+      "maxHp": 300,
+      "hurtboxRadius": 0.8,
+      "armor": 60
+    }
+  },
+  "raider": {
+    "maxHp": 40,
+    "maxSpeed": 5,
+    "hurtboxRadius": 0.5,
+    "ai": {
+      "sightRadius": 14,
+      "attackRadius": 1.6,
+      "windupTicks": 36,
+      "cooldownTicks": 60
+    },
+    "loot": [{ "kind": "gold", "amount": 5 }]
+  },
+  "bomber": {
+    "maxHp": 40,
+    "maxSpeed": 5,
+    "hurtboxRadius": 0.5,
+    "ai": {
+      "sightRadius": 14,
+      "attackRadius": 1.6,
+      "windupTicks": 36,
+      "cooldownTicks": 60
+    },
+    "hazard": {
+      "radius": 2.5,
+      "damage": 25,
+      "delayTicks": 30
+    },
+    "loot": [
+      { "kind": "gold", "amount": 10 },
+      { "kind": "heal", "amount": 15 }
+    ]
+  }
+}

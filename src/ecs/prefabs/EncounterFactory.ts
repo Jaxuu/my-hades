@@ -84,9 +84,12 @@ function resolveRoomWaves(
     }
 
     // Dry-run assembly: no side effect on the caller's world, full validation.
+    // M10-T01: an entry names an enemy TYPE plus its placement, and the factory
+    // resolves the numbers — so a wave referencing an unknown type, or a type whose
+    // config is malformed, fails HERE, at load time, rather than inside `step()`.
     const scratch = new World();
     for (const enemy of wave.enemies) {
-      EnemyFactory.spawn(scratch, enemy);
+      EnemyFactory.spawn(scratch, enemy.enemyId, enemy);
     }
   }
 

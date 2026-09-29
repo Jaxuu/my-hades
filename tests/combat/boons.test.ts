@@ -47,9 +47,6 @@ import {
   DEFAULT_HITSTUN_TICKS,
   DEFAULT_KNOCKBACK_FORCE,
   DEFAULT_MAX_HP,
-  DEFAULT_ZEUS_STRIKE_DAMAGE,
-  DEFAULT_ZEUS_STRIKE_LIFESPAN_TICKS,
-  DEFAULT_ZEUS_STRIKE_RADIUS,
   DashSystem,
   EnemyFactory,
   EventQueue,
@@ -80,10 +77,23 @@ import {
   vec2,
 } from '../../src';
 import type { EntityId, HitEvent, Snapshot, System, SystemContext } from '../../src';
+import { testEnemy } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
 const TOLERANCE = 1e-9;
+
+/*
+ * M10-T01 · the Zeus bolt's numbers, pinned as LITERALS.
+ *
+ * They moved from `ModifierComponent` to `assets/data/modifiers.json`; restating
+ * them here is what makes this suite fail when the data is re-tuned, instead of
+ * silently agreeing with whatever the config happens to say (the tautological-
+ * assertion trap).
+ */
+const DEFAULT_ZEUS_STRIKE_DAMAGE = 20;
+const DEFAULT_ZEUS_STRIKE_RADIUS = 1;
+const DEFAULT_ZEUS_STRIKE_LIFESPAN_TICKS = 2;
 
 /** Enemy spawn X used by every rig: 0.75 < 1.5 reach, so the base hit lands on tick 0. */
 const ENEMY_X = 1.5;
@@ -104,12 +114,12 @@ interface Rig {
 function makeRig(options: { boon?: boolean; enemyX?: number } = {}): Rig {
   const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
   const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-  const enemy = EnemyFactory.spawn(sim.world, {
+  const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
     x: options.enemyX ?? ENEMY_X,
     y: 0,
     facingRadians: 0,
     maxSpeed: MAX_SPEED,
-  });
+  }));
   if (options.boon ?? true) addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
   return { sim, player, enemy };
 }
@@ -256,7 +266,7 @@ describe('G1 · CollisionSystem publishes a HitEvent for every landed hit (AC-01
     const spy = new EventSpy(events);
     const sim = makeSpySim(events, spy);
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1); // tick 0 — the base hit lands
@@ -288,7 +298,7 @@ describe('G1 · CollisionSystem publishes a HitEvent for every landed hit (AC-01
     const spy = new EventSpy(events);
     const sim = makeSpySim(events, spy);
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     addTag(sim.world, enemy, INVULNERABLE_TAG);
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -308,7 +318,7 @@ describe('G1 · CollisionSystem publishes a HitEvent for every landed hit (AC-01
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
     });
-    EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -412,7 +422,7 @@ describe('G2 · Zeus Strike injects a directionless lightning hitbox (AC-03)', (
   it('does not fire when the ATTACKER lacks the boon, but the victim has it', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     addModifier(sim.world, enemy, ZEUS_STRIKE_MODIFIER); // the VICTIM holds it
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -448,7 +458,7 @@ describe('G3 · a modifier-sourced hit never re-enters modifier dispatch (AC-04)
   it('drops a modifier-sourced event at the gate, and injects for the same event untagged', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
 
     const events = new EventQueue();
@@ -490,7 +500,7 @@ describe('G3 · a modifier-sourced hit never re-enters modifier dispatch (AC-04)
   it('ignores an event whose attacker does not hold the boon', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
     const events = new EventQueue();
     const modifiers = new ModifierSystem(events);
@@ -513,7 +523,7 @@ describe('G3 · a modifier-sourced hit never re-enters modifier dispatch (AC-04)
   it('is a strict no-op on an empty queue (the C9 zero-side-effect guarantee)', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
     const modifiers = new ModifierSystem(new EventQueue());
     const snapshotBefore = sim.snapshot();
@@ -543,7 +553,7 @@ describe('G4 · without the boon there is exactly ONE settlement (AC-03 / C9)', 
     const run = (holder: 'none' | 'enemy'): number[] => {
       const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-      const enemy = EnemyFactory.spawn(sim.world, { x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+      const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: ENEMY_X, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
       if (holder === 'enemy') addModifier(sim.world, enemy, ZEUS_STRIKE_MODIFIER);
 
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
@@ -788,12 +798,12 @@ describe('G8 · deterministic replay of the injection path (AC-06)', () => {
         facingRadians: 0,
         maxSpeed: MAX_SPEED,
       });
-      const enemy = EnemyFactory.spawn(sim.world, {
+      const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
         x: ENEMY_X,
         y: 0,
         facingRadians: 0,
         maxSpeed: MAX_SPEED,
-      });
+      }));
       addModifier(sim.world, player, ZEUS_STRIKE_MODIFIER);
       addModifier(sim.world, enemy, 'athena_dash');
 

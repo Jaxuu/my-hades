@@ -80,6 +80,8 @@ import type {
   SystemContext,
   World,
 } from '../../src';
+import { SchemaError } from '../../src';
+import { testEnemy, testEnemyRef } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
@@ -250,10 +252,10 @@ describe('G0 · hazard assembly and contract (AC-01/AC-02)', () => {
 
   it('the `hazard` spawn option is a capability switch, not a new default', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
-    const plain = EnemyFactory.spawn(sim.world, {});
-    const caster = EnemyFactory.spawn(sim.world, {
+    const plain = EnemyFactory.spawn(sim.world, ...testEnemy({}));
+    const caster = EnemyFactory.spawn(sim.world, ...testEnemy({
       hazard: { radius: 4, damage: 30, delayTicks: 45 },
-    });
+    }));
 
     // Omit it and the component set is untouched (spec 14 AC-11 zero regression).
     expect(sim.world.getComponent(plain, HazardCasterComponent)).toBeUndefined();
@@ -264,9 +266,11 @@ describe('G0 · hazard assembly and contract (AC-01/AC-02)', () => {
     expect(tuning?.damage).toBe(30);
     expect(tuning?.delayTicks).toBe(45);
 
-    // Validation happens at the assembly seam, like every other opt-in capability.
-    expect(() => EnemyFactory.spawn(sim.world, { hazard: { radius: -1 } })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawn(sim.world, { hazard: { delayTicks: 2.5 } })).toThrow(RangeError);
+    // Validation happens when the config is registered (M10-T01) — one phase
+    // earlier than the pre-M10 assembly-seam check, and therefore strictly safer:
+    // a malformed hazard can no longer exist as a live entity at all.
+    expect(() => testEnemy({ hazard: { radius: -1 } })).toThrow(SchemaError);
+    expect(() => testEnemy({ hazard: { delayTicks: 2.5 } })).toThrow(SchemaError);
     expect(sim.world.entityCount).toBe(2);
   });
 
@@ -346,7 +350,7 @@ describe('G1 · the delayed blast resolves on exactly the delayTicks-th tick (AC
     // situation a delayed AoE exists to punish.
     const { sim, spy } = makeObservableSim();
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const author = EnemyFactory.spawn(sim.world, { x: 20, y: 20, maxHp: 10, hp: 10 });
+    const author = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 20, y: 20, maxHp: 10, hp: 10 }));
     const hazardId = spawnHazard(sim.world, {
       x: 0,
       y: 0,
@@ -407,7 +411,7 @@ describe('G1 · the delayed blast resolves on exactly the delayTicks-th tick (AC
 describe('G2 · a corpse or a frozen entity is left holding no bomb (AC-04)', () => {
   it('a corpse cannot plant, and its hand-written pulse is neither executed nor cleared', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
-    const corpse = EnemyFactory.spawn(sim.world, { x: 5, y: 5, hazard: {} });
+    const corpse = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, hazard: {} }));
     markDead(sim.world, corpse);
 
     intentOf(sim, corpse).wantsToHazard = true;
@@ -424,7 +428,7 @@ describe('G2 · a corpse or a frozen entity is left holding no bomb (AC-04)', ()
 
   it('freeze clears the pulse, so no bomb appears when the hitstop lapses', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 5, y: 5, hazard: {} });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, hazard: {} }));
     applyFreeze(sim.world, enemy, 5);
     intentOf(sim, enemy).wantsToHazard = true;
 
@@ -440,7 +444,7 @@ describe('G2 · a corpse or a frozen entity is left holding no bomb (AC-04)', ()
   it('a non-planter consumes and DROPS the pulse — it is never buffered', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     // No `hazard` option => no HazardCasterComponent: this entity can never plant.
-    const plain = EnemyFactory.spawn(sim.world, { x: 5, y: 5 });
+    const plain = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5 }));
     intentOf(sim, plain).wantsToHazard = true;
 
     sim.step(1);
@@ -452,7 +456,7 @@ describe('G2 · a corpse or a frozen entity is left holding no bomb (AC-04)', ()
 
   it('death neutralises the pulse on the corpse itself', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 5, y: 5, maxHp: 10, hp: 10, hazard: {} });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, maxHp: 10, hp: 10, hazard: {} }));
     applyDamage(sim.world, enemy, 999);
 
     sim.step(1); // tick 0 — dies; DeathSystem neutralises its intent
@@ -466,8 +470,8 @@ describe('G2 · a corpse or a frozen entity is left holding no bomb (AC-04)', ()
  * G3 · RUN_FAILED                                                            *
  * ========================================================================== */
 const TWO_WAVES: readonly EncounterWaveConfig[] = [
-  { delayTicks: 0, enemies: [{ x: 5, y: 0, maxHp: 100, hp: 100 }] },
-  { delayTicks: 10, enemies: [{ x: 6, y: 0, maxHp: 100, hp: 100 }] },
+  { delayTicks: 0, enemies: [testEnemyRef({ x: 5, y: 0, maxHp: 100, hp: 100 })] },
+  { delayTicks: 10, enemies: [testEnemyRef({ x: 6, y: 0, maxHp: 100, hp: 100 })] },
 ];
 
 interface RunRig {
@@ -593,7 +597,7 @@ describe('G3 · a failed run does not advance the room (AC-06)', () => {
  * G4 · restartRun                                                            *
  * ========================================================================== */
 const RUN_WAVES: readonly EncounterWaveConfig[] = [
-  { delayTicks: 0, enemies: [{ x: 5, y: 0, maxHp: 100, hp: 100 }] },
+  { delayTicks: 0, enemies: [testEnemyRef({ x: 5, y: 0, maxHp: 100, hp: 100 })] },
 ];
 
 /**
@@ -801,13 +805,13 @@ describe('G5 · pipeline slot and zero regression (AC-10/AC-11)', () => {
   it('an AI hazard caster plants at its target feet on the tick its windup ends', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 1,
       y: 0,
       maxSpeed: MAX_SPEED,
       ai: { sightRadius: 10, attackRadius: 3, windupTicks: 5, cooldownTicks: 20 },
       hazard: { radius: 2, damage: 25, delayTicks: 10 },
-    });
+    }));
 
     sim.step(1); // tick 0 — the target is already in attack range => WINDUP, no pulse
     expect(aiOf(sim, enemy).state).toBe(AIState.WINDUP);

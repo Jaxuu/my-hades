@@ -42,6 +42,7 @@ import { HealthComponent, applyDamage } from '../../src/ecs/components/HealthCom
 import { applyFreeze } from '../../src/ecs/components/FreezeComponent';
 import { ATTACK_KEY } from '../../src/ecs/components/PlayerInputComponent';
 import { GameRenderer } from '../../client/GameRenderer';
+import { testEnemy } from '../harness/config-fixtures';
 
 /* ------------------------------------------------------------------ *
  * Independent fixtures (NOT shared with the engineering suite).       *
@@ -105,7 +106,7 @@ describe('QA-INDEP · V1 snapshot precedes movement (semantic)', () => {
   it('prevX is the PRE-movement position even though the real MovementSystem ran', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     // 60 world-units/s * (1/60 s) === exactly 1 world unit per tick (60*(1/60)===1).
-    const id = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: 60 });
+    const id = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxSpeed: 60 }));
     const intent = must(sim.world.getComponent(id, IntentComponent), 'IntentComponent');
     must(sim.world.getComponent(id, VelocityComponent), 'VelocityComponent');
     intent.moveVector = vec2(1, 0);
@@ -138,8 +139,8 @@ describe('QA-INDEP · V3 renderer never writes back to the logic world', () => {
   it('world snapshots are bit-identical across a burst that hits every FX path', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     const playerId = PlayerFactory.spawn(sim.world, { x: 0, y: 0 });
-    const doomedId = EnemyFactory.spawn(sim.world, { x: 3, y: 0, hp: 20, maxHp: 20 });
-    const recycledId = EnemyFactory.spawn(sim.world, { x: -3, y: 0, hp: 20, maxHp: 20 });
+    const doomedId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0, hp: 20, maxHp: 20 }));
+    const recycledId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: -3, y: 0, hp: 20, maxHp: 20 }));
     sim.step(2);
 
     const renderer = new GameRenderer(makeApp(20));
@@ -235,7 +236,7 @@ describe('QA-INDEP · V4 alpha boundaries and robustness', () => {
 describe('QA-INDEP · V5 damage floaters', () => {
   it('a 100 -> 90 drop spawns exactly one Text whose .text is "-10"', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const id = EnemyFactory.spawn(sim.world, { x: 3, y: 0, hp: 100, maxHp: 100 });
+    const id = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0, hp: 100, maxHp: 100 }));
     sim.step(1);
 
     const app = makeApp(20);
@@ -254,7 +255,7 @@ describe('QA-INDEP · V5 damage floaters', () => {
 
   it('HP RISING (heal) spawns NO floater', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const id = EnemyFactory.spawn(sim.world, { x: 0, y: 0, hp: 50, maxHp: 100 });
+    const id = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, hp: 50, maxHp: 100 }));
     sim.step(1);
 
     const app = makeApp(20);
@@ -271,7 +272,7 @@ describe('QA-INDEP · V5 damage floaters', () => {
 
   it('a low-HP entity spawning does NOT emit a first-frame phantom floater', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    EnemyFactory.spawn(sim.world, { x: 0, y: 0, hp: 30, maxHp: 100 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, hp: 30, maxHp: 100 }));
     sim.step(1);
 
     const app = makeApp(20);
@@ -289,7 +290,7 @@ describe('QA-INDEP · V5 damage floaters', () => {
 
   it('the floater is destroyed after 1000ms and fxLayer does not leak', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const id = EnemyFactory.spawn(sim.world, { x: 0, y: 0, hp: 100, maxHp: 100 });
+    const id = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, hp: 100, maxHp: 100 }));
     sim.step(1);
 
     const app = makeApp(20);
@@ -313,7 +314,7 @@ describe('QA-INDEP · V5 damage floaters', () => {
 
   it('two separate hits yield two independently-timed floaters', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
-    const id = EnemyFactory.spawn(sim.world, { x: 0, y: 0, hp: 100, maxHp: 100 });
+    const id = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, hp: 100, maxHp: 100 }));
     sim.step(1);
 
     const app = makeApp(20);
@@ -387,7 +388,7 @@ describe('QA-INDEP · V6 hit flash (freeze + HITSTUN)', () => {
   it('a REAL collision writing HITSTUN tints the victim (previously uncovered branch)', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0 }); // id 0, facing +x
-    const enemyId = EnemyFactory.spawn(sim.world, { x: 0.75, y: 0, hp: 100, maxHp: 100 }); // id 1
+    const enemyId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0.75, y: 0, hp: 100, maxHp: 100 })); // id 1
 
     // Rising edge on the attack key -> CombatActionSystem spawns a hitbox at the
     // attacker's facing offset (0.75, 0), which overlaps the enemy's hurtbox.
@@ -412,7 +413,7 @@ describe('QA-INDEP · V6 hit flash (freeze + HITSTUN)', () => {
   it('a hitbox view (no State, no Freeze) is never tinted, even beside a HITSTUN victim', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0 });
-    EnemyFactory.spawn(sim.world, { x: 0.75, y: 0, hp: 100, maxHp: 100 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0.75, y: 0, hp: 100, maxHp: 100 }));
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1);
 
@@ -476,7 +477,7 @@ describe('QA-INDEP · V7 backward compatibility & determinism', () => {
     const script = (): Snapshot[] => {
       const sim = new GameSimulator({ systems: createDefaultSystems() });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0 });
-      EnemyFactory.spawn(sim.world, { x: 3, y: 0 });
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0 }));
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
       sim.inject({ kind: 'move', tick: 5, vector: vec2(1, 0) });
       const out: Snapshot[] = [];

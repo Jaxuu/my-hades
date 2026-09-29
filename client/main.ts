@@ -48,9 +48,9 @@ import { createDefaultSystems } from '../src/ecs/systems/pipeline';
 import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
 import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
+import { bootstrapData } from '../src/data/index';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
-import { PickupKind } from '../src/ecs/components/PickupComponent';
 import {
   EncounterStateComponent,
   findRewardDraft,
@@ -70,20 +70,17 @@ import { UIManager } from './UIManager';
 const SEED = 0x12345678;
 
 const PLAYER_MAX_HP = 100;
-const ENEMY_MAX_HP = 40;
 
-/** Windup / cooldown shared by every demo enemy, in ticks. */
-const ENEMY_WINDUP_TICKS = 36;
-const ENEMY_COOLDOWN_TICKS = 60;
-
-/** What a regular demo enemy leaves behind (M9-T01): a small purse, always. */
-const ENEMY_LOOT = [{ kind: PickupKind.GOLD, amount: 5 }] as const;
-
-/** What the bomber leaves behind: a purse plus a flask, so both pickup kinds appear. */
-const BOMBER_LOOT = [
-  { kind: PickupKind.GOLD, amount: 10 },
-  { kind: PickupKind.HEAL, amount: 15 },
-] as const;
+/**
+ * The two demo enemy TYPES (M10-T01).
+ *
+ * Their health, speed, body size, AI tuning, hazard tuning and loot all live in
+ * `assets/data/enemies.json`. This file only says WHICH type to place and WHERE, so
+ * re-tuning the demo fight is a data edit rather than a code change — and there is
+ * no second copy of "40 HP" to drift out of step with the config.
+ */
+const RAIDER = 'raider';
+const BOMBER = 'bomber';
 
 function mountCanvas(app: Application): void {
   const mount = document.getElementById('app');
@@ -92,20 +89,33 @@ function mountCanvas(app: Application): void {
   }
 }
 
-function main(): void {
+/**
+ * Boot the data layer, then the presentation layer (M10-T01, spec 16 AC-03).
+ *
+ * `await bootstrapData()` is the FIRST thing that happens, and it is deliberately
+ * awaited BEFORE `new Application()` and before any `GameSimulator` exists: the
+ * engine's config table must be filled and validated while the process is still
+ * allowed to fail, because `step()` is a synchronous loop that can neither await
+ * nor recover. A malformed `assets/data/*.json` therefore aborts the boot with a
+ * `SchemaError` naming the exact field, instead of producing a run whose enemies
+ * have `NaN` health.
+ */
+async function main(): Promise<void> {
+  await bootstrapData();
+
   const app = new Application();
 
   // v8: async init; the canvas is `app.canvas` (NOT `app.view`).
-  void app
-    .init({
-      background: 0x14161c,
-      resizeTo: window,
-      antialias: true,
-    })
-    .then(() => {
-      start(app);
-    });
+  await app.init({
+    background: 0x14161c,
+    resizeTo: window,
+    antialias: true,
+  });
+
+  start(app);
 }
+
+void main();
 
 /**
  * Assemble ONE run: the player, the rooms and the run's state singleton.
@@ -133,19 +143,7 @@ function buildRun(world: World): void {
     maxHp: PLAYER_MAX_HP,
   });
 
-  const enemy = (x: number, y: number) => ({
-    x,
-    y,
-    hp: ENEMY_MAX_HP,
-    maxHp: ENEMY_MAX_HP,
-    ai: {
-      sightRadius: 14,
-      attackRadius: 1.6,
-      windupTicks: ENEMY_WINDUP_TICKS,
-      cooldownTicks: ENEMY_COOLDOWN_TICKS,
-    },
-    loot: ENEMY_LOOT,
-  });
+  const enemy = (x: number, y: number) => ({ enemyId: RAIDER, x, y });
 
   /**
    * The bomb planter (M8-T01): the same enemy, plus `hazard`. On every windup it
@@ -153,11 +151,7 @@ function buildRun(world: World): void {
    * AoE is what makes standing still a decision rather than a default. It pays out
    * more, and leaves a flask (M9-T01).
    */
-  const bomber = (x: number, y: number) => ({
-    ...enemy(x, y),
-    hazard: { radius: 2.5, damage: 25, delayTicks: 30 },
-    loot: BOMBER_LOOT,
-  });
+  const bomber = (x: number, y: number) => ({ enemyId: BOMBER, x, y });
 
   /**
    * A two-wave opening room, then a two-wave boss room. AI enemies (`ai` and

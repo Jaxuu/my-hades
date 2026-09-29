@@ -226,7 +226,10 @@ export class EncounterSystem implements System {
   ): void {
     const spawned: EntityId[] = [];
     for (const enemy of buildWaveRoster(enemies, encounter.depth)) {
-      spawned.push(EnemyFactory.spawn(world, enemy));
+      // M10-T01: the roster entry carries the TYPE (`enemyId`) and the placement;
+      // the balance numbers are resolved inside the factory from the config table,
+      // so the encounter layer still re-implements no assembly (spec 08 AC-05).
+      spawned.push(EnemyFactory.spawn(world, enemy.enemyId, enemy));
     }
     encounter.trackedEntityIds = spawned;
     encounter.nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED;

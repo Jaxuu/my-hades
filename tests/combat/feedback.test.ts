@@ -71,6 +71,7 @@ import {
   vec2,
 } from '../../src';
 import type { EntityId, Snapshot } from '../../src';
+import { testEnemy } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
@@ -86,12 +87,12 @@ interface Rig {
 function makeRig(options: { enemyMaxSpeed?: number } = {}): Rig {
   const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
   const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-  const enemy = EnemyFactory.spawn(sim.world, {
+  const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
     x: 1.5,
     y: 0,
     facingRadians: 0,
     maxSpeed: options.enemyMaxSpeed ?? MAX_SPEED,
-  });
+  }));
   return { sim, player, enemy };
 }
 
@@ -444,7 +445,7 @@ describe('G2 · hitstun and forced knockback (AC-03)', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
     // Enemy at (0.5, 1.0); hitbox centre (0.75, 0): distance hypot(-0.25, 1) = 1.031 < 1.5.
-    const enemy = EnemyFactory.spawn(sim.world, { x: 0.5, y: 1.0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0.5, y: 1.0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1); // tick 0
 
@@ -474,7 +475,7 @@ describe('G2 · hitstun and forced knockback (AC-03)', () => {
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
     // Enemy sits EXACTLY on the hitbox centre (0.75, 0): the away-vector degenerates,
     // so the direction must fall back to the hitbox facing (+x, facingRadians = 0).
-    const enemy = EnemyFactory.spawn(sim.world, { x: 0.75, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0.75, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1); // tick 0
 
@@ -493,7 +494,7 @@ describe('G3 · deterministic replay of the feedback path (AC-04)', () => {
     const runScript = (): Snapshot[] => {
       const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-      EnemyFactory.spawn(sim.world, { x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
       sim.inject({ kind: 'keyDown', tick: 20, key: ATTACK_KEY });
@@ -592,7 +593,7 @@ describe('G6 · a pulse that cannot fire is consumed, never buffered (spec §4.2
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
     // Far away so the frozen entity is isolated from any combat.
-    const enemy = EnemyFactory.spawn(sim.world, { x: 50, y: 50, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 50, y: 50, facingRadians: 0, maxSpeed: MAX_SPEED }));
     sim.step(1); // tick 0
 
     applyFreeze(sim.world, enemy, DEFAULT_HITSTOP_TICKS); // arm a freeze as a hit would
@@ -693,7 +694,7 @@ describe('G7 · hitstopTicks / knockbackForce configuration boundaries (spec §3
   it('hitstopTicks = 0 lands the hit but freezes NEITHER side', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
     const hitbox = sim.world.createEntity();
     sim.world.addComponent(hitbox.id, new TransformComponent(0.75, 0, 0));
@@ -721,7 +722,7 @@ describe('G7 · hitstopTicks / knockbackForce configuration boundaries (spec §3
   it('knockbackForce = 0 pins the victim in place, so the persistent overlap must still deal damage only ONCE', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1.5, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED }));
 
     const hitbox = sim.world.createEntity();
     sim.world.addComponent(hitbox.id, new TransformComponent(0.75, 0, 0));

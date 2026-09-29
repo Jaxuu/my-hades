@@ -55,6 +55,8 @@ import {
   vec2,
 } from '../../src';
 import type { EntityId, Snapshot } from '../../src';
+import { SchemaError } from '../../src';
+import { testEnemy } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
@@ -81,12 +83,12 @@ function makeRig(enemyX: number, enemyY: number, enemyFacing: number): Rig {
     facingRadians: 0,
     maxSpeed: MAX_SPEED,
   });
-  const enemy = EnemyFactory.spawn(sim.world, {
+  const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
     x: enemyX,
     y: enemyY,
     facingRadians: enemyFacing,
     maxSpeed: MAX_SPEED,
-  });
+  }));
   return { sim, player, enemy };
 }
 
@@ -186,10 +188,14 @@ describe('G0 · combatant assembly and faction rules (AC-01 support)', () => {
   });
 
   it('rejects combatant configurations that cannot be valid', () => {
+    // M10-T01: these are now SCHEMA rejections, raised when the config is
+    // registered rather than when an entity is assembled. Same discipline — fail
+    // loudly — moved one phase earlier: a bad number can no longer exist at all.
     const sim = new GameSimulator();
-    expect(() => EnemyFactory.spawn(sim.world, { hurtboxRadius: 0 })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawn(sim.world, { maxHp: 0 })).toThrow(RangeError);
-    expect(() => EnemyFactory.spawn(sim.world, { hp: 200, maxHp: 100 })).toThrow(RangeError);
+    expect(() => testEnemy({ hurtboxRadius: 0 })).toThrow(SchemaError);
+    expect(() => testEnemy({ maxHp: 0 })).toThrow(SchemaError);
+    expect(() => testEnemy({ hp: 200, maxHp: 100 })).toThrow(SchemaError);
+    expect(sim.world.entityCount).toBe(0);
   });
 });
 
@@ -351,12 +357,12 @@ describe('G3 · deterministic replay (AC-06)', () => {
     const runScript = (): Snapshot[] => {
       const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-      const enemy = EnemyFactory.spawn(sim.world, {
+      const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
         x: 0,
         y: 1.9,
         facingRadians: ENEMY_FACING_BACK,
         maxSpeed: MAX_SPEED,
-      });
+      }));
 
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
       // Dash entry is gated to IDLE/MOVING (spec 02 §4.1), so a dash pressed while

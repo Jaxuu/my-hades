@@ -27,6 +27,7 @@ import { applyDamage } from '../../src/ecs/components/HealthComponent';
 import { HitboxComponent } from '../../src/ecs/components/HitboxComponent';
 import { ATTACK_KEY } from '../../src/ecs/components/PlayerInputComponent';
 import { GameRenderer, PX_PER_UNIT } from '../../client/GameRenderer';
+import { testEnemy } from '../harness/config-fixtures';
 
 interface FakeTicker {
   deltaMS: number;
@@ -56,7 +57,7 @@ describe('GameRenderer bridge (spec 09)', () => {
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     // id 0 = player, id 1 = enemy (creation order == id order == child order).
     PlayerFactory.spawn(sim.world, { x: 1.5, y: -2, facingRadians: 0.75 });
-    EnemyFactory.spawn(sim.world, { x: -3, y: 4, facingRadians: -1.25 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: -3, y: 4, facingRadians: -1.25 }));
 
     const renderer = new GameRenderer(app);
     renderer.init();
@@ -83,7 +84,7 @@ describe('GameRenderer bridge (spec 09)', () => {
     const { app } = makeApp(20);
     const sim = new GameSimulator({ systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0 });
-    const enemyId = EnemyFactory.spawn(sim.world, { x: 3, y: 0, hp: 10, maxHp: 10 });
+    const enemyId = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 3, y: 0, hp: 10, maxHp: 10 }));
     sim.step(1);
 
     const renderer = new GameRenderer(app);

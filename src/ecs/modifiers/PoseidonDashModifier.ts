@@ -1,12 +1,19 @@
 /**
  * Poseidon Dash — the reference `onDash` handler.
- * See specs/12_armor_and_dash_boons_spec.md §3.5 / §4.4 (AC-04).
+ * See specs/12_armor_and_dash_boons_spec.md §3.5 / §4.4 (AC-04) and
+ * specs/16_data_driven_pipeline_spec.md §4.2 (M10-T01).
  *
  * Where Zeus Strike injects on a landed HIT, this handler injects on a DASH ENTRY:
  * the instant its holder enters `DASHING`, a self-centred shockwave hitbox appears —
  * large radius, high knockback, low damage (AC-04). It is the first boon driven by
  * the action hook rather than the hit hook, and its existence is the proof that the
  * modifier engine reacts to EVENTS, not specifically to hits.
+ *
+ * M10-T01 moved its five numbers into `assets/data/modifiers.json`; the handler now
+ * receives them through its constructor, exactly like `ZeusStrikeModifier`. The
+ * "dash through a crowd" shape (large radius, low damage, high knockback, no
+ * hitstop) is now a property of the DATA rather than of the code, so it can be
+ * re-tuned without touching — or re-reviewing — this file.
  *
  * CENTRED ON THE DASHER, not offset along the facing: "dash through a crowd" should
  * scatter the crowd, not poke the one enemy in front. `event.position` is the
@@ -37,20 +44,21 @@
 
 import type { DashEvent, HitEvent } from '../events';
 import type { IModifierHandler, ModifierContext } from './ModifierRegistry';
+import type { ModifierConfig } from '../../data/schemas';
 import { FactionComponent } from '../components/FactionComponent';
 import { HitboxComponent } from '../components/HitboxComponent';
 import { TransformComponent } from '../components/TransformComponent';
-import {
-  DEFAULT_POSEIDON_DASH_DAMAGE,
-  DEFAULT_POSEIDON_DASH_HITSTOP_TICKS,
-  DEFAULT_POSEIDON_DASH_KNOCKBACK,
-  DEFAULT_POSEIDON_DASH_LIFESPAN_TICKS,
-  DEFAULT_POSEIDON_DASH_RADIUS,
-  POSEIDON_DASH_MODIFIER,
-} from '../components/ModifierComponent';
+import { POSEIDON_DASH_MODIFIER } from '../components/ModifierComponent';
 
 export class PoseidonDashModifier implements IModifierHandler {
   public readonly id = POSEIDON_DASH_MODIFIER;
+
+  /** The shockwave's parameters, read once from the config table. */
+  private readonly config: ModifierConfig;
+
+  public constructor(config: ModifierConfig) {
+    this.config = config;
+  }
 
   /**
    * No on-hit behaviour: this boon is driven entirely by dashes. Present because
@@ -90,13 +98,14 @@ export class PoseidonDashModifier implements IModifierHandler {
     world.addComponent(
       blast.id,
       new HitboxComponent(
-        DEFAULT_POSEIDON_DASH_RADIUS,
-        DEFAULT_POSEIDON_DASH_DAMAGE,
-        DEFAULT_POSEIDON_DASH_LIFESPAN_TICKS,
+        this.config.radius,
+        this.config.damage,
+        // The schema guarantees >= 2 — see ZeusStrikeModifier for the phase rule.
+        this.config.lifespanTicks,
         faction.faction,
         event.entityId,
-        DEFAULT_POSEIDON_DASH_HITSTOP_TICKS,
-        DEFAULT_POSEIDON_DASH_KNOCKBACK,
+        this.config.hitstopTicks,
+        this.config.knockbackForce,
         [], // hitEntities — nothing struck yet
         POSEIDON_DASH_MODIFIER, // anti-recursion provenance
       ),

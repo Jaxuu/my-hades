@@ -69,6 +69,7 @@ import {
   isRewardId,
   vec2,
 } from '../../src';
+import { testEnemyRef } from '../harness/config-fixtures';
 import type { EntityId, Snapshot } from '../../src';
 
 const FPS = 60;
@@ -172,7 +173,7 @@ function makeRewardRoom(
   sim: GameSimulator,
   enemyHp = 10,
 ): { readonly player: EntityId; readonly room: EntityId } {
-  const waves = [{ delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: enemyHp, hp: enemyHp }] }];
+  const waves = [{ delayTicks: 0, enemies: [testEnemyRef({ x: 6, y: 0, maxHp: enemyHp, hp: enemyHp })] }];
   const player = PlayerFactory.spawn(sim.world, { x: -10, y: 0, maxSpeed: 5 });
   const room = EncounterFactory.spawn(sim.world, { waves, rooms: [waves, waves] });
   return { player, room };
@@ -603,25 +604,27 @@ describe('G6 · only an option the room offered can be taken (AC-03)', () => {
  * ========================================================================== */
 describe('G7 · each descent makes the next wave bigger (AC-04)', () => {
   it('buildWaveRoster is pure, additive and offset', () => {
-    const base = [{ x: 6, y: 0 }];
+    // M10-T01: a roster entry is an enemy TYPE id plus placement, so the fixture
+    // names a type explicitly rather than implying "some enemy".
+    const base = [{ enemyId: 'grunt', x: 6, y: 0 }];
     expect(buildWaveRoster(base, 0)).toEqual(base);
     expect(buildWaveRoster(base, -3)).toEqual(base);
 
     const one = buildWaveRoster(base, 1);
     expect(one).toHaveLength(2);
-    expect(at(one, 0)).toEqual({ x: 6, y: 0 }); // the base entry is untouched
-    expect(at(one, 1)).toEqual({ x: 6 + DEPTH_SPAWN_SPACING_UNITS, y: 0 });
+    expect(at(one, 0)).toEqual({ enemyId: 'grunt', x: 6, y: 0 }); // the base entry is untouched
+    expect(at(one, 1)).toEqual({ enemyId: 'grunt', x: 6 + DEPTH_SPAWN_SPACING_UNITS, y: 0 });
 
     const three = buildWaveRoster(
       [
-        { x: 6, y: 0 },
-        { x: 7, y: 1 },
+        { enemyId: 'grunt', x: 6, y: 0 },
+        { enemyId: 'grunt', x: 7, y: 1 },
       ],
       3,
     );
     expect(three).toHaveLength(5); // 2 base + 3 depth
     // The caller's array is never mutated.
-    expect(base).toEqual([{ x: 6, y: 0 }]);
+    expect(base).toEqual([{ enemyId: 'grunt', x: 6, y: 0 }]);
   });
 
   it('two descents grow the wave 1 -> 2 -> 3', () => {

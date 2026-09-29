@@ -81,6 +81,8 @@ import type {
   SystemContext,
   World,
 } from '../../src';
+import { SchemaError } from '../../src';
+import { testEnemy, testEnemyRef } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
@@ -237,7 +239,7 @@ function spawnProbeHitbox(
 describe('G0 · death marker and room config contracts (AC-02/AC-05/AC-06)', () => {
   it('markDead is idempotent and isDead distinguishes dead from destroyed', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxHp: 10, hp: 10 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxHp: 10, hp: 10 }));
 
     expect(isDead(sim.world, enemy)).toBe(false);
 
@@ -257,9 +259,9 @@ describe('G0 · death marker and room config contracts (AC-02/AC-05/AC-06)', () 
 
   it('isWaveCleared: an EMPTY roster is "not spawned yet", never "cleared"', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
-    const alive = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxHp: 10, hp: 10 });
-    const dead = EnemyFactory.spawn(sim.world, { x: 1, y: 0, maxHp: 10, hp: 10 });
-    const destroyed = EnemyFactory.spawn(sim.world, { x: 2, y: 0, maxHp: 10, hp: 10 });
+    const alive = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxHp: 10, hp: 10 }));
+    const dead = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1, y: 0, maxHp: 10, hp: 10 }));
+    const destroyed = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 2, y: 0, maxHp: 10, hp: 10 }));
     markDead(sim.world, dead);
     sim.world.destroyEntity(destroyed);
 
@@ -273,7 +275,7 @@ describe('G0 · death marker and room config contracts (AC-02/AC-05/AC-06)', () 
   it('EncounterFactory.spawn mounts one component and starts IN_PROGRESS, wave 0, unscheduled', () => {
     const sim = new GameSimulator({ fps: FPS, systems: [] });
     const room = EncounterFactory.spawn(sim.world, {
-      waves: [{ delayTicks: 0, enemies: [{ x: 5, y: 0 }] }],
+      waves: [{ delayTicks: 0, enemies: [testEnemyRef({ x: 5, y: 0 })] }],
     });
 
     expect(sim.world.entityCount).toBe(1);
@@ -295,10 +297,10 @@ describe('G0 · death marker and room config contracts (AC-02/AC-05/AC-06)', () 
     const sim = new GameSimulator({ fps: FPS, systems: [] });
 
     expect(() => resolveEncounterConfig({ waves: [] })).toThrow(RangeError);
-    expect(() => resolveEncounterConfig({ waves: [{ delayTicks: -1, enemies: [{}] }] })).toThrow(
+    expect(() => resolveEncounterConfig({ waves: [{ delayTicks: -1, enemies: [testEnemyRef({})] }] })).toThrow(
       RangeError,
     );
-    expect(() => resolveEncounterConfig({ waves: [{ delayTicks: 1.5, enemies: [{}] }] })).toThrow(
+    expect(() => resolveEncounterConfig({ waves: [{ delayTicks: 1.5, enemies: [testEnemyRef({})] }] })).toThrow(
       RangeError,
     );
     // A wave with no enemies would wedge the room forever: an empty tracked roster is
@@ -306,16 +308,21 @@ describe('G0 · death marker and room config contracts (AC-02/AC-05/AC-06)', () 
     expect(() => resolveEncounterConfig({ waves: [{ delayTicks: 0, enemies: [] }] })).toThrow(
       RangeError,
     );
-    // Per-enemy rules are validated by DRY-RUNNING the real assembly, so a bad enemy
-    // spec is caught here rather than aborting a simulation mid-tick (AC-05).
+    // Per-enemy rules are validated by DRY-RUNNING the real assembly, so a wave that
+    // names an enemy TYPE the config table does not know is caught here rather than
+    // aborting a simulation mid-tick (AC-05). A malformed enemy CONFIG never reaches
+    // this point at all: it fails the schema during Bootstrap (spec 16 AC-02), which
+    // is why the pre-M10 `{ maxHp: -1 }` probe now has to be a bad TYPE id.
     expect(() =>
-      resolveEncounterConfig({ waves: [{ delayTicks: 0, enemies: [{ maxHp: -1 }] }] }),
-    ).toThrow(RangeError);
+      resolveEncounterConfig({ waves: [{ delayTicks: 0, enemies: [{ enemyId: 'no_such_enemy' }] }] }),
+    ).toThrow(SchemaError);
 
     // Loading fails BEFORE the room entity is created, so a rejected room is inert.
     expect(() =>
-      EncounterFactory.spawn(sim.world, { waves: [{ delayTicks: 0, enemies: [{ maxHp: -1 }] }] }),
-    ).toThrow(RangeError);
+      EncounterFactory.spawn(sim.world, {
+        waves: [{ delayTicks: 0, enemies: [{ enemyId: 'no_such_enemy' }] }],
+      }),
+    ).toThrow(SchemaError);
     expect(sim.world.entityCount).toBe(0);
   });
 });
@@ -327,14 +334,14 @@ describe('G1 · the death transition happens at the END of the killing tick (AC-
   it('tags the corpse, neutralises its intent and publishes exactly one EntityDeathEvent', () => {
     const { sim, deathEvents } = makeObservableSim();
     PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 1.0,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
       maxHp: DEFAULT_ATTACK_DAMAGE,
       hp: DEFAULT_ATTACK_DAMAGE,
-    });
+    }));
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1); // processed tick 0 — the killing tick
@@ -377,14 +384,14 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
     });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 1.0,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
       maxHp: DEFAULT_ATTACK_DAMAGE,
       hp: DEFAULT_ATTACK_DAMAGE,
-    });
+    }));
 
     sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
     sim.step(1); // tick 0 — the kill
@@ -436,8 +443,8 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
   it('target gate: identical hitboxes, only the DEAD target is skipped', () => {
     const { sim, spy, deathEvents } = makeObservableSim();
     const attacker = PlayerFactory.spawn(sim.world, { x: -5, y: -5, maxSpeed: MAX_SPEED });
-    const corpse = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxHp: 100, hp: 0 });
-    const victim = EnemyFactory.spawn(sim.world, { x: 10, y: 0, maxHp: 100, hp: 100 });
+    const corpse = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxHp: 100, hp: 0 }));
+    const victim = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 10, y: 0, maxHp: 100, hp: 100 }));
     markDead(sim.world, corpse);
 
     const atCorpse = spawnProbeHitbox(sim, { x: 0, y: 0, owner: attacker });
@@ -468,9 +475,9 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
   it('owner gate: a corpse swings for nothing, a live owner still connects', () => {
     const { sim, spy } = makeObservableSim();
     const liveOwner = PlayerFactory.spawn(sim.world, { x: -5, y: -5, maxSpeed: MAX_SPEED });
-    const deadOwner = EnemyFactory.spawn(sim.world, { x: 20, y: 20, maxHp: 10, hp: 0 });
+    const deadOwner = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 20, y: 20, maxHp: 10, hp: 0 }));
     markDead(sim.world, deadOwner);
-    const victim = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxHp: 100, hp: 100 });
+    const victim = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxHp: 100, hp: 100 }));
 
     const fromCorpse = spawnProbeHitbox(sim, { x: 0, y: 0, owner: deadOwner });
     const fromLive = spawnProbeHitbox(sim, { x: 0, y: 0, owner: liveOwner });
@@ -488,12 +495,12 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
   it('same-tick gate: one entity settles at most once per tick, even when it dies mid-tick', () => {
     const { sim, spy, deathEvents } = makeObservableSim();
     const attacker = PlayerFactory.spawn(sim.world, { x: -5, y: -5, maxSpeed: MAX_SPEED });
-    const victim = EnemyFactory.spawn(sim.world, {
+    const victim = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 0,
       y: 0,
       maxHp: DEFAULT_ATTACK_DAMAGE,
       hp: DEFAULT_ATTACK_DAMAGE,
-    });
+    }));
 
     const first = spawnProbeHitbox(sim, { x: 0, y: 0, owner: attacker });
     const second = spawnProbeHitbox(sim, { x: 0, y: 0, owner: attacker });
@@ -520,7 +527,7 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
     // that is exactly why it is worth pinning: every gate in the engine reads
     // `isDead`, so the TAG must be the authority — not a re-derived `hp <= 0` check
     // that would silently stop protecting the moment a heal / revive path lands.
-    const tagged = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxHp: 100, hp: 100 });
+    const tagged = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxHp: 100, hp: 100 }));
     markDead(sim.world, tagged);
 
     const hitbox = spawnProbeHitbox(sim, { x: 0, y: 0, owner: attacker });
@@ -535,12 +542,12 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
   it('movement gate: a corpse does not slide, even with an in-flight knockback and no freeze', () => {
     const { sim } = makeObservableSim();
     const attacker = PlayerFactory.spawn(sim.world, { x: -5, y: -5, maxSpeed: MAX_SPEED });
-    const victim = EnemyFactory.spawn(sim.world, {
+    const victim = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 0,
       y: 0,
       maxHp: DEFAULT_ATTACK_DAMAGE,
       hp: DEFAULT_ATTACK_DAMAGE,
-    });
+    }));
 
     // A PURE-KNOCKBACK swing: `hitstopTicks = 0` means `applyFreeze` is a no-op, so the
     // corpse keeps an armed knockback with NO freeze to accidentally hold it in place.
@@ -571,7 +578,7 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
 
   it('combat-action gate: a corpse holding an attack pulse raises no hitbox', () => {
     const { sim } = makeObservableSim();
-    const corpse = EnemyFactory.spawn(sim.world, { x: 5, y: 5, maxSpeed: MAX_SPEED });
+    const corpse = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, maxSpeed: MAX_SPEED }));
     markDead(sim.world, corpse);
 
     // Adversarial probe: hand the corpse a pulse that no producer would ever write.
@@ -589,7 +596,7 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
 
   it('dash gate: a corpse holding a dash pulse never dashes and never gains i-frames', () => {
     const { sim } = makeObservableSim();
-    const corpse = EnemyFactory.spawn(sim.world, { x: 5, y: 5, maxSpeed: MAX_SPEED });
+    const corpse = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, maxSpeed: MAX_SPEED }));
     markDead(sim.world, corpse);
 
     intentOf(sim, corpse).wantsToDash = true;
@@ -601,7 +608,7 @@ describe('G2 · a corpse is not interactive from the very next tick (AC-01/AC-04
 
   it('status gate: a corpse stops taking damage over time', () => {
     const { sim } = makeObservableSim();
-    const corpse = EnemyFactory.spawn(sim.world, { x: 5, y: 5, maxHp: 100, hp: 100 });
+    const corpse = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 5, maxHp: 100, hp: 100 }));
     applyStatusEffect(sim.world, corpse, POISON_STATUS_SPEC);
     const poisonAtDeath = getStatusEffect(sim.world, corpse, POISON_STATUS_SPEC.id);
     expect(poisonAtDeath?.ticksUntilProc).toBe(POISON_STATUS_SPEC.intervalTicks);
@@ -624,7 +631,7 @@ describe('G3 · a corpse produces no intent, on both intent-generation paths (AC
   it('an AI enemy stops writing intent the moment it dies', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const player = PlayerFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-    const enemy = EnemyFactory.spawn(sim.world, {
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 5,
       y: 0,
       facingRadians: 0,
@@ -636,7 +643,7 @@ describe('G3 · a corpse produces no intent, on both intent-generation paths (AC
         windupTicks: 30,
         cooldownTicks: 60,
       },
-    });
+    }));
 
     sim.step(1); // tick 0 — the "discovery" tick flips IDLE -> CHASING, no vector
     expect(aiOf(sim, enemy).state).toBe(AIState.CHASING);
@@ -706,8 +713,8 @@ describe('G4 · a single-wave room is cleared on the tick its last member dies (
         {
           delayTicks: 0,
           enemies: [
-            { x: 6, y: 0, maxHp: 10, hp: 10 },
-            { x: 7, y: 0, maxHp: 10, hp: 10 },
+            testEnemyRef({ x: 6, y: 0, maxHp: 10, hp: 10 }),
+            testEnemyRef({ x: 7, y: 0, maxHp: 10, hp: 10 }),
           ],
         },
       ],
@@ -761,12 +768,12 @@ describe('G5 · wave 2 spawns exactly delayTicks after the wipe was detected (AC
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     const room = EncounterFactory.spawn(sim.world, {
       waves: [
-        { delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: 10, hp: 10 }] },
+        { delayTicks: 0, enemies: [testEnemyRef({ x: 6, y: 0, maxHp: 10, hp: 10 })] },
         {
           delayTicks: 30,
           enemies: [
-            { x: 7, y: 0, maxHp: 10, hp: 10 },
-            { x: 8, y: 0, maxHp: 10, hp: 10 },
+            testEnemyRef({ x: 7, y: 0, maxHp: 10, hp: 10 }),
+            testEnemyRef({ x: 8, y: 0, maxHp: 10, hp: 10 }),
           ],
         },
       ],
@@ -829,7 +836,7 @@ describe('G5 · wave 2 spawns exactly delayTicks after the wipe was detected (AC
         {
           delayTicks: 0,
           enemies: [
-            { x: 5, y: 0, maxSpeed: MAX_SPEED, ai: { sightRadius: 10, attackRadius: 3 } },
+            testEnemyRef({ x: 5, y: 0, maxSpeed: MAX_SPEED, ai: { sightRadius: 10, attackRadius: 3 } }),
           ],
         },
       ],
@@ -900,11 +907,11 @@ describe('G7 · deterministic replay of a full encounter script (AC-08)', () => 
           {
             delayTicks: 0,
             enemies: [
-              { x: 6, y: 0, maxHp: 10, hp: 10 },
-              { x: 7, y: 1, maxHp: 10, hp: 10 },
+              testEnemyRef({ x: 6, y: 0, maxHp: 10, hp: 10 }),
+              testEnemyRef({ x: 7, y: 1, maxHp: 10, hp: 10 }),
             ],
           },
-          { delayTicks: 5, enemies: [{ x: 8, y: 0, maxHp: 10, hp: 10 }] },
+          { delayTicks: 5, enemies: [testEnemyRef({ x: 8, y: 0, maxHp: 10, hp: 10 })] },
         ],
       });
       PlayerFactory.spawn(sim.world, { x: -10, y: 0, maxSpeed: MAX_SPEED });
@@ -962,9 +969,9 @@ describe('G8 · zero regression and a one-tick death bus (AC-09/AC-10)', () => {
   it('the death bus holds exactly the deaths of the tick just processed', () => {
     const { sim, deathEvents } = makeObservableSim();
     const enemies = [
-      EnemyFactory.spawn(sim.world, { x: 5, y: 0, maxHp: 10, hp: 10 }),
-      EnemyFactory.spawn(sim.world, { x: 6, y: 0, maxHp: 10, hp: 10 }),
-      EnemyFactory.spawn(sim.world, { x: 7, y: 0, maxHp: 10, hp: 10 }),
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 0, maxHp: 10, hp: 10 })),
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 6, y: 0, maxHp: 10, hp: 10 })),
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 7, y: 0, maxHp: 10, hp: 10 })),
     ];
 
     applyDamage(sim.world, at(enemies, 0), 999);

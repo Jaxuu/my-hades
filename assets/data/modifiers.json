@@ -1,0 +1,16 @@
+{
+  "zeus_strike": {
+    "radius": 1,
+    "damage": 20,
+    "lifespanTicks": 2,
+    "hitstopTicks": 0,
+    "knockbackForce": 0
+  },
+  "poseidon_dash": {
+    "radius": 3,
+    "damage": 5,
+    "lifespanTicks": 2,
+    "hitstopTicks": 0,
+    "knockbackForce": 40
+  }
+}

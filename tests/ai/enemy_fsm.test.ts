@@ -62,6 +62,7 @@ import {
   vec2,
 } from '../../src';
 import type { EntityId, Snapshot, System, SystemContext, Vec2, World } from '../../src';
+import { testEnemy } from '../harness/config-fixtures';
 
 const FPS = 60;
 
@@ -104,7 +105,7 @@ function buildRig(systems: readonly System[], options: AirOptions): AIRig {
     facingRadians: options.playerFacingRadians ?? 0,
     maxSpeed: 5,
   });
-  const enemy = EnemyFactory.spawn(sim.world, {
+  const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({
     x: options.enemyX ?? 0,
     y: options.enemyY ?? 0,
     facingRadians: 0,
@@ -116,7 +117,7 @@ function buildRig(systems: readonly System[], options: AirOptions): AIRig {
       windupTicks: options.windupTicks ?? 30,
       cooldownTicks: options.cooldownTicks ?? 60,
     },
-  });
+  }));
   return { sim, player, enemy };
 }
 
@@ -258,8 +259,8 @@ describe('G0 · AIControllerComponent + AI tuning contracts (AC-02 / AC-08)', ()
 
   it('mounts the AI controller only when the caller opts in', () => {
     const sim = new GameSimulator();
-    const scripted = EnemyFactory.spawn(sim.world, { x: 0, y: 0 });
-    const driven = EnemyFactory.spawn(sim.world, { x: 0, y: 0, ai: {} });
+    const scripted = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0 }));
+    const driven = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, ai: {} }));
 
     expect(sim.world.getComponent(scripted, AIControllerComponent)).toBeUndefined();
     const ai = sim.world.getComponent(driven, AIControllerComponent);
@@ -309,7 +310,7 @@ describe('G1 · the AI is the sole author of an AI entity intent (AC-01)', () =>
 
   it('leaves a script-driven enemy intent untouched (AC-08)', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
-    const enemy = EnemyFactory.spawn(sim.world, { x: 0, y: 0, maxSpeed: 5 });
+    const enemy = EnemyFactory.spawn(sim.world, ...testEnemy({ x: 0, y: 0, maxSpeed: 5 }));
     const intent = intentOf(sim, enemy);
 
     intent.moveVector = vec2(1, 0);
@@ -776,7 +777,7 @@ describe('G9 · zero regression for entities without an AI controller (AC-08)', 
     const runScript = (systems: readonly System[]): Snapshot[] => {
       const sim = new GameSimulator({ fps: FPS, systems });
       PlayerFactory.spawn(sim.world, { x: 0, y: 0, facingRadians: 0, maxSpeed: 5 });
-      EnemyFactory.spawn(sim.world, { x: 1.5, y: 0, maxSpeed: 5 });
+      EnemyFactory.spawn(sim.world, ...testEnemy({ x: 1.5, y: 0, maxSpeed: 5 }));
       sim.inject({ kind: 'keyDown', tick: 0, key: ATTACK_KEY });
 
       const snapshots: Snapshot[] = [];
@@ -801,7 +802,7 @@ describe('G9 · zero regression for entities without an AI controller (AC-08)', 
   it('leaves the AI query empty when nobody opted in', () => {
     const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
     PlayerFactory.spawn(sim.world, { x: 0, y: 0 });
-    EnemyFactory.spawn(sim.world, { x: 5, y: 0 });
+    EnemyFactory.spawn(sim.world, ...testEnemy({ x: 5, y: 0 }));
 
     sim.step(10);
 

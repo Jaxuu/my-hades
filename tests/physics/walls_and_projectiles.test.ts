@@ -52,12 +52,8 @@ import {
   DEFAULT_CAST_LIFESPAN_TICKS,
   DEFAULT_CAST_PROJECTILE_SPEED,
   DEFAULT_CAST_SPAWN_OFFSET,
-  DEFAULT_ELITE_HURTBOX_RADIUS,
-  DEFAULT_ELITE_MAX_HP,
   DEFAULT_HURTBOX_RADIUS,
   DEFAULT_MAX_HP,
-  DEFAULT_POSEIDON_DASH_DAMAGE,
-  DEFAULT_POSEIDON_DASH_KNOCKBACK,
   DEFAULT_WALL_SLAM_DAMAGE,
   EnemyFactory,
   Faction,
@@ -84,11 +80,25 @@ import {
   vec2,
 } from '../../src';
 import type { EntityId } from '../../src';
+import { testEnemy, testElite } from '../harness/config-fixtures';
 
 const FPS = 60;
 const MAX_SPEED = 5;
 /** Per-tick integration accumulates float rounding; measured drift is ~1e-15. */
 const TOLERANCE = 1e-9;
+
+/*
+ * M10-T01 · the elite and Poseidon numbers this suite pins, as LITERALS.
+ *
+ * They used to be exported by `EnemyFactory` / `ModifierComponent`; they now live
+ * in `assets/data/*.json`. Restating them here is deliberate — see the
+ * tautological-assertion trap: "the field equals the constant that built it" can
+ * never fail, so the values have to be written out for a re-tune to be caught.
+ */
+const DEFAULT_ELITE_MAX_HP = 300;
+const DEFAULT_ELITE_HURTBOX_RADIUS = 0.8;
+const DEFAULT_POSEIDON_DASH_DAMAGE = 5;
+const DEFAULT_POSEIDON_DASH_KNOCKBACK = 40;
 
 /** The reference arena wall: a 2 x 10 slab whose left face sits at x = 3. */
 const WALL = { x: 3, y: -5, width: 2, height: 10 } as const;
@@ -343,13 +353,13 @@ function makeSlamRig(): SlamRig {
     facingRadians: 0,
     maxSpeed: MAX_SPEED,
   });
-  const elite = EnemyFactory.spawnElite(sim.world, {
+  const elite = EnemyFactory.spawnElite(sim.world, ...testElite({
     x: ELITE_X,
     y: 0,
     facingRadians: 0,
     maxSpeed: MAX_SPEED,
     armor: ELITE_ARMOR,
-  });
+  }));
   createWall(sim.world, WALL);
   addModifier(sim.world, player, POSEIDON_DASH_MODIFIER);
   return { sim, player, elite };
@@ -631,18 +641,18 @@ describe('G5 · the projectile flies, hits once, and stops there (AC-03/04)', ()
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
     });
-    const near = EnemyFactory.spawn(sim.world, {
+    const near = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 3,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
-    const far = EnemyFactory.spawn(sim.world, {
+    }));
+    const far = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 6,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
 
     sim.inject({ kind: 'keyDown', tick: 0, key: CAST_KEY });
     sim.step(1); // tick 0 — spawned, and collision-tested at (0.5, 0): out of reach
@@ -754,12 +764,12 @@ describe('G6 · a projectile is retired by geometry, and cannot pass through it 
       maxSpeed: MAX_SPEED,
     });
     // The enemy stands BEHIND the wall: the projectile must never reach it.
-    const shielded = EnemyFactory.spawn(sim.world, {
+    const shielded = EnemyFactory.spawn(sim.world, ...testEnemy({
       x: 7,
       y: 0,
       facingRadians: 0,
       maxSpeed: MAX_SPEED,
-    });
+    }));
     createWall(sim.world, { x: 4, y: -5, width: 2, height: 10 });
 
     sim.inject({ kind: 'keyDown', tick: 0, key: CAST_KEY });

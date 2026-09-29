@@ -1,101 +1,171 @@
 /**
- * Enemy entity assembly. See specs/03_combat_hitbox_spec.md §6 and
- * specs/04_combat_feedback_spec.md §6.
+ * Enemy entity assembly — now fully data-driven (M10-T01).
+ * See specs/16_data_driven_pipeline_spec.md §4.1 (AC-01) and §4.2 (AC-03).
  *
- * An enemy is assembled from exactly the same component set as the player
- * (`spawn-helpers.ts`); only the faction differs. That is deliberate: the dash /
- * i-frame machinery and the combat machinery are entity-agnostic, which is why the
- * same `DashSystem` that grants the player i-frames also protects a dashing enemy
- * (spec 03 §4.4 — the AC-04 acceptance tests rely on this).
+ * WHAT CHANGED IN M10
+ * -------------------
+ * Before M10 this factory carried the balance numbers itself
+ * (`DEFAULT_ENEMY_MAX_SPEED`, `DEFAULT_ELITE_ARMOR = 60`, `DEFAULT_ELITE_MAX_HP =
+ * 300`, …) and accepted a flat `EnemySpawnOptions` bag in which ANY of them could
+ * be overridden per call site. Two problems followed:
  *
- * An enemy owns an `IntentComponent` but NOT a `PlayerInputComponent`: its intent
- * is written directly by AI / scripts (or by the test harness), which is exactly
- * how the old "enemies must carry an InputComponent to be able to dash" limitation
- * was root-fixed. Intent and hardware input are now fully decoupled — spec 03 §10
- * trade-off 4 is resolved by M2-T02 (spec 04 §10).
+ *  1. Re-tuning an enemy type meant editing engine source, and the shipped values
+ *     were scattered across the factory, the component defaults and the demo
+ *     entry point — there was no single answer to "how much HP does a grunt have".
+ *  2. A call site could pass `{ maxHp: Number.NaN }` and nothing rejected it; the
+ *     NaN surfaced several ticks later as a health bar that never moved.
  *
- * M4-T01 adds the AI writer as an OPT-IN: pass `ai` in the spawn options and an
- * `AIControllerComponent` is mounted, making the enemy drive itself through the
- * FSM (spec 07). Omit it and the enemy behaves exactly as it did before M4 —
- * script-driven through its `IntentComponent`.
+ * M10 splits the two halves and gives each a home:
+ *
+ *  - **Type** (`enemyId`): resolved through `DataManager` from
+ *    `assets/data/enemies.json`. Health, speed, body size, armour, dash tuning, AI
+ *    tuning, hazard tuning and loot ALL come from there. This factory contains no
+ *    balance literal at all.
+ *  - **Instance** (`EnemyPlacement`): where the enemy stands and what it hunts.
+ *    Genuinely per-entity, and therefore not data.
+ *
+ * The result is that `spawn` can no longer be handed a number, so it can no
+ * longer be handed a WRONG number: every value it writes has already passed the
+ * schema (AC-02) before the process started simulating.
+ *
+ * WHAT DID NOT CHANGE
+ * -------------------
+ * The component set. An enemy is still assembled by `spawnCombatant` — the same
+ * single assembly point the player uses — so the two prefabs still cannot drift,
+ * and every validation rule that seam applies (hp within `[0, maxHp]`, an
+ * i-frame window no longer than the dash, an attack reach no longer than sight)
+ * is still applied, now to values the schema has already checked once.
  */
 
 import type { EntityId } from '../Entity';
 import type { World } from '../World';
+import { DataManager } from '../../data/DataManager';
+import { SchemaError } from '../../data/schemas';
+import type { EnemyConfig, LootDropConfig } from '../../data/schemas';
 import { Faction } from '../components/FactionComponent';
-import { DEFAULT_COMBATANT_MAX_SPEED, spawnCombatant } from './spawn-helpers';
-import type { DashTuningOptions, EnemySpawnOptions } from './spawn-helpers';
-
-/** Default enemy speed in world units per second. */
-export const DEFAULT_ENEMY_MAX_SPEED = DEFAULT_COMBATANT_MAX_SPEED;
+import { PickupKind } from '../components/PickupComponent';
+import type { LootDropOptions } from '../components/LootComponent';
+import { spawnCombatant } from './spawn-helpers';
+import type { CombatantSpawnOptions, EnemyPlacement } from './spawn-helpers';
 
 /**
- * Default armor pool of an ELITE (M6-T02, spec 12 §3.2).
+ * Re-exported from `spawn-helpers.ts`, where it is declared, so the encounter
+ * layer can describe a wave roster without importing this factory (spec 08 §3.2).
+ * Same declaration — not a copy, so the two can never drift.
+ */
+export type { EnemyPlacement, EnemySpawnOptions, EnemySpawnSpec } from './spawn-helpers';
+
+/**
+ * Map one JSON loot entry onto the assembly vocabulary.
  *
- * A fixed value rather than a fraction of HP on purpose: a fixed pool means a
- * high-damage or multi-hit attack breaks it quickly, so every fight is guaranteed
- * to reach a "staggerable" phase instead of degenerating into a standing trade.
+ * The ONLY place the data layer's lowercase `'gold' | 'heal'` meets the
+ * `PickupKind` enum. Doing it here — at the single assembly seam — means the
+ * engine keeps using the enum everywhere else and the JSON keeps using plain
+ * strings, with exactly one translation rather than one per consumer.
  */
-export const DEFAULT_ELITE_ARMOR = 60;
-
-/** Default hit-point ceiling of an elite — 3x a regular enemy's `100`. */
-export const DEFAULT_ELITE_MAX_HP = 300;
+function toLootOptions(drop: LootDropConfig): LootDropOptions {
+  return {
+    kind: drop.kind === 'heal' ? PickupKind.HEAL : PickupKind.GOLD,
+    ...(drop.amount === undefined ? {} : { amount: drop.amount }),
+    ...(drop.radius === undefined ? {} : { radius: drop.radius }),
+    ...(drop.lifespanTicks === undefined ? {} : { lifespanTicks: drop.lifespanTicks }),
+  };
+}
 
 /**
- * Default hurtbox radius of an elite (vs `0.5` for a regular enemy). This is what
- * "bigger body" means in this engine: the elite is easier to hit, which is the
- * price it pays for being harder to stagger.
+ * Fold an elite variant over its base config.
+ *
+ * A pure override of the three fields the variant declares; everything else
+ * (speed, dash, AI, hazard, loot) is inherited, so an elite is the SAME enemy
+ * with a bigger body, a bigger pool and standing armour — not a second config
+ * that has to be kept in step by hand.
  */
-export const DEFAULT_ELITE_HURTBOX_RADIUS = 0.8;
-
-/** Optional dash tuning overrides; every field defaults to the DashStatsComponent default. */
-export type EnemyDashOptions = DashTuningOptions;
+function applyEliteVariant(config: EnemyConfig): EnemyConfig {
+  const elite = config.elite;
+  if (elite === undefined) {
+    throw new SchemaError(
+      `enemy '${config.id}' declares no 'elite' variant, so it cannot be spawned as an elite. Add an 'elite' block to assets/data/enemies.json, or spawn it with EnemyFactory.spawn.`,
+    );
+  }
+  return {
+    ...config,
+    maxHp: elite.maxHp,
+    hurtboxRadius: elite.hurtboxRadius,
+    armor: elite.armor,
+  };
+}
 
 /**
- * An enemy spec. Re-exported from `spawn-helpers.ts`, where it is declared, so the
- * encounter layer can describe a wave roster without importing this factory
- * (spec 08 §3.2). Same declaration — not a copy, so the two can never drift.
+ * Turn a validated config + a placement into the flat options `spawnCombatant`
+ * expects.
+ *
+ * The conditional spreads are not style: `exactOptionalPropertyTypes` forbids
+ * writing an explicit `undefined` into an optional field, and — more
+ * importantly — the presence/absence of `armor`, `ai` and `hazard` IS the
+ * capability switch (`spawnCombatant` mounts a component only when the field is
+ * present). Collapsing "absent" into "present but undefined" would mount
+ * components the config never asked for.
  */
-export type { EnemySpawnOptions };
+function toCombatantOptions(
+  config: EnemyConfig,
+  placement: EnemyPlacement,
+): CombatantSpawnOptions {
+  const target = placement.targetEntityId ?? null;
+  return {
+    ...(placement.x === undefined ? {} : { x: placement.x }),
+    ...(placement.y === undefined ? {} : { y: placement.y }),
+    ...(placement.facingRadians === undefined ? {} : { facingRadians: placement.facingRadians }),
+    maxSpeed: config.maxSpeed,
+    maxHp: config.maxHp,
+    ...(config.hp === undefined ? {} : { hp: config.hp }),
+    hurtboxRadius: config.hurtboxRadius,
+    ...(config.armor === undefined ? {} : { armor: config.armor }),
+    ...(config.dash === undefined ? {} : { dash: config.dash }),
+    // `targetEntityId` is placement, not config: it is an EntityId, so it can
+    // never be a property of the TYPE (see `EnemyPlacement`).
+    ...(config.ai === undefined ? {} : { ai: { ...config.ai, targetEntityId: target } }),
+    ...(config.hazard === undefined ? {} : { hazard: config.hazard }),
+    ...(config.loot === undefined ? {} : { loot: config.loot.map(toLootOptions) }),
+  };
+}
 
 export class EnemyFactory {
   /**
-   * Create an enemy entity owning Transform + Velocity + Intent + State + DashStats
-   * + Tag + Faction(Enemy) + Health + Hurtbox. The enemy does NOT own
-   * `PlayerInputComponent`; drive it through its `IntentComponent`.
-   * @throws RangeError under the same conditions as `PlayerFactory.spawn`.
+   * Create an enemy of type `enemyId`, placed at `placement`.
+   *
+   * The entity owns Transform + Velocity + Intent + State + DashStats + Tag +
+   * Modifier + StatusEffect + Faction(Enemy) + Health + Hurtbox, PLUS whichever
+   * opt-in capabilities its config declares: `armor` mounts an `ArmorComponent`,
+   * `ai` mounts an `AIControllerComponent`, `hazard` mounts a
+   * `HazardCasterComponent`, `loot` mounts a `LootComponent`. An enemy never
+   * carries `PlayerInputComponent` (it is intent-driven by AI or by a script).
+   *
+   * @throws SchemaError when `enemyId` is not in the loaded config table — which
+   *   includes the case where Bootstrap never ran (spec 16 AC-03).
+   * @throws RangeError from `spawnCombatant` if a parsed value violates an
+   *   assembly-level rule (these are cross-field rules the schema cannot state on
+   *   its own, e.g. an i-frame window longer than the dash).
    */
-  public static spawn(world: World, options: EnemySpawnOptions = {}): EntityId {
-    return spawnCombatant(world, Faction.Enemy, options, false);
+  public static spawn(world: World, enemyId: string, placement: EnemyPlacement = {}): EntityId {
+    const config = DataManager.getEnemyConfig(enemyId);
+    return spawnCombatant(world, Faction.Enemy, toCombatantOptions(config, placement), false);
   }
 
   /**
-   * Create an ELITE enemy (M6-T02, spec 12 §3.2): exactly the component set of
-   * {@link spawn}, PLUS a standing `ArmorComponent`, a LARGER hurtbox and a LARGER
-   * HP pool.
+   * Create the ELITE form of enemy type `enemyId` (M6-T02, spec 12 §3.2).
    *
-   * An elite is assembled by FILLING DEFAULTS and delegating to `spawn` — never by
-   * re-listing components here. That keeps "assembly lives in exactly one place"
-   * true (the player and enemy prefabs cannot drift), and it means every validation
-   * rule `spawnCombatant` applies is applied to an elite too, for free.
+   * Exactly the component set of {@link spawn}, with the config's `elite` block
+   * folded over it: a larger HP pool, a larger hurtbox and a standing armour
+   * pool. Assembly is still delegated to `spawn` — never re-listed here — so
+   * "assembly lives in exactly one place" stays true and every validation rule
+   * applies to an elite for free.
    *
-   * Every default is overridable through `options`, so a caller can tune a specific
-   * elite (a boss with `armor: 200`, a light elite with a normal-sized body) without
-   * this factory growing a second configuration surface. Passing `armor` explicitly
-   * replaces the elite default; there is deliberately no way to spawn an elite with
-   * NO armor — that is just `spawn`.
-   *
-   * @throws RangeError under the same conditions as {@link spawn} (including a
-   *   non-positive-finite `armor`).
+   * @throws SchemaError when the type declares no `elite` variant. There is
+   *   deliberately no fallback: silently spawning a plain enemy under the elite's
+   *   name is the failure the pre-M10 `armor: 0` rejection existed to prevent.
    */
-  public static spawnElite(world: World, options: EnemySpawnOptions = {}): EntityId {
-    const maxHp = options.maxHp ?? DEFAULT_ELITE_MAX_HP;
-    return EnemyFactory.spawn(world, {
-      ...options,
-      maxHp,
-      hp: options.hp ?? maxHp,
-      hurtboxRadius: options.hurtboxRadius ?? DEFAULT_ELITE_HURTBOX_RADIUS,
-      armor: options.armor ?? DEFAULT_ELITE_ARMOR,
-    });
+  public static spawnElite(world: World, enemyId: string, placement: EnemyPlacement = {}): EntityId {
+    const config = DataManager.getEnemyConfig(enemyId);
+    return spawnCombatant(world, Faction.Enemy, toCombatantOptions(applyEliteVariant(config), placement), false);
   }
 }
