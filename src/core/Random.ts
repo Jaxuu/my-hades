@@ -75,8 +75,16 @@ function elementAt<T>(items: readonly T[], index: number): T {
  * value no assertion should ever need to read.
  */
 export class Random {
-  /** The seed this generator was constructed with (diagnostics / replay logs). */
-  public readonly seed: number;
+  /**
+   * The seed this generator currently holds (diagnostics / replay logs).
+   *
+   * NOT `readonly`: a RUN BOUNDARY may reseed the generator in place (M8-T01,
+   * `reseed` below). Everything else treats it as read-only — the logic layer
+   * never reseeds DURING a run, which is what ADR-004 §Decision 3 actually
+   * guarantees ("no wall-clock entropy, no surprise re-rolls mid-run"), not
+   * "the field is immutable forever".
+   */
+  public seed: number;
 
   /** Current 32-bit state word. Unsigned, always in `[0, 2^32)`. */
   private state: number;
@@ -89,6 +97,28 @@ export class Random {
     // `>>> 0` folds any finite number (including negatives and fractions) into the
     // 32-bit unsigned state space, so every seed is legal and every seed maps to
     // exactly one starting state.
+    this.state = seed >>> 0;
+  }
+
+  /**
+   * Reset the generator to `seed` — LEGAL ONLY AT A RUN BOUNDARY (M8-T01).
+   *
+   * Called by `World.reseed`, which is called only by
+   * `GameSimulator.restartRun`. Mid-run reseeding would be exactly the
+   * non-reproducibility ADR-004 exists to prevent, so the call graph is kept
+   * narrow on purpose: one caller, one situation.
+   *
+   * In-place rather than a fresh instance, so that every reference captured
+   * during assembly (a test holding `world.rng`, a future save layer) keeps
+   * pointing at the LIVE generator instead of silently going stale.
+   *
+   * @throws RangeError if `seed` is not finite.
+   */
+  public reseed(seed: number): void {
+    if (!Number.isFinite(seed)) {
+      throw new RangeError(`Random seed must be a finite number, received: ${String(seed)}`);
+    }
+    this.seed = seed;
     this.state = seed >>> 0;
   }
 

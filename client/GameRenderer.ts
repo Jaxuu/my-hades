@@ -36,6 +36,7 @@ import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { ActionState, StateComponent } from '../src/ecs/components/StateComponent';
 import { isFrozen } from '../src/ecs/components/FreezeComponent';
 import { isDead } from '../src/ecs/components/DeadTagComponent';
+import { HazardComponent } from '../src/ecs/components/HazardComponent';
 
 /**
  * The render layer's ONE constant contract: world units -> pixels (spec 09 C8).
@@ -71,6 +72,36 @@ const HITBOX_ENEMY_COLOR = 0xff4d4d;
 const HITBOX_ALPHA = 0.35;
 const HURTBOX_STROKE_ALPHA = 0.35;
 
+/**
+ * Hazard telegraph colour (M8-T01). A saturated warning red, deliberately the
+ * same hue family as the enemy body so "this is hostile ground" reads instantly,
+ * but drawn as a translucent FILL so the player can still see what is standing
+ * inside it.
+ */
+const HAZARD_COLOR = 0xff2d2d;
+
+/** Fill alpha of a hazard's warning circle at the START of its fuse. */
+const HAZARD_FILL_ALPHA_MIN = 0.08;
+
+/** Fill alpha of a hazard's warning circle at the moment of detonation. */
+const HAZARD_FILL_ALPHA_MAX = 0.5;
+
+/** Ring stroke alpha at the start of the fuse. */
+const HAZARD_RING_ALPHA_MIN = 0.4;
+
+/** Ring stroke alpha at the moment of detonation. */
+const HAZARD_RING_ALPHA_MAX = 1;
+
+/**
+ * Scale of a hazard's warning circle at the START of its fuse, as a fraction of
+ * the true blast radius. The circle grows to `1.0` as the fuse burns down, so the
+ * warning reads as "closing in" rather than as a static decal.
+ */
+const HAZARD_SCALE_MIN = 0.82;
+
+/** Fixed ring line width (px). The animation is alpha + scale, not stroke growth. */
+const HAZARD_RING_WIDTH = 2;
+
 /** No tint — the neutral resting value (PixiJS multiplies by white = identity). */
 const NO_TINT = 0xffffff;
 
@@ -102,7 +133,7 @@ function shortestArcDelta(from: number, to: number): number {
 }
 
 /** View classification, decided by component presence (spec 09 §4.3). */
-export type ViewKind = 'hitbox' | 'player' | 'enemy';
+export type ViewKind = 'hazard' | 'hitbox' | 'player' | 'enemy';
 
 /** One entity's presentation object, plus the state its lifecycle needs. */
 export interface EntityView {
@@ -119,6 +150,16 @@ export interface EntityView {
    * a `HealthComponent` (e.g. hitboxes).
    */
   lastHp: number | undefined;
+  /**
+   * Hazard-only: the two animated layers of the warning (M8-T01). Present exactly
+   * when `kind === 'hazard'`. Held by reference so the per-frame animation sets
+   * their alphas directly instead of reaching into `container.children` by index —
+   * the warning's layers are a structural fact, not a positional one.
+   */
+  hazard?: {
+    readonly fill: Graphics;
+    readonly ring: Graphics;
+  };
 }
 
 /** A live damage floater: a PixiJS `Text` plus the bookkeeping its lifetime needs. */
@@ -213,6 +254,9 @@ export class GameRenderer {
     const clampedAlpha = Math.min(1, Math.max(0, alpha));
     this.createMissingViews(world);
     this.syncTransforms(world, clampedAlpha);
+    // M8-T01: hazard warnings are animated from their own countdown, so they are
+    // synced here rather than inside `syncTransforms` (which is about position).
+    this.syncHazards(world);
     // Age the floaters that already exist BEFORE spawning this frame's, so a fresh
     // floater starts at full alpha instead of losing a frame of life immediately.
     this.advanceFloatingTexts(this.app.ticker.deltaMS);
@@ -399,8 +443,21 @@ export class GameRenderer {
     view.container.destroy({ children: true });
   }
 
-  /** Classify (hitbox FIRST, then faction) and build the matching placeholder. */
+  /**
+   * Classify and build the matching placeholder.
+   *
+   * Order is hazard -> hitbox -> faction, and the hazard branch MUST come first
+   * (M8-T01): a telegraph owns no `HitboxComponent` and no `FactionComponent`
+   * (spec 14 I1/I2), so without its own branch it would fall through to the
+   * "no visual contract for this entity" early return and be silently invisible —
+   * which for a warning is the worst possible failure mode.
+   */
   private createView(world: World, id: EntityId): EntityView | undefined {
+    const hazard = world.getComponent(id, HazardComponent);
+    if (hazard !== undefined) {
+      return this.createHazardView(hazard);
+    }
+
     const hitbox = world.getComponent(id, HitboxComponent);
     let view: EntityView | undefined;
     if (hitbox !== undefined) {
@@ -421,6 +478,74 @@ export class GameRenderer {
     const health = world.getComponent(id, HealthComponent);
     view.lastHp = health !== undefined ? health.hp : undefined;
     return view;
+  }
+
+  /**
+   * Build a hazard's warning: a translucent filled circle at the TRUE blast
+   * radius, plus a ring marking its edge. Both are drawn once at full radius and
+   * animated by `syncHazards` through `alpha` and `scale`, so no geometry is
+   * rebuilt per frame.
+   */
+  private createHazardView(hazard: HazardComponent): EntityView {
+    const radiusPx = hazard.radius * PX_PER_UNIT;
+    const container = new Container();
+
+    const fill = new Graphics();
+    fill.circle(0, 0, radiusPx).fill({ color: HAZARD_COLOR, alpha: HAZARD_FILL_ALPHA_MIN });
+    container.addChild(fill);
+
+    const ring = new Graphics();
+    ring
+      .circle(0, 0, radiusPx)
+      .stroke({ width: HAZARD_RING_WIDTH, color: HAZARD_COLOR, alpha: HAZARD_RING_ALPHA_MIN });
+    container.addChild(ring);
+
+    return {
+      container,
+      kind: 'hazard',
+      isDying: false,
+      deathElapsedMs: 0,
+      lastHp: undefined,
+      hazard: { fill, ring },
+    };
+  }
+
+  /**
+   * Animate every hazard warning from its own fuse (M8-T01, spec 14 §4.6).
+   *
+   * Progress is `1 - delayTicks / totalDelayTicks`, clamped to `[0, 1]`; a
+   * non-positive `totalDelayTicks` counts as "about to blow" (progress 1), which
+   * is the honest reading of a zero-fuse hazard rather than a division by zero.
+   *
+   * The reading is deliberately the COMPONENT's remaining fuse, not a value the
+   * renderer accumulates itself: the warning must agree with the logic tick that
+   * will actually detonate, and only the logic layer knows that. `totalDelayTicks`
+   * lives on the component for exactly this reason (spec 14 §3.1) — the render
+   * layer never has to remember a hazard's initial length.
+   *
+   * Pure reads and pure visual writes: no logic state is touched, and nothing
+   * here feeds back into `src/` (spec 09 AC-01).
+   */
+  private syncHazards(world: World): void {
+    for (const [id, view] of this.views) {
+      if (view.kind !== 'hazard') continue;
+      if (view.isDying) continue;
+
+      const hazard = world.getComponent(id, HazardComponent);
+      if (hazard === undefined) continue;
+
+      const total = hazard.totalDelayTicks;
+      const raw = total > 0 ? 1 - hazard.delayTicks / total : 1;
+      const t = Math.min(1, Math.max(0, raw));
+
+      view.container.alpha = 1;
+      view.container.scale.set(HAZARD_SCALE_MIN + (1 - HAZARD_SCALE_MIN) * t);
+
+      const layers = view.hazard;
+      if (layers === undefined) continue;
+      layers.fill.alpha = HAZARD_FILL_ALPHA_MIN + (HAZARD_FILL_ALPHA_MAX - HAZARD_FILL_ALPHA_MIN) * t;
+      layers.ring.alpha = HAZARD_RING_ALPHA_MIN + (HAZARD_RING_ALPHA_MAX - HAZARD_RING_ALPHA_MIN) * t;
+    }
   }
 
   private createHitboxView(hitbox: HitboxComponent): EntityView {

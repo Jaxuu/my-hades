@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-hades · roguelike loop (M6-T01)</title>
+    <title>my-hades · roguelike loop (M8-T01)</title>
     <style>
       html,
       body {
@@ -97,6 +97,29 @@
       .reward-button:active {
         transform: translateY(0);
       }
+
+      /* M8-T01 · death overlay. Same root element as the draft overlay (only one
+         is ever on screen), restyled into a terminal state: a deep red wash, a
+         wide-tracked heading, and a hint line. */
+      #ui-layer.is-death {
+        background: rgba(34, 4, 6, 0.86);
+      }
+
+      #ui-layer.is-death h2 {
+        font-size: 34px;
+        font-weight: 700;
+        color: #ff5a5a;
+        letter-spacing: 0.22em;
+        text-shadow: 0 0 18px rgba(255, 60, 60, 0.45);
+      }
+
+      #ui-layer .death-hint {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.1em;
+        color: #e6e6e6;
+        opacity: 0.85;
+      }
     </style>
   </head>
   <body>
@@ -104,7 +127,7 @@
     <div id="ui-layer"></div>
     <div id="hud"></div>
     <div id="keys">
-      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺
+      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 重开（阵亡后）
     </div>
     <script type="module" src="/client/main.ts"></script>
   </body>

@@ -37,6 +37,12 @@ import {
 import { Faction, FactionComponent } from '../components/FactionComponent';
 import { DEFAULT_MAX_HP, HealthComponent } from '../components/HealthComponent';
 import { ArmorComponent } from '../components/ArmorComponent';
+import { HazardCasterComponent } from '../components/HazardCasterComponent';
+import {
+  DEFAULT_HAZARD_DAMAGE,
+  DEFAULT_HAZARD_DELAY_TICKS,
+  DEFAULT_HAZARD_RADIUS,
+} from '../components/HazardComponent';
 import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxComponent';
 
 /** Default locomotion speed in world units per second for any combatant. */
@@ -143,6 +149,18 @@ export interface CombatantSpawnOptions {
    * (spec 07 C10 / §10 trade-off 5).
    */
   readonly ai?: AITuningOptions;
+  /**
+   * Hazard-casting tuning (M8-T01). When present, a `HazardCasterComponent` is
+   * mounted and the entity becomes a "bomb planter": on the tick its AI windup
+   * ends it raises `wantsToHazard` alongside `wantsToAttack`, and `HazardSystem`
+   * plants a delayed AoE at its target's feet (spec 14 AC-01).
+   *
+   * Omit it and NO hazard component is mounted at all, so every pre-M8 enemy is
+   * assembled exactly as before. Like `ai` and `armor`, this is a CAPABILITY
+   * SWITCH rather than an elite-only channel: the component set stays defined in
+   * this one place, so the player and enemy prefabs still cannot drift apart.
+   */
+  readonly hazard?: HazardCastingOptions;
 }
 
 /**
@@ -207,6 +225,48 @@ export function resolveAITuning(options: AITuningOptions = {}): ResolvedAITuning
 }
 
 /**
+ * Optional hazard-casting overrides (M8-T01); every field defaults to its
+ * `HazardComponent` default.
+ *
+ * There is deliberately NO `targetEntityId` here: the landing spot is resolved at
+ * plant time from the caster's live AI target, so a stale id can never be baked
+ * into the assembly (spec 14 §4.2).
+ */
+export interface HazardCastingOptions {
+  readonly radius?: number;
+  readonly damage?: number;
+  readonly delayTicks?: number;
+}
+
+/** Fully-resolved hazard tuning, ready to be written onto a `HazardCasterComponent`. */
+export interface ResolvedHazardCasting {
+  readonly radius: number;
+  readonly damage: number;
+  readonly delayTicks: number;
+}
+
+/**
+ * Resolve (and validate) hazard-casting overrides.
+ *
+ * @throws RangeError for a non-positive radius, a negative damage, or a
+ *   non-non-negative-integer delay. `damage: 0` is legal (a pure-displacement
+ *   trap); `delayTicks: 0` is legal (detonates on the next tick's update).
+ */
+export function resolveHazardCasting(options: HazardCastingOptions = {}): ResolvedHazardCasting {
+  const radius = options.radius ?? DEFAULT_HAZARD_RADIUS;
+  const damage = options.damage ?? DEFAULT_HAZARD_DAMAGE;
+  const delayTicks = options.delayTicks ?? DEFAULT_HAZARD_DELAY_TICKS;
+
+  assertPositiveFinite(radius, 'hazard.radius');
+  if (!Number.isFinite(damage) || damage < 0) {
+    throw new RangeError(`hazard.damage must be a non-negative finite number, received: ${String(damage)}`);
+  }
+  assertNonNegativeInteger(delayTicks, 'hazard.delayTicks');
+
+  return { radius, damage, delayTicks };
+}
+
+/**
  * Assemble a combatant entity owning the full component set:
  * Transform + Velocity + Intent + State + DashStats + Tag + Modifier
  * + StatusEffect + Faction + Health + Hurtbox.
@@ -227,15 +287,17 @@ export function resolveAITuning(options: AITuningOptions = {}): ResolvedAITuning
  * the player and enemy prefabs can never drift apart.
  *
  * The component set above is the MANDATORY one. `PlayerInputComponent` (hardware),
- * `AIControllerComponent` (M4-T01) and `ArmorComponent` (M6-T02) are the three
- * OPT-IN extras. Input and AI are mutually exclusive (the player gets the device,
- * an AI-driven enemy gets the FSM, a plain script-driven enemy gets neither);
- * armor is orthogonal to both — any combatant may carry it.
+ * `AIControllerComponent` (M4-T01), `ArmorComponent` (M6-T02) and
+ * `HazardCasterComponent` (M8-T01) are the four OPT-IN extras. Input and AI are
+ * mutually exclusive (the player gets the device, an AI-driven enemy gets the
+ * FSM, a plain script-driven enemy gets neither); armor and hazard casting are
+ * orthogonal to both — any combatant may carry either.
  *
  * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` / `armor` is not a
  *   positive finite number, if `hp` falls outside `[0, maxHp]`, if any dash override
  *   is invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
- *   {@link resolveAITuning}), or if AI tuning is combined with `hardwareInput`.
+ *   {@link resolveAITuning}), if any hazard override is invalid (see
+ *   {@link resolveHazardCasting}), or if AI tuning is combined with `hardwareInput`.
  */
 export function spawnCombatant(
   world: World,
@@ -274,6 +336,12 @@ export function spawnCombatant(
       'ai tuning cannot be combined with hardware input: an entity is either device-driven or AI-driven',
     );
   }
+
+  // Hazard casting is an OPT-IN capability too (M8-T01), and it is orthogonal to
+  // both of the above: it only decides what a windup DOES, so a hazard caster may
+  // equally be script-driven. Mounted last so the component set reads in the order
+  // the capabilities were added.
+  const hazard = options.hazard === undefined ? undefined : resolveHazardCasting(options.hazard);
 
   const entity = world.createEntity();
   world.addComponent(
@@ -315,6 +383,12 @@ export function spawnCombatant(
         ai.windupTicks,
         ai.cooldownTicks,
       ),
+    );
+  }
+  if (hazard !== undefined) {
+    world.addComponent(
+      entity.id,
+      new HazardCasterComponent(hazard.radius, hazard.damage, hazard.delayTicks),
     );
   }
   return entity.id;

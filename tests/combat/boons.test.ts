@@ -722,7 +722,7 @@ describe('G6 · EventQueue is a FIFO, copy-on-drain, tick-scoped wire (AC-07)', 
 /* ------------------------------------------------------------------ *
  * G7 · canonical pipeline order                                       *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 15-segment pipeline order (AC-08)', () => {
+describe('G7 · canonical 16-segment pipeline order (AC-08)', () => {
   it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Reward -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
@@ -730,6 +730,7 @@ describe('G7 · canonical 15-segment pipeline order (AC-08)', () => {
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',
+      'HazardSystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',

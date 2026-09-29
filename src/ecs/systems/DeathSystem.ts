@@ -55,6 +55,8 @@ import { vec2 } from '../../core/math';
 import { HealthComponent } from '../components/HealthComponent';
 import { DeadTagComponent, markDead } from '../components/DeadTagComponent';
 import { IntentComponent } from '../components/IntentComponent';
+import { PlayerInputComponent } from '../components/PlayerInputComponent';
+import { markRunFailed } from '../components/GameStateComponent';
 
 export class DeathSystem implements System {
   public readonly name = 'DeathSystem';
@@ -93,7 +95,47 @@ export class DeathSystem implements System {
       markDead(world, id);
       this.neutraliseIntent(world, id);
       this.events.emit({ tick: ctx.tick, entityId: id });
+      this.failRunIfPlayer(world, id);
     }
+  }
+
+  /**
+   * Drop the tick-scoped death bus at a run boundary (M8-T01, spec 14 §4.5).
+   *
+   * `GameSimulator.restartRun` calls this through `Scheduler.reset`. The bus is
+   * cleared at the START of every update anyway, so this is not what bounds it —
+   * it is what stops a RESTART from leaving a bus full of events that reference
+   * entities the restart just destroyed. Without it, a test that asserts "no
+   * stale events survive a restart" would be asserting something false.
+   */
+  public reset(): void {
+    this.events.clear();
+  }
+
+  /**
+   * If the entity that just died is the PLAYER, the whole RUN is over
+   * (M8-T01, spec 14 AC-02 / §4.4).
+   *
+   * The player predicate is `PlayerInputComponent`, not `Faction.Player`: the
+   * hardware-input component is mounted on the player and ONLY on the player
+   * (spec 01 §3.3), which makes "owns a device" a structural identity in this
+   * engine rather than a gameplay label that future content could reassign.
+   *
+   * Written HERE, in the same iteration that mounts the death tag, because this
+   * is the one place that knows "a death just resolved and this is who it was".
+   * The transition is monotone: `markRunFailed` only ever moves
+   * `PLAYING -> RUN_FAILED`, and the only way back is a full `restartRun`
+   * (spec 14 I7). A world with no game-state singleton is a no-op — a world that
+   * never assembled a run cannot fail one (spec 14 AC-11).
+   *
+   * Note it does NOT pause the simulation. `step()` keeps running so that a
+   * replay containing a death stays replayable; what stops is the player's
+   * intent (`PlayerControllerSystem`) and the encounter scheduler
+   * (`EncounterSystem`).
+   */
+  private failRunIfPlayer(world: World, id: EntityId): void {
+    if (!world.hasComponent(id, PlayerInputComponent)) return;
+    markRunFailed(world);
   }
 
   /**
@@ -108,6 +150,9 @@ export class DeathSystem implements System {
     intent.wantsToDash = false;
     intent.wantsToAttack = false;
     intent.wantsToCast = false;
+    // M8-T01: the hazard pulse too — a corpse must not be left holding a bomb it
+    // never planted (spec 14 AC-04).
+    intent.wantsToHazard = false;
     intent.aimRadians = null;
   }
 }

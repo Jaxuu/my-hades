@@ -1,19 +1,28 @@
 /**
  * main — the composition root of the presentation layer.
- * See specs/09_renderer_bridge_spec.md §1.2 / §5.3 and
- * specs/11_roguelike_loop_spec.md §4.5.
+ * See specs/09_renderer_bridge_spec.md §1.2 / §5.3,
+ * specs/11_roguelike_loop_spec.md §4.5 and
+ * specs/14_aoe_and_run_lifecycle_spec.md §4.5 / §4.6.
  *
  * Wires the headless simulation core to PixiJS AND to the DOM:
- *   GameSimulator (15-system pipeline)  ->  GameRenderer (read-only)  ->  PixiJS
+ *   GameSimulator (16-system pipeline)  ->  GameRenderer (read-only)  ->  PixiJS
  *   GameSimulator                       ->  UIManager    (read-only)  ->  #ui-layer
  *   KeyboardInput  ->  per-tick injection  ->  GameSimulator.step(1)
  *   UIManager click ->  selectReward injection  ->  GameSimulator.step(1)
+ *   UIManager  R key ->  onRestart callback     ->  GameSimulator.restartRun()
  *
- * M6-T01 replaces the hand-placed enemies with a REAL `EncounterFactory` room, so the
- * roguelike loop is observable end to end: clear both waves -> the room rolls a
- * three-option draft -> the overlay appears -> picking a boon descends the room and
- * spawns a bigger wave. The player is deliberately granted NO boons up front — boons
- * now arrive through the draft, which is the whole point of the milestone.
+ * M6-T01 replaced the hand-placed enemies with a REAL `EncounterFactory` room, so
+ * the roguelike loop is observable end to end: clear both waves -> the room rolls
+ * a three-option draft -> the overlay appears -> picking a boon descends the room
+ * and spawns a bigger wave.
+ *
+ * M8-T01 closes the loop at both ends:
+ *   - `buildRun` is handed to the simulator as its `runSetup`, so "what a run
+ *     looks like" is declared ONCE and `restartRun()` can rebuild it without the
+ *     simulator learning a single game concept (spec 14 §4.5);
+ *   - dying now shows the death overlay and `R` starts a fresh run, with the
+ *     player id re-resolved every frame rather than captured — after a restart the
+ *     player is a BRAND NEW entity, and a captured id would point at a corpse.
  *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
@@ -24,11 +33,16 @@
 import { Application } from 'pixi.js';
 
 import { GameSimulator } from '../src/core/GameSimulator';
+import type { World } from '../src/ecs/World';
+import type { EntityId } from '../src/ecs/Entity';
 import { createDefaultSystems } from '../src/ecs/systems/pipeline';
 import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
 import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
+import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
+import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import { findRewardDraft } from '../src/ecs/components/EncounterStateComponent';
+import { isRunFailed } from '../src/ecs/components/GameStateComponent';
 
 import { GameRenderer } from './GameRenderer';
 import { GameLoop } from './GameLoop';
@@ -36,14 +50,18 @@ import { KeyboardInput } from './KeyboardInput';
 import { UIManager } from './UIManager';
 
 /**
- * The run's seed. Fixed here so a reload reproduces the same drafts; swap it for a
- * per-run value (UI entropy, a clock read, a user-supplied code) to vary the run —
- * the logic layer stays deterministic either way (ADR-004 §4.3).
+ * The run's seed. Fixed here so a reload reproduces the same drafts; `restartRun`
+ * increments it, so each death gives a genuinely different next run while staying
+ * fully deterministic (spec 14 AC-08).
  */
 const SEED = 0x12345678;
 
 const PLAYER_MAX_HP = 100;
 const ENEMY_MAX_HP = 40;
+
+/** Windup / cooldown shared by every demo enemy, in ticks. */
+const ENEMY_WINDUP_TICKS = 36;
+const ENEMY_COOLDOWN_TICKS = 60;
 
 function mountCanvas(app: Application): void {
   const mount = document.getElementById('app');
@@ -67,12 +85,20 @@ function main(): void {
     });
 }
 
-function start(app: Application): void {
-  mountCanvas(app);
-
-  const sim = new GameSimulator({ systems: createDefaultSystems(), seed: SEED });
-
-  const playerId = PlayerFactory.spawn(sim.world, {
+/**
+ * Assemble ONE run: the player, the room and the run's state singleton.
+ *
+ * Declared as a plain function rather than a closure over `sim` so it can be
+ * handed to the simulator as `runSetup` and reused for the very first run without
+ * a special case — the first run and every restarted one go through the exact same
+ * code, which is the only way "restart == fresh start" can be true.
+ *
+ * Enemies use `ai` WITHOUT an explicit `targetEntityId`: the FSM auto-acquires the
+ * nearest hostile, so this function never needs to know the player's id — which
+ * matters because after a restart the player has a new one.
+ */
+function buildRun(world: World): void {
+  PlayerFactory.spawn(world, {
     x: 0,
     y: 0,
     facingRadians: 0,
@@ -80,28 +106,59 @@ function start(app: Application): void {
     maxHp: PLAYER_MAX_HP,
   });
 
-  // A two-wave room. AI enemies (`ai` and hardware input are mutually exclusive —
-  // the player is the device-driven one) so the fight plays itself out.
   const enemy = (x: number, y: number) => ({
     x,
     y,
     hp: ENEMY_MAX_HP,
     maxHp: ENEMY_MAX_HP,
     ai: {
-      targetEntityId: playerId,
       sightRadius: 14,
       attackRadius: 1.6,
-      windupTicks: 36,
-      cooldownTicks: 60,
+      windupTicks: ENEMY_WINDUP_TICKS,
+      cooldownTicks: ENEMY_COOLDOWN_TICKS,
     },
   });
 
-  EncounterFactory.spawn(sim.world, {
+  /**
+   * The bomb planter (M8-T01): the same enemy, plus `hazard`. On every windup it
+   * plants a 30-tick telegraph at the player's feet AND swings — the telegraphed
+   * AoE is what makes standing still a decision rather than a default.
+   */
+  const bomber = (x: number, y: number) => ({
+    ...enemy(x, y),
+    hazard: { radius: 2.5, damage: 25, delayTicks: 30 },
+  });
+
+  // A two-wave room. AI enemies (`ai` and hardware input are mutually exclusive —
+  // the player is the device-driven one) so the fight plays itself out.
+  EncounterFactory.spawn(world, {
     waves: [
       { delayTicks: 0, enemies: [enemy(5, 0)] },
-      { delayTicks: 120, enemies: [enemy(-5, 2), enemy(5, -2)] },
+      { delayTicks: 120, enemies: [enemy(-5, 2), bomber(5, -2)] },
     ],
   });
+
+  // The run's state singleton (M8-T01). Without it a player death would be an
+  // ordinary death and the death overlay could never appear (spec 14 AC-11).
+  GameStateFactory.spawn(world);
+}
+
+/** The device-driven entity, i.e. the player — re-resolved every frame. */
+function findPlayerId(world: World): EntityId | undefined {
+  return world.query(PlayerInputComponent)[0];
+}
+
+function start(app: Application): void {
+  mountCanvas(app);
+
+  const sim = new GameSimulator({
+    systems: createDefaultSystems(),
+    seed: SEED,
+    runSetup: buildRun,
+  });
+
+  // The FIRST run goes through the same builder every restart will use.
+  buildRun(sim.world);
 
   const renderer = new GameRenderer(app);
   renderer.init();
@@ -122,6 +179,13 @@ function start(app: Application): void {
             // past tick (spec 11 AC-03).
             sim.inject({ kind: 'selectReward', tick: sim.tick, rewardId });
           },
+          onRestart: () => {
+            // `R` is also an external command, but unlike a click it is not
+            // tick-aligned: a restart is a RUN-BOUNDARY operation, not a
+            // simulation input, so it does not ride the input queue. It rewinds
+            // the clock and rebuilds the world immediately (spec 14 §4.5).
+            sim.restartRun();
+          },
         });
 
   // Start the loop FIRST, then register the observers: PixiJS runs ticker listeners
@@ -135,21 +199,20 @@ function start(app: Application): void {
       manager.sync(sim.world);
     });
   }
-  installHud(app, sim, renderer, playerId);
+  installHud(app, sim, renderer);
 }
 
-/** Minimal HUD: tick / player hp / counts / the live reward draft. */
-function installHud(
-  app: Application,
-  sim: GameSimulator,
-  renderer: GameRenderer,
-  playerId: number,
-): void {
+/** Minimal HUD: tick / run status / player hp / counts / the live reward draft. */
+function installHud(app: Application, sim: GameSimulator, renderer: GameRenderer): void {
   const hud = document.getElementById('hud');
   if (hud === null) return;
 
   app.ticker.add(() => {
-    const health = sim.world.getComponent(playerId, HealthComponent);
+    // Re-resolved every frame: a restart replaces the player entity, so a captured
+    // id would silently report a corpse's (frozen) health forever.
+    const playerId = findPlayerId(sim.world);
+    const health =
+      playerId === undefined ? undefined : sim.world.getComponent(playerId, HealthComponent);
     const hp = health !== undefined ? health.hp : 0;
     const maxHp = health !== undefined ? health.maxHp : 0;
 
@@ -159,8 +222,10 @@ function installHud(
         ? 'reward  —'
         : `reward  ${String(draft.pendingRewards?.length ?? 0)} options · depth ${String(draft.depth)}`;
 
+    const status = isRunFailed(sim.world) ? 'RUN_FAILED' : 'PLAYING';
+
     hud.textContent =
-      `tick ${sim.tick}\n` +
+      `tick ${sim.tick} · ${status}\n` +
       `player hp ${hp} / ${maxHp}\n` +
       `entities ${sim.world.entityCount} · views ${renderer.viewCount}\n` +
       rewardLine;

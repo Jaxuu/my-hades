@@ -537,6 +537,7 @@ describe('G4 · canonical 15-segment pipeline order (AC-07)', () => {
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',
+      'HazardSystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',

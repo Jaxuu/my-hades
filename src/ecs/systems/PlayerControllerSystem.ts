@@ -40,6 +40,7 @@ import { ATTACK_KEY, CAST_KEY, DASH_KEY, PlayerInputComponent } from '../compone
 import { IntentComponent } from '../components/IntentComponent';
 import { isDead } from '../components/DeadTagComponent';
 import { findRewardDraft } from '../components/EncounterStateComponent';
+import { isRunFailed } from '../components/GameStateComponent';
 
 export class PlayerControllerSystem implements System {
   public readonly name = 'PlayerControllerSystem';
@@ -143,9 +144,19 @@ export class PlayerControllerSystem implements System {
    * The gate cannot deadlock the player: `pendingRewards` is cleared by
    * `RewardSystem` in the SAME tick it settles a selection, so the hold lasts
    * exactly as long as the draft is genuinely open.
+   *
+   * M8-T01 adds the SECOND suppression reason to the same boolean (spec 14
+   * AC-05): a `RUN_FAILED` run holds the player's intent. The two are folded
+   * into ONE `suppressed` verdict on purpose — this is the single intent
+   * generation choke point, so "the player's input is dead" can only ever be
+   * half-applied if it were checked in two places. Note the overlap with the
+   * death gate below is deliberate rather than redundant: the death gate covers
+   * the CORPSE, while this covers the RUN, so "no intent" holds at the choke
+   * point instead of depending on a downstream system happening to consult the
+   * death tag too.
    */
   private deriveIntent(world: World): void {
-    const held = findRewardDraft(world) !== undefined;
+    const suppressed = findRewardDraft(world) !== undefined || isRunFailed(world);
 
     for (const id of world.query(PlayerInputComponent, IntentComponent)) {
       // A corpse must not have its neutralised intent re-derived from the device
@@ -157,11 +168,12 @@ export class PlayerControllerSystem implements System {
       const intent = world.getComponent(id, IntentComponent);
       if (input === undefined || intent === undefined) continue;
 
-      if (held) {
+      if (suppressed) {
         intent.moveVector = vec2(0, 0);
         intent.wantsToDash = false;
         intent.wantsToAttack = false;
         intent.wantsToCast = false;
+        intent.wantsToHazard = false;
         continue;
       }
 
@@ -169,6 +181,11 @@ export class PlayerControllerSystem implements System {
       intent.wantsToDash = input.buttonDashJustPressed;
       intent.wantsToAttack = input.buttonAttackJustPressed;
       intent.wantsToCast = input.buttonCastJustPressed;
+      // The player has no hazard key in this milestone, so the pulse is always
+      // cleared here rather than left to whatever a previous tick wrote. Keeping
+      // it explicit means "the player cannot plant hazards" is a fact stated at
+      // the intent producer, not an absence (spec 14 §3.4).
+      intent.wantsToHazard = false;
     }
   }
 }

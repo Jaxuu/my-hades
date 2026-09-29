@@ -109,8 +109,26 @@ export class ModifierSystem implements System {
     }
   }
 
-  /** Fixed hit dispatch chain (spec 05 §4.2 / spec 06 §4.4). */
-  private dispatchHit(event: HitEvent, context: ModifierContext): void {
+  /**
+   * Drop both tick-scoped buses at a run boundary (M8-T01, spec 14 §4.5).
+   *
+   * `GameSimulator.restartRun` reaches this through `Scheduler.reset`. Both buses
+   * are already empty at every tick boundary by invariant (this system full-drains
+   * them every tick), so this is defensive rather than load-bearing today — but it
+   * is the honest counterpart to `DeathSystem.reset`, and it means "no bus
+   * survives a restart" is a property of the SYSTEM rather than a property of
+   * "nothing happened to leave anything behind".
+   *
+   * `clear()` rather than `drain()`: there is no consumer to hand the events to,
+   * so discarding without observing is exactly the right primitive — the same
+   * asymmetry `EventQueue.clear` documents.
+   */
+  public reset(): void {
+    this.events.clear();
+    this.dashEvents.clear();
+  }
+
+  /** Fixed hit dispatch chain (spec 05 §4.2 / spec 06 §4.4). */  private dispatchHit(event: HitEvent, context: ModifierContext): void {
     // 1. Anti-recursion: a modifier-sourced hit never re-enters modifier dispatch.
     if (event.sourceModifier !== null) return;
 

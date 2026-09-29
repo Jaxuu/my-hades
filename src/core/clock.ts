@@ -56,4 +56,20 @@ export class FixedClock {
     }
     this._totalTicks += ticks;
   }
+
+  /**
+   * Return the clock to tick `0` (M8-T01, spec 14 AC-03).
+   *
+   * The run-boundary primitive behind `GameSimulator.restartRun`: a new run
+   * starts at tick `0`. `elapsedSeconds` / `elapsedMs` need no reset because they
+   * are pure functions of `totalTicks` (the precision contract in the header) —
+   * they follow automatically, which is exactly why deriving time by
+   * multiplication instead of accumulating it pays off here.
+   *
+   * Note the clock is the ONLY thing that rewinds in this engine. `World.nextId`
+   * deliberately does not (see `World.clearEntities`).
+   */
+  public reset(): void {
+    this._totalTicks = 0;
+  }
 }

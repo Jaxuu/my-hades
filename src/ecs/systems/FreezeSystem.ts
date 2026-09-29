@@ -65,6 +65,9 @@ export class FreezeSystem implements System {
           intent.wantsToDash = false;
           intent.wantsToAttack = false;
           intent.wantsToCast = false;
+          // M8-T01: the hazard pulse is cleared too. A frozen enemy must not come
+          // out of hitstop holding a bomb it never got to plant (spec 14 AC-04).
+          intent.wantsToHazard = false;
         }
       }
     }

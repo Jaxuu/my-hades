@@ -25,4 +25,22 @@ export class Scheduler {
       system.update(world, ctx);
     }
   }
+
+  /**
+   * Hand every system its optional run-boundary hook (M8-T01, spec 14 §4.5).
+   *
+   * Called by `GameSimulator.restartRun` AFTER the world has been cleared, so a
+   * system that owns a tick-scoped bus can drop its contents instead of leaving
+   * events that reference destroyed entities. Registration order is used, which
+   * is the same order `run` uses — deterministic by construction.
+   *
+   * Most systems have no hook and are skipped by the optional call: this engine's
+   * whole design is "no cross-tick hidden state", so implementing `reset` is the
+   * exception, not the rule.
+   */
+  public reset(): void {
+    for (const system of this.systems) {
+      system.reset?.();
+    }
+  }
 }

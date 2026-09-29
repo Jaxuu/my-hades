@@ -53,6 +53,7 @@ import {
 import { EnemyFactory } from '../prefabs/EnemyFactory';
 import type { EnemySpawnOptions } from '../prefabs/spawn-helpers';
 import { draftRewards } from '../rewards/RewardPool';
+import { isRunFailed } from '../components/GameStateComponent';
 
 /**
  * Extra world units of separation between a wave's configured enemies and the
@@ -97,6 +98,14 @@ export class EncounterSystem implements System {
   public readonly name = 'EncounterSystem';
 
   public update(world: World, ctx: SystemContext): void {
+    // M8-T01 (spec 14 AC-06): a FAILED RUN is inert. Without this gate the room
+    // would keep its schedule while the player's corpse lies on the floor — the
+    // next wave would spawn 30 ticks after the wipe, which is precisely the "the
+    // game carries on like an enemy dying" behaviour AC-02 forbids. Evaluated
+    // ONCE per tick, before the entity loop, so the verdict cannot differ between
+    // two rooms within a tick.
+    if (isRunFailed(world)) return;
+
     for (const id of world.query(EncounterStateComponent)) {
       const encounter = world.getComponent(id, EncounterStateComponent);
       if (encounter === undefined) continue;

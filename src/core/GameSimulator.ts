@@ -28,6 +28,21 @@ export interface GameSimulatorOptions {
    * logic layer (ADR-004 §Decision 3).
    */
   readonly seed?: number;
+  /**
+   * How to ASSEMBLE a run (M8-T01, spec 14 AC-03).
+   *
+   * A callback the caller supplies, invoked by `GameSimulator.restartRun` to
+   * rebuild the world after it has been cleared. It is a CONSTRUCTOR option
+   * rather than a `restartRun` parameter so that the restart signature stays the
+   * one the milestone asks for (`restartRun(newSeed?)`) while `GameSimulator`
+   * stays free of game concepts: the simulator does not know what a player, a
+   * room or a game state is — it only knows that a caller can build one.
+   *
+   * Omit it and `restartRun` still clears the world, reseeds and rewinds the
+   * clock; the world is simply left empty. That is the honest behaviour for a
+   * simulator whose caller never declared a run shape.
+   */
+  readonly runSetup?: (world: World) => void;
 }
 
 export interface ComponentSnapshot {
@@ -52,6 +67,7 @@ export class GameSimulator {
   private readonly clock: FixedClock;
   private readonly input: InputQueue;
   private readonly scheduler: Scheduler;
+  private readonly runSetup: ((world: World) => void) | undefined;
 
   constructor(options: GameSimulatorOptions = {}) {
     this.clock = new FixedClock(options.fps !== undefined ? { fps: options.fps } : {});
@@ -62,6 +78,7 @@ export class GameSimulator {
     this.world = options.seed !== undefined ? new World({ seed: options.seed }) : new World();
     this.input = new InputQueue();
     this.scheduler = new Scheduler();
+    this.runSetup = options.runSetup;
     for (const system of options.systems ?? []) {
       this.scheduler.register(system);
     }
@@ -149,6 +166,44 @@ export class GameSimulator {
       );
     }
     this.step(targetTick - this.clock.totalTicks);
+  }
+
+  /**
+   * Throw the current run away and start a fresh one (M8-T01, spec 14 AC-03).
+   *
+   * The ONLY way back from `RUN_FAILED`, and the only operation in this engine
+   * that rewinds anything. The steps are ordered, and the order is the contract
+   * (spec 14 §4.5):
+   *
+   *  1. `world.clearEntities()` — every entity goes: the player, the room,
+   *    corpses, armed hazards, in-flight projectiles, unspent hitboxes, and every
+   *    modifier the player had accumulated. Note `World.nextId` is NOT reset, on
+   *    purpose: ids must never be reused (`GameRenderer.retired` depends on it).
+   *  2. `world.reseed(...)` — a NEW seed. `newSeed` if given, otherwise the
+   *    previous seed plus one. Incrementing rather than rolling is what makes
+   *    "restart twice from the same starting seed" reproducible (ADR-004).
+   *  3. `input.clear()` — drop SCHEDULED input events. Without this the first
+   *    tick of the new run would receive the previous run's last `move` / key
+   *    events, which is replay contamination rather than a leftover.
+   *  4. `scheduler.reset()` — let systems that own a tick-scoped bus drop its
+   *    contents (the death bus deliberately keeps the tick's deaths, spec 08
+   *    §3.3, and those events reference entities step 1 just destroyed).
+   *  5. `clock.reset()` — back to tick `0`.
+   *  6. `runSetup(world)` — rebuild the run's entities.
+   *
+   * Steps 1–2 happen BEFORE 6 so that `runSetup` sees an empty world with the new
+   * generator, i.e. the same conditions a fresh construction has. Anything
+   * `runSetup` draws is therefore drawn from the new stream, in the same order,
+   * for the same seed — which is what makes a restarted run replayable.
+   */
+  public restartRun(newSeed?: number): void {
+    const seed = newSeed ?? this.world.rng.seed + 1;
+    this.world.clearEntities();
+    this.world.reseed(seed);
+    this.input.clear();
+    this.scheduler.reset();
+    this.clock.reset();
+    this.runSetup?.(this.world);
   }
 
   /**

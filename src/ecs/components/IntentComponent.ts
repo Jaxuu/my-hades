@@ -21,13 +21,14 @@
  *  - `moveVector` is PERSISTENT, exactly like the old `InputComponent.moveVector`:
  *    an empty input frame leaves it untouched, so "hold the stick" is expressed by
  *    retaining the last vector.
- *  - `wantsToDash` / `wantsToAttack` / `wantsToCast` are SINGLE-TICK PULSES
- *    (rising-edge semantics). The consumer (DashSystem / CombatActionSystem) sets
- *    them back to `false` after evaluating its gate. This preserves the "holding
- *    the dash key does not auto-repeat a dash once the cooldown lapses" contract
- *    (spec 03 §4.3): if the consumer were skipped (e.g. while frozen) the pulse
- *    stays set, which is why FreezeSystem explicitly clears the whole intent while
- *    an entity is frozen (spec 04 §4.3).
+ *  - `wantsToDash` / `wantsToAttack` / `wantsToCast` / `wantsToHazard` are
+ *    SINGLE-TICK PULSES (rising-edge semantics). The consumer (DashSystem /
+ *    CombatActionSystem / HazardSystem) sets them back to `false` after
+ *    evaluating its gate. This preserves the "holding the dash key does not
+ *    auto-repeat a dash once the cooldown lapses" contract (spec 03 §4.3): if the
+ *    consumer were skipped (e.g. while frozen) the pulse stays set, which is why
+ *    FreezeSystem explicitly clears the whole intent while an entity is frozen
+ *    (spec 04 §4.3).
  *  - `aimRadians` is PERSISTENT, like `moveVector`, and `null` means "this entity
  *    has no facing of its own". It exists so an entity can express "face THIS way
  *    without moving" through the intent seam instead of writing
@@ -73,12 +74,33 @@ export class IntentComponent extends ComponentBase {
    */
   public wantsToCast: boolean;
 
+  /**
+   * Logical hazard-planting intent for this tick (single-tick pulse; consumer
+   * clears it).
+   *
+   * M8-T01 (spec 14 AC-01) adds the FOURTH action pulse, and it follows the
+   * contract of the other three verbatim: raised by an intent producer
+   * (`AISystem`, on the tick a windup ends — alongside `wantsToAttack`), and
+   * read-and-cleared by its consumer (`HazardSystem`) BEFORE the gate, so a
+   * rejected pulse is DROPPED rather than buffered (spec 03 §4.3). `FreezeSystem`
+   * and `DeathSystem` clear it too, for the same reason they clear the others:
+   * a frozen or dead entity must not be left holding a bomb.
+   *
+   * The PLAYER never raises it in this milestone — `PlayerControllerSystem`
+   * writes `false` unconditionally, because there is no hazard key on the
+   * device. The pulse exists on every combatant for the same reason
+   * `wantsToCast` does: intent is a shared vocabulary, and an enemy is not a
+   * special kind of thing (spec 04 §3.1).
+   */
+  public wantsToHazard: boolean;
+
   constructor(
     moveVector: Vec2 = vec2(0, 0),
     wantsToDash = false,
     wantsToAttack = false,
     aimRadians: number | null = null,
     wantsToCast = false,
+    wantsToHazard = false,
   ) {
     super();
     this.moveVector = moveVector;
@@ -86,6 +108,7 @@ export class IntentComponent extends ComponentBase {
     this.wantsToAttack = wantsToAttack;
     this.aimRadians = aimRadians;
     this.wantsToCast = wantsToCast;
+    this.wantsToHazard = wantsToHazard;
   }
 }
 

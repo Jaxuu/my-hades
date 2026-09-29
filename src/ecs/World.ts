@@ -77,6 +77,44 @@ export class World {
     return this.alive.has(id);
   }
 
+  /**
+   * Destroy EVERY entity, leaving an empty world (M8-T01, spec 14 AC-03).
+   *
+   * The world-reset primitive `GameSimulator.restartRun` is built on. It clears
+   * the alive set and every component store in one pass rather than calling
+   * `destroyEntity` per entity — same observable result, no per-entity liveness
+   * assertions on a path that is destroying everything anyway.
+   *
+   * `nextId` IS DELIBERATELY NOT RESET, and this is a P0 rather than a tidiness
+   * choice (spec 14 I8 / risk R2). `GameRenderer.retired` is a set of ids whose
+   * death FX has already finished and which must NEVER be given a view again; it
+   * is safe only because `EntityId`s are monotonically increasing and never
+   * reused (spec 10 §4.5). Resetting the counter would hand the NEXT run's player
+   * an id that is already in `retired` — a player that is permanently invisible
+   * on screen, with no logic-layer test able to see it. Ids keep climbing across
+   * runs; a run boundary is not an identity boundary.
+   */
+  public clearEntities(): void {
+    this.alive.clear();
+    for (const store of this.stores.values()) {
+      store.clear();
+    }
+  }
+
+  /**
+   * Reseed the world's ONE PRNG (M8-T01).
+   *
+   * Reseeding is a RUN-BOUNDARY operation, not a gameplay one: it is called only
+   * by `GameSimulator.restartRun`, with a seed that came either from the caller
+   * or from the previous seed (ADR-004 §Decision 3 — the logic layer never
+   * INVENTS a seed, and a pure function of the previous seed is not inventing
+   * one). Within a run the generator is never reseeded, which is what keeps a
+   * replay exact.
+   */
+  public reseed(seed: number): void {
+    this.rng.reseed(seed);
+  }
+
   public destroyEntity(id: EntityId): void {
     this.assertAlive(id);
     this.alive.delete(id);

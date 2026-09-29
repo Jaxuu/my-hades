@@ -690,7 +690,7 @@ describe('G6 · hitstop pauses the FSM without eating frames (AC-06)', () => {
 /* ========================================================================== *
  * G7 · pipeline order                                                        *
  * ========================================================================== */
-describe('G7 · canonical 15-segment pipeline order (AC-07)', () => {
+describe('G7 · canonical 16-segment pipeline order (AC-07)', () => {
   it('slots AISystem between the freeze gate and the advance systems', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
@@ -698,6 +698,7 @@ describe('G7 · canonical 15-segment pipeline order (AC-07)', () => {
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',
+      'HazardSystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',

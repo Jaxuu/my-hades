@@ -5,11 +5,12 @@
  * specs/07_enemy_ai_spec.md §5.2, specs/08_encounter_and_death_spec.md §5.2 and
  * specs/11_roguelike_loop_spec.md §5.2.
  *
- * Order (HARD CONTRACT, 15 segments):
+ * Order (HARD CONTRACT, 16 segments):
  *   TransformSnapshotSystem -> PlayerControllerSystem -> FreezeSystem -> AISystem
- *     -> MovementSystem -> DashSystem -> StateSystem -> CombatActionSystem
- *     -> CollisionSystem -> StatusEffectSystem -> ModifierSystem -> DeathSystem
- *     -> EncounterSystem -> RewardSystem -> LifespanSystem.
+ *     -> HazardSystem -> MovementSystem -> DashSystem -> StateSystem
+ *     -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
+ *     -> ModifierSystem -> DeathSystem -> EncounterSystem -> RewardSystem
+ *     -> LifespanSystem.
  *
  * Why this exact order:
  * -1. TransformSnapshotSystem is the M5-T02 INSERTION and it sits AHEAD of every
@@ -39,6 +40,28 @@
  *     verdict as the action systems it feeds, or an enemy would come out of hitstop
  *     one tick later than the player. It changes no existing system's relative
  *     position and LifespanSystem stays LAST.
+ *  0c. HazardSystem is the M8-T01 INSERTION — and it is the FIRST milestone since
+ *     M1 to add a genuinely NEW segment rather than extending an existing one.
+ *     It sits immediately AFTER AISystem and BEFORE MovementSystem, and all three
+ *     halves of that slot are forced (specs/14_aoe_and_run_lifecycle_spec.md §4.3):
+ *       - AFTER AISystem: the `wantsToHazard` pulse is raised by the AI in THIS
+ *         tick, so a consumer that ran earlier would always be one tick late.
+ *       - BEFORE CollisionSystem: the blast must be collision-tested on the very
+ *         tick it is spawned, which is what makes the blast's `activeTicks = 1`
+ *         mean "exactly one hit test" instead of "a silent no-op" (contrast the
+ *         Zeus bolt / Poseidon shockwave, which need 2 because ModifierSystem
+ *         injects them AFTER CollisionSystem).
+ *       - BEFORE MovementSystem DELIBERATELY: the AoE lands on the ground the
+ *         target is standing on at the START of the tick, so this tick's
+ *         displacement is the dodge window. Running after MovementSystem would
+ *         land the telegraph where the target ENDED UP.
+ *     Why a new segment rather than a tail phase on an existing system (the
+ *     M7-T01 route): a hazard owns an independent lifecycle and its own event
+ *     source (an intent pulse), so folding it into MovementSystem's tail would
+ *     create a branch that has nothing to do with motion. The cost is real and
+ *     was paid: the six `toEqual` pipeline pinning tests were updated to 16
+ *     segments. It changes no EXISTING system's relative position, and
+ *     LifespanSystem stays LAST.
  *  1. MovementSystem integrates position against the state decided on the PREVIOUS
  *     tick. Running it before the dash/state systems means a dash started this tick
  *     begins displacing on the next tick, giving exactly 15 movement ticks for a
@@ -126,6 +149,7 @@ import { createDefaultModifierRegistry } from '../modifiers/index';
 import { PlayerControllerSystem } from './PlayerControllerSystem';
 import { FreezeSystem } from './FreezeSystem';
 import { AISystem } from './AISystem';
+import { HazardSystem } from './HazardSystem';
 import { MovementSystem } from './MovementSystem';
 import { DashSystem } from './DashSystem';
 import { StateSystem } from './StateSystem';
@@ -170,6 +194,7 @@ export function createDefaultSystems(
     new PlayerControllerSystem(),
     new FreezeSystem(),
     new AISystem(),
+    new HazardSystem(),
     new MovementSystem(),
     new DashSystem(dashEvents),
     new StateSystem(),

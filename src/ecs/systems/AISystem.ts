@@ -59,6 +59,7 @@ import type { EntityId } from '../Entity';
 import type { Vec2 } from '../../core/math';
 import { lengthVec2, normalizeVec2, vec2 } from '../../core/math';
 import { AIControllerComponent, AIState } from '../components/AIControllerComponent';
+import { HazardCasterComponent } from '../components/HazardCasterComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { ActionState, StateComponent } from '../components/StateComponent';
 import { TransformComponent } from '../components/TransformComponent';
@@ -106,6 +107,7 @@ export class AISystem implements System {
       // never leak through, and the attack pulse is exactly one tick wide.
       intent.moveVector = vec2(0, 0);
       intent.wantsToAttack = false;
+      intent.wantsToHazard = false;
       intent.aimRadians = null;
 
       // --- Gate 1: hitstun INTERRUPTS the FSM ----------------------------
@@ -165,6 +167,15 @@ export class AISystem implements System {
             // later in the same pipeline), which spawns the hitbox along the
             // facing MovementSystem just applied from `aimRadians`.
             intent.wantsToAttack = true;
+            // M8-T01 (spec 14 AC-01): a hazard caster plants its AoE on the SAME
+            // tick its swing lands, so the melee and the delayed blast are two
+            // halves of one attack rather than two alternating ones. The pulse is
+            // still only a PULSE — the AI never creates an entity and never reads
+            // a target position; `HazardSystem` (index 4) owns both (spec 07
+            // AC-01: the AI's output is intent, nothing else).
+            if (world.getComponent(id, HazardCasterComponent) !== undefined) {
+              intent.wantsToHazard = true;
+            }
             ai.state = AIState.COOLDOWN;
             ai.ticksRemaining = ai.cooldownTicks;
           }

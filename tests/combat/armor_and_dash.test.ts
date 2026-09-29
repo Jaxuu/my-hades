@@ -706,13 +706,14 @@ describe('G4 · DashSystem publishes one DashEvent per dash entry (AC-03)', () =
  * G5 · pipeline + zero regression + elite assembly                           *
  * ========================================================================== */
 describe('G5 · pipeline unchanged, zero regression, elite assembly (AC-05 / AC-06)', () => {
-  it('keeps the canonical 15-segment order, with ModifierSystem after DashSystem', () => {
+  it('keeps the canonical 16-segment order, with ModifierSystem after DashSystem', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'TransformSnapshotSystem',
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',
+      'HazardSystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',

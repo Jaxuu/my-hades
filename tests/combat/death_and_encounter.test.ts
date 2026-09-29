@@ -848,7 +848,7 @@ describe('G5 · wave 2 spawns exactly delayTicks after the wipe was detected (AC
 /* ========================================================================== *
  * G6 · pipeline order                                                        *
  * ========================================================================== */
-describe('G6 · canonical 15-segment pipeline order (AC-07)', () => {
+describe('G6 · canonical 16-segment pipeline order (AC-07)', () => {
   it('slots Death then Encounter after every damage source, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
@@ -856,6 +856,7 @@ describe('G6 · canonical 15-segment pipeline order (AC-07)', () => {
       'PlayerControllerSystem',
       'FreezeSystem',
       'AISystem',
+      'HazardSystem',
       'MovementSystem',
       'DashSystem',
       'StateSystem',
