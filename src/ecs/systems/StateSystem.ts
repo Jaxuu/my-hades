@@ -16,6 +16,11 @@
  * machine, so `ticksInState` is preserved across the freeze and RESUMES from where
  * it stopped (spec 04 AC-02).
  *
+ * DEAD entities are skipped before even that (M4-T02, spec 08 §4.2): a corpse's
+ * state machine is over. Its `ticksInState` stops where it stood — including the
+ * `HITSTUN` it died in — which is exactly what "inert" means, and why a test must
+ * never use the action state as evidence that a corpse was *not* hit (spec 08 §6.4).
+ *
  * Holds NO cross-tick hidden state: the machine is fully described by
  * `StateComponent.state` / `StateComponent.ticksInState` (spec 00 §6.1).
  */
@@ -31,12 +36,15 @@ import {
 import { DEFAULT_DASH_DURATION_TICKS, DashStatsComponent } from '../components/DashStatsComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { isFrozen } from '../components/FreezeComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class StateSystem implements System {
   public readonly name = 'StateSystem';
 
   public update(world: World, _ctx: SystemContext): void {
     for (const id of world.query(StateComponent)) {
+      // Death first: the state machine of a corpse is finished (spec 08 §4.2).
+      if (isDead(world, id)) continue;
       if (isFrozen(world, id)) continue;
 
       const state = world.getComponent(id, StateComponent);

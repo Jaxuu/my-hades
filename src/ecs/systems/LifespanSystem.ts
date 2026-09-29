@@ -9,6 +9,14 @@
  * Expiry is measured in Ticks (integers) on the component, never in wall-clock
  * time, so it is fps-independent and replay-exact. The system holds no hidden
  * cross-tick state (spec 00 §6.1).
+ *
+ * DELIBERATELY NOT gated on death (M4-T02, spec 08 §4.2): a hitbox is not a
+ * combatant and has no `HealthComponent` — a corpse's in-flight swing still ages
+ * out on schedule, keeping its full `activeTicks` window. Retirement of a DEAD
+ * owner's swing is enforced where it belongs, at the point of use, by
+ * `CollisionSystem`'s owner gate; expiring it early here would instead couple
+ * expiry to a game concept and break the "a hitbox lives exactly `activeTicks`
+ * ticks" contract that spec 03 §6 pins (spec 08 §10 trade-off 3).
  */
 
 import type { System, SystemContext } from '../System';

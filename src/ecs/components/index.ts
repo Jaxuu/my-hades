@@ -14,3 +14,5 @@ export * from './KnockbackComponent';
 export * from './ModifierComponent';
 export * from './StatusEffectComponent';
 export * from './AIControllerComponent';
+export * from './DeadTagComponent';
+export * from './EncounterStateComponent';

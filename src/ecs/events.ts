@@ -1,23 +1,29 @@
 /**
- * Tick-scoped event bus. See specs/05_boon_modifier_spec.md §3.1 / §3.2 / §4.1.
+ * Tick-scoped event buses. See specs/05_boon_modifier_spec.md §3.1 / §3.2 / §4.1
+ * and specs/08_encounter_and_death_spec.md §3.3.
  *
- * This is the seam that turns "a hit happened" from an internal side effect of
- * CollisionSystem into an explicit, observable FACT that any later system can
- * react to. The M3-T01 modifier engine (ModifierSystem) is the first consumer;
- * future hooks (OnKill, OnDash, ...) reuse the same queue with a different
- * payload type — the generic parameter is the whole extension story.
+ * This is the seam that turns "a hit happened" (and, as of M4-T02, "an entity
+ * died") from an internal side effect of a system into an explicit, observable
+ * FACT that any later system can react to. The M3-T01 modifier engine
+ * (ModifierSystem) is the first consumer; future hooks (OnKill, OnDash, ...)
+ * reuse the same queue with a different payload type — the generic parameter is
+ * the whole extension story. M4-T02 cashes that in with a SECOND payload type on
+ * its own bus ({@link EntityDeathEvent}), which is why the two shipped buses are
+ * separate instances rather than one `HitEvent | EntityDeathEvent` queue: a
+ * consumer of one must never have to discriminate the other.
  *
- * NOT cross-tick state: the queue is a WIRE between two systems within a single
- * tick. ModifierSystem drains it in full every tick, so its observable state at
- * every tick boundary is `size === 0` (spec 05 C5). It lives here rather than on
- * `World` so the generic ECS layer stays free of game concepts, and it is passed
- * by constructor injection rather than through `SystemContext` so the frozen
- * harness contracts (clock / step / SystemContext) are left untouched
- * (spec 05 C6 / §5.3).
+ * NOT cross-tick state: the queue is a WIRE between systems within a single tick.
+ * Each bus has exactly one drainer (ModifierSystem for the hit bus, DeathSystem's
+ * `clear()` for the death bus), so its observable state at a tick boundary is
+ * bounded and deterministic. It lives here rather than on `World` so the generic
+ * ECS layer stays free of game concepts, and it is passed by constructor
+ * injection rather than through `SystemContext` so the frozen harness contracts
+ * (clock / step / SystemContext) are left untouched (spec 05 C6 / §5.3).
  *
  * Determinism: `emit` order is the production order (CollisionSystem iterates
- * hitboxes and targets by ascending id), and `drain` preserves that FIFO order,
- * so the sequence of injected entities is reproducible tick for tick.
+ * hitboxes and targets by ascending id; DeathSystem iterates dying entities by
+ * ascending id), and `drain` preserves that FIFO order, so the sequence of
+ * injected entities is reproducible tick for tick.
  */
 
 import type { EntityId } from './Entity';
@@ -63,10 +69,38 @@ export interface HitEvent {
 }
 
 /**
+ * A resolved death, as a pure fact (M4-T02). See
+ * specs/08_encounter_and_death_spec.md §3.3 / §4.1.
+ *
+ * Emitted by `DeathSystem` in the same tick it mounts the `DeadTagComponent` —
+ * i.e. at the END of the tick in which `hp` reached `0`. Exactly ONE event is
+ * published per entity, ever: the producer skips anything already tagged, and
+ * `markDead` is idempotent (spec 08 AC-01).
+ *
+ * Carries no policy, exactly like {@link HitEvent}: it says WHO died and WHEN,
+ * never what should happen as a result. "Therefore the room is cleared" is the
+ * encounter scheduler's business (spec 08 §4.3), and "therefore play the death
+ * VFX" is the render layer's.
+ *
+ * Deliberately minimal — `tick` + `entityId` only. Faction, position and cause of
+ * death are all readable from the corpse itself for as long as the corpse exists
+ * (and this milestone never destroys it, spec 08 §10 trade-off 1), so copying them
+ * into the event would be redundant state that could drift out of sync. Keeping
+ * the payload free of game types is also what lets this live in the generic ECS
+ * layer rather than next to the components.
+ */
+export interface EntityDeathEvent {
+  /** Tick the death was resolved on (`SystemContext.tick` of the producer). */
+  readonly tick: number;
+  /** The entity that died. Still ALIVE in the world — death is a state, not a delete. */
+  readonly entityId: EntityId;
+}
+
+/**
  * FIFO event queue shared by one producer and one consumer per tick.
  *
  * @typeParam T Payload type; defaults to {@link HitEvent}, so `new EventQueue()`
- *   is a hit-event bus. New hooks instantiate `EventQueue<SomeOtherEvent>`.
+ *   is a hit-event bus. The death bus is `new EventQueue<EntityDeathEvent>()`.
  */
 export class EventQueue<T = HitEvent> {
   private pending: T[] = [];
@@ -92,7 +126,15 @@ export class EventQueue<T = HitEvent> {
     return drained;
   }
 
-  /** Discard every pending event. For tests / fault recovery only. */
+  /**
+   * Discard every pending event.
+   *
+   * Two legitimate uses: tests / fault recovery, and the DEATH bus — `DeathSystem`
+   * clears it at the START of every update, which is what bounds that bus to a
+   * single tick instead of letting it grow for the whole run (spec 08 §3.3). Note
+   * the asymmetry with `drain()`: clearing DISCARDS without observing, which is
+   * only correct for a bus whose consumer is optional.
+   */
   public clear(): void {
     this.pending = [];
   }

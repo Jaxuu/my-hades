@@ -24,12 +24,20 @@
  * Holds NO cross-tick hidden state: the persistent bits live on
  * `PlayerInputComponent` (keysHeld / moveVector), the pulses live on
  * `IntentComponent` (spec 00 §6.1).
+ *
+ * DEAD entities are skipped in BOTH phases (M4-T02, spec 08 §4.2). Phase 2 is the
+ * one that matters: `deriveIntent` copies the persistent stick vector onto the
+ * intent every tick, so without the gate a player who dies while holding the stick
+ * would have its intent RE-FILLED one tick after `DeathSystem` neutralised it —
+ * leaving a corpse that visibly "still wants to walk". Skipping phase 1 as well
+ * keeps a corpse's held-key set frozen instead of mutating state nothing can use.
  */
 
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import { ATTACK_KEY, DASH_KEY, PlayerInputComponent } from '../components/PlayerInputComponent';
 import { IntentComponent } from '../components/IntentComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class PlayerControllerSystem implements System {
   public readonly name = 'PlayerControllerSystem';
@@ -55,6 +63,9 @@ export class PlayerControllerSystem implements System {
    */
   private bindHardwareInput(world: World, ctx: SystemContext): void {
     for (const id of world.query(PlayerInputComponent)) {
+      // A corpse's device snapshot is frozen, not updated (spec 08 §4.2).
+      if (isDead(world, id)) continue;
+
       const input = world.getComponent(id, PlayerInputComponent);
       if (input === undefined) continue;
 
@@ -110,6 +121,11 @@ export class PlayerControllerSystem implements System {
    */
   private deriveIntent(world: World): void {
     for (const id of world.query(PlayerInputComponent, IntentComponent)) {
+      // A corpse must not have its neutralised intent re-derived from the device
+      // (spec 08 §4.2) — otherwise "dead entities output no intent" would last
+      // exactly one tick.
+      if (isDead(world, id)) continue;
+
       const input = world.getComponent(id, PlayerInputComponent);
       const intent = world.getComponent(id, IntentComponent);
       if (input === undefined || intent === undefined) continue;

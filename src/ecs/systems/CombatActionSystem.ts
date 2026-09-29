@@ -15,6 +15,12 @@
  *
  * Frozen entities are skipped entirely (spec 04 §4.7).
  *
+ * DEAD entities are skipped before even that (M4-T02, spec 08 §4.2): a corpse
+ * cannot swing. Skipping before the pulse read-and-clear is deliberate — the pulse
+ * is a one-tick wire between an intent producer and this consumer, and a corpse's
+ * intent has already been neutralised by `DeathSystem`, so there is nothing left to
+ * consume and nothing to buffer.
+ *
  * Holds NO cross-tick hidden state: every timing decision lives on
  * `StateComponent.ticksInState` (spec 00 §6.1).
  */
@@ -25,6 +31,7 @@ import { vec2 } from '../../core/math';
 import { ActionState, StateComponent } from '../components/StateComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { isFrozen } from '../components/FreezeComponent';
+import { isDead } from '../components/DeadTagComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { FactionComponent } from '../components/FactionComponent';
 import {
@@ -47,6 +54,8 @@ export class CombatActionSystem implements System {
     );
 
     for (const id of ids) {
+      // Death first: a corpse raises no new hitbox (spec 08 §4.2).
+      if (isDead(world, id)) continue;
       if (isFrozen(world, id)) continue;
 
       const intent = world.getComponent(id, IntentComponent);

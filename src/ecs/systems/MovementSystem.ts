@@ -10,6 +10,10 @@
  * move exactly like the player.
  *
  * Per-entity dispatch inside `integrate`, in priority order:
+ *   0. DEAD (death tag)    -> skip entirely: a corpse is not displaced, not even by
+ *                             an in-flight knockback (M4-T02, spec 08 §4.2). This is
+ *                             the gate that stops a knocked-back body from sliding
+ *                             across the arena after it dies.
  *   1. FROZEN  (hitstop)   -> skip entirely: no displacement, no intent read.
  *   2. HITSTUN             -> forced knockback displacement: `knockback.velocity`
  *                             integrated directly, NOT clamped by maxSpeed, NOT
@@ -19,6 +23,10 @@
  *   4. otherwise           -> normal locomotion from `intent.moveVector`. While
  *                             rooted, a non-null `intent.aimRadians` still steers
  *                             the facing (M4-T01 telegraph lock — spec 07 §3.3).
+ *
+ * Death outranks hitstop and hitstun: a corpse frozen mid-knockback must stay put
+ * whether or not its freeze has lapsed, so the dead gate is the only one that is
+ * independent of a counter's phase.
  *
  * The tick length is READ FROM THE SIMULATION CLOCK (`ctx.fixedDeltaSeconds`) and
  * never hard-coded, so behaviour is identical at any fps (spec 01 §5.2 / AC-05).
@@ -37,6 +45,7 @@ import { isFrozen } from '../components/FreezeComponent';
 import { KnockbackComponent } from '../components/KnockbackComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class MovementSystem implements System {
   public readonly name = 'MovementSystem';
@@ -55,6 +64,9 @@ export class MovementSystem implements System {
       const velocity = world.getComponent(id, VelocityComponent);
       const transform = world.getComponent(id, TransformComponent);
       if (intent === undefined || velocity === undefined || transform === undefined) continue;
+
+      // 0. Death: a corpse is not displaced at all (M4-T02, spec 08 §4.2).
+      if (isDead(world, id)) continue;
 
       // 1. Hitstop: a frozen entity neither moves nor responds to intent.
       if (isFrozen(world, id)) continue;

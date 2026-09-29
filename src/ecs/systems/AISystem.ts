@@ -26,8 +26,12 @@
  * point of the intent seam: a new enemy behaviour needs no new movement or combat
  * code (spec 07 §1.1).
  *
- * Two gates, in this order (spec 07 §4.6 — the order is NOT exchangeable):
+ * Three gates, in this order (spec 07 §4.6 + spec 08 §4.2 — the order is NOT
+ * exchangeable):
  *
+ *  -1. DEATH (`isDead`)      -> INERT: skip entirely, write nothing. A corpse owns
+ *      no intent and takes no decisions, permanently. This gate comes FIRST
+ *      because it is the only one that can never lapse.
  *   0. hitstop (`isFrozen`)  -> PAUSE: skip entirely, write nothing. FreezeSystem,
  *      which ran immediately before us, has already zeroed a still-frozen entity's
  *      intent, so the pause cannot buffer anything.
@@ -35,9 +39,15 @@
  *      A windup that was interrupted is DISCARDED, never resumed — after the stun
  *      the enemy re-evaluates from scratch.
  *
- * Gate 0 must come first: a single hit writes hitstop AND hitstun together, so if
- * the hitstun branch were tested first it would fire during the hitstop window and
- * downgrade the pause into a cancel, silently eating telegraph frames.
+ * Gate 0 must come first of the two live gates: a single hit writes hitstop AND
+ * hitstun together, so if the hitstun branch were tested first it would fire during
+ * the hitstop window and downgrade the pause into a cancel, silently eating
+ * telegraph frames.
+ *
+ * The death gate is not merely "the AI happens to write nothing": it is what makes
+ * AC-01's "a corpse outputs no intent" hold against a HAND-WRITTEN intent too. An
+ * AI entity whose intent is overwritten every tick by this system would otherwise
+ * still be driven after death by whatever was left in the component (spec 08 §6.3).
  *
  * Holds NO cross-tick hidden state: the whole machine lives on
  * `AIControllerComponent` (spec 07 C5).
@@ -55,6 +65,7 @@ import { TransformComponent } from '../components/TransformComponent';
 import { FactionComponent, areHostile } from '../components/FactionComponent';
 import { HealthComponent, isAlive } from '../components/HealthComponent';
 import { isFrozen } from '../components/FreezeComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class AISystem implements System {
   public readonly name = 'AISystem';
@@ -68,6 +79,10 @@ export class AISystem implements System {
     );
 
     for (const id of ids) {
+      // --- Gate -1: death is absolute (M4-T02, spec 08 §4.2) --------------
+      // Before the component fetch: a corpse costs one store lookup, nothing more.
+      if (isDead(world, id)) continue;
+
       const ai = world.getComponent(id, AIControllerComponent);
       const intent = world.getComponent(id, IntentComponent);
       const state = world.getComponent(id, StateComponent);

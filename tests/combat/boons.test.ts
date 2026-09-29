@@ -722,8 +722,8 @@ describe('G6 · EventQueue is a FIFO, copy-on-drain, tick-scoped wire (AC-07)', 
 /* ------------------------------------------------------------------ *
  * G7 · canonical pipeline order                                       *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 11-segment pipeline order (AC-08)', () => {
-  it('runs ... Collision -> StatusEffect -> Modifier -> Lifespan, keeping Lifespan last', () => {
+describe('G7 · canonical 13-segment pipeline order (AC-08)', () => {
+  it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'PlayerControllerSystem',
@@ -736,6 +736,8 @@ describe('G7 · canonical 11-segment pipeline order (AC-08)', () => {
       'CollisionSystem',
       'StatusEffectSystem',
       'ModifierSystem',
+      'DeathSystem',
+      'EncounterSystem',
       'LifespanSystem',
     ]);
 
@@ -750,6 +752,13 @@ describe('G7 · canonical 11-segment pipeline order (AC-08)', () => {
     // every advance system (it is an intent PRODUCER).
     expect(names.indexOf('AISystem')).toBeGreaterThan(names.indexOf('FreezeSystem'));
     expect(names.indexOf('AISystem')).toBeLessThan(names.indexOf('MovementSystem'));
+    // ... and the two M4-T02 slots (spec 08 §5.2): DeathSystem after every damage
+    // source and after the modifier dispatch, EncounterSystem after the death tag it
+    // reads, both before the last segment.
+    expect(names.indexOf('DeathSystem')).toBeGreaterThan(names.indexOf('CollisionSystem'));
+    expect(names.indexOf('DeathSystem')).toBeGreaterThan(names.indexOf('StatusEffectSystem'));
+    expect(names.indexOf('DeathSystem')).toBeGreaterThan(names.indexOf('ModifierSystem'));
+    expect(names.indexOf('EncounterSystem')).toBeGreaterThan(names.indexOf('DeathSystem'));
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);
   });
 

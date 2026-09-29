@@ -24,7 +24,7 @@ import type { EntityId } from '../Entity';
 import type { World } from '../World';
 import { Faction } from '../components/FactionComponent';
 import { DEFAULT_COMBATANT_MAX_SPEED, spawnCombatant } from './spawn-helpers';
-import type { CombatantSpawnOptions, DashTuningOptions } from './spawn-helpers';
+import type { DashTuningOptions, EnemySpawnOptions } from './spawn-helpers';
 
 /** Default enemy speed in world units per second. */
 export const DEFAULT_ENEMY_MAX_SPEED = DEFAULT_COMBATANT_MAX_SPEED;
@@ -32,7 +32,12 @@ export const DEFAULT_ENEMY_MAX_SPEED = DEFAULT_COMBATANT_MAX_SPEED;
 /** Optional dash tuning overrides; every field defaults to the DashStatsComponent default. */
 export type EnemyDashOptions = DashTuningOptions;
 
-export interface EnemySpawnOptions extends CombatantSpawnOptions {}
+/**
+ * An enemy spec. Re-exported from `spawn-helpers.ts`, where it is declared, so the
+ * encounter layer can describe a wave roster without importing this factory
+ * (spec 08 §3.2). Same declaration — not a copy, so the two can never drift.
+ */
+export type { EnemySpawnOptions };
 
 export class EnemyFactory {
   /**

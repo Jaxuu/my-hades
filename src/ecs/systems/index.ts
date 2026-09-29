@@ -8,5 +8,7 @@ export * from './CombatActionSystem';
 export * from './CollisionSystem';
 export * from './StatusEffectSystem';
 export * from './ModifierSystem';
+export * from './DeathSystem';
+export * from './EncounterSystem';
 export * from './LifespanSystem';
 export * from './pipeline';

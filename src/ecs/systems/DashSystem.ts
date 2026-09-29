@@ -27,6 +27,12 @@
  *
  * Frozen entities are skipped entirely (spec 04 §4.7): hitstop suppresses dash
  * entry, so no pulse is buffered while frozen (FreezeSystem clears it instead).
+ *
+ * DEAD entities are skipped before even that (M4-T02, spec 08 §4.2): a corpse
+ * cannot start a dash, cannot hold an i-frame tag, and cannot keep ticking a
+ * cooldown. The death gate precedes the freeze gate because death is permanent
+ * while a freeze lapses — an ordering that matters the moment a corpse dies with a
+ * freeze still armed.
  */
 
 import type { System, SystemContext } from '../System';
@@ -37,6 +43,7 @@ import { ActionState, StateComponent } from '../components/StateComponent';
 import { DashStatsComponent } from '../components/DashStatsComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { isFrozen } from '../components/FreezeComponent';
+import { isDead } from '../components/DeadTagComponent';
 import { INVULNERABLE_TAG, addTag, removeTag } from '../components/TagComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
@@ -54,6 +61,8 @@ export class DashSystem implements System {
     );
 
     for (const id of ids) {
+      // Death first: a corpse takes no action, not even a frozen one (spec 08 §4.2).
+      if (isDead(world, id)) continue;
       if (isFrozen(world, id)) continue;
 
       const intent = world.getComponent(id, IntentComponent);

@@ -72,6 +72,19 @@ export function assertPositiveInteger(value: number, label: string): void {
 }
 
 /**
+ * @throws RangeError if `value` is not a non-negative integer.
+ *
+ * The `0`-inclusive sibling of {@link assertPositiveInteger}, for counts where
+ * "none / immediately" is a legal value — encounter wave delays (spec 08 §3.4).
+ * Lives here so the whole validation vocabulary has one home.
+ */
+export function assertNonNegativeInteger(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative integer, received: ${String(value)}`);
+  }
+}
+
+/**
  * Resolve (and validate) dash tuning overrides.
  * @throws RangeError for non-positive multipliers / tick counts, or when
  *   `invulnerableTicks` exceeds `durationTicks` (an i-frame window longer than the
@@ -117,6 +130,21 @@ export interface CombatantSpawnOptions {
    */
   readonly ai?: AITuningOptions;
 }
+
+/**
+ * The spec an encounter wave hands to `EnemyFactory.spawn` (spec 08 §3.2).
+ *
+ * Declared HERE (rather than next to `EnemyFactory`) because it is the shared
+ * assembly vocabulary: `EncounterStateComponent` must be able to describe a wave's
+ * roster without the components layer depending on the prefabs layer. `EnemyFactory`
+ * re-exports it, so `import { EnemySpawnOptions } from './EnemyFactory'` keeps
+ * working — it is the same declaration, not a copy.
+ *
+ * Structurally identical to {@link CombatantSpawnOptions} today. Kept as its own
+ * name because a wave's roster is an ENEMY roster: the day enemies gain a field the
+ * player must not have, the narrowing belongs here and no call site changes.
+ */
+export type EnemySpawnOptions = CombatantSpawnOptions;
 
 /** Optional AI tuning overrides; every field defaults to its `AIControllerComponent` default. */
 export interface AITuningOptions {

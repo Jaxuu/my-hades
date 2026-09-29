@@ -1,13 +1,13 @@
 /**
  * Canonical per-tick system pipeline.
  * See specs/02_dash_and_state_spec.md §5.1, specs/03_combat_hitbox_spec.md §5.4,
- * specs/04_combat_feedback_spec.md §5.2, specs/05_boon_modifier_spec.md §5.2 and
- * specs/07_enemy_ai_spec.md §5.2.
+ * specs/04_combat_feedback_spec.md §5.2, specs/05_boon_modifier_spec.md §5.2,
+ * specs/07_enemy_ai_spec.md §5.2 and specs/08_encounter_and_death_spec.md §5.2.
  *
  * Order (HARD CONTRACT):
  *   PlayerControllerSystem -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem
  *     -> StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
- *     -> ModifierSystem -> LifespanSystem.
+ *     -> ModifierSystem -> DeathSystem -> EncounterSystem -> LifespanSystem.
  *
  * Why this exact order:
  *  0. PlayerControllerSystem is the new FIRST segment (M2-T02): it replaces the old
@@ -64,14 +64,31 @@
  *     LifespanSystem stays LAST.
  *  8. LifespanSystem runs LAST so it cannot destroy a hitbox before that hitbox has
  *     been collision-tested this tick — a hitbox gets its full `activeTicks` span.
+ *  9. DeathSystem is the M4-T02 INSERTION. It sits after EVERY damage source
+ *     (CollisionSystem and StatusEffectSystem are both upstream) and after
+ *     ModifierSystem, so the tick has fully played out before the dead are counted:
+ *     `hp` is final, boons have already reacted to the hits that landed, and a hit
+ *     landed on the tick its owner dies still counts. It sits BEFORE LifespanSystem
+ *     because LifespanSystem must stay LAST — running after it would let a hitbox be
+ *     destroyed before it had ever been collision-tested, silently shortening every
+ *     `activeTicks` window by one tick. It changes no existing system's relative
+ *     position.
+ * 10. EncounterSystem is the second M4-T02 INSERTION, and it must come AFTER
+ *     DeathSystem: its whole input is the death tag (`DeadTagComponent` is written at
+ *     the end of the tick by DeathSystem), so running earlier would delay every wave
+ *     transition by one tick and make `delayTicks` read one tick short. It must also
+ *     come before LifespanSystem, which stays LAST. Consequence, documented rather
+ *     than accidental: a wave spawned on tick `T` first ACTS on `T+1`, because every
+ *     per-entity system has already run this tick (spec 08 §6.2).
  *
  * Reordering any of these systems changes observable behaviour and will break the
  * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6,
- * spec 07 §6).
+ * spec 07 §6, spec 08 §6).
  */
 
 import type { System } from '../System';
 import { EventQueue } from '../events';
+import type { EntityDeathEvent } from '../events';
 import { PlayerControllerSystem } from './PlayerControllerSystem';
 import { FreezeSystem } from './FreezeSystem';
 import { AISystem } from './AISystem';
@@ -82,6 +99,8 @@ import { CombatActionSystem } from './CombatActionSystem';
 import { CollisionSystem } from './CollisionSystem';
 import { StatusEffectSystem } from './StatusEffectSystem';
 import { ModifierSystem } from './ModifierSystem';
+import { DeathSystem } from './DeathSystem';
+import { EncounterSystem } from './EncounterSystem';
 import { LifespanSystem } from './LifespanSystem';
 
 /**
@@ -92,8 +111,16 @@ import { LifespanSystem } from './LifespanSystem';
  *   callers are unaffected; tests may inject their own queue to observe the bus
  *   (spec 05 §6.5). A fresh queue per call means two simulators can never share
  *   events, which is what keeps replay deterministic (spec 05 §5.3).
+ * @param deathEvents Death bus owned by DeathSystem (producer; no mandatory
+ *   consumer, so DeathSystem CLEARS it at the start of every tick and its post-step
+ *   content is exactly "the deaths of the tick just processed"). Defaults to a
+ *   private queue, so callers that do not care about deaths need no change; tests
+ *   inject one to observe `EntityDeathEvent` (spec 08 §6.1).
  */
-export function createDefaultSystems(events: EventQueue = new EventQueue()): readonly System[] {
+export function createDefaultSystems(
+  events: EventQueue = new EventQueue(),
+  deathEvents: EventQueue<EntityDeathEvent> = new EventQueue<EntityDeathEvent>(),
+): readonly System[] {
   return [
     new PlayerControllerSystem(),
     new FreezeSystem(),
@@ -105,6 +132,8 @@ export function createDefaultSystems(events: EventQueue = new EventQueue()): rea
     new CollisionSystem(events),
     new StatusEffectSystem(),
     new ModifierSystem(events),
+    new DeathSystem(deathEvents),
+    new EncounterSystem(),
     new LifespanSystem(),
   ];
 }

@@ -742,8 +742,8 @@ describe('G6 · ModifierSystem dispatches through the registry (AC-04)', () => {
 /* ------------------------------------------------------------------ *
  * G7 · pipeline order + determinism                                   *
  * ------------------------------------------------------------------ */
-describe('G7 · canonical 11-segment pipeline and deterministic replay (AC-08/09)', () => {
-  it('runs ... Collision -> StatusEffect -> Modifier -> Lifespan, keeping Lifespan last', () => {
+describe('G7 · canonical 13-segment pipeline and deterministic replay (AC-08/09)', () => {
+  it('runs ... Collision -> StatusEffect -> Modifier -> Death -> Encounter -> Lifespan, keeping Lifespan last', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'PlayerControllerSystem',
@@ -756,6 +756,8 @@ describe('G7 · canonical 11-segment pipeline and deterministic replay (AC-08/09
       'CollisionSystem',
       'StatusEffectSystem',
       'ModifierSystem',
+      'DeathSystem',
+      'EncounterSystem',
       'LifespanSystem',
     ]);
 
@@ -768,6 +770,10 @@ describe('G7 · canonical 11-segment pipeline and deterministic replay (AC-08/09
     // systems; it must never drift past MovementSystem or ahead of FreezeSystem.
     expect(names.indexOf('AISystem')).toBeGreaterThan(names.indexOf('FreezeSystem'));
     expect(names.indexOf('AISystem')).toBeLessThan(names.indexOf('MovementSystem'));
+    // M4-T02 (spec 08 §5.2) slotted DeathSystem after every damage source and
+    // EncounterSystem right behind it, reading the death tag DeathSystem just wrote.
+    expect(names.indexOf('DeathSystem')).toBeGreaterThan(names.indexOf('StatusEffectSystem'));
+    expect(names.indexOf('EncounterSystem')).toBeGreaterThan(names.indexOf('DeathSystem'));
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);
   });
 

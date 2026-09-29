@@ -30,6 +30,13 @@
  *
  * Holds NO cross-tick hidden state: both counters (`remainingTicks`,
  * `ticksUntilProc`) live on the component (spec 00 §6.1).
+ *
+ * DEAD entities are skipped (M4-T02, spec 08 §4.2): a corpse stops taking damage
+ * over time. Note this is a SEMANTIC choice, not a numerical one — `applyDamage`
+ * clamps at `0`, so letting a corpse's poison tick would change no hit points. It
+ * is skipped because "death ends every ongoing process" is the contract the rest of
+ * the engine implements, and a status clock still running on a body is the one
+ * place that contract would visibly leak (spec 08 §8).
  */
 
 import type { System, SystemContext } from '../System';
@@ -37,6 +44,7 @@ import type { World } from '../World';
 import type { StatusEffect } from '../components/StatusEffectComponent';
 import { StatusEffectComponent } from '../components/StatusEffectComponent';
 import { applyDamage } from '../components/HealthComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class StatusEffectSystem implements System {
   public readonly name = 'StatusEffectSystem';
@@ -45,6 +53,9 @@ export class StatusEffectSystem implements System {
     // `query` returns a fresh ascending array, so rebuilding each entity's effect
     // list while we iterate is safe and stays deterministic.
     for (const id of world.query(StatusEffectComponent)) {
+      // A corpse's status clocks are stopped, not run out (spec 08 §4.2).
+      if (isDead(world, id)) continue;
+
       const component = world.getComponent(id, StatusEffectComponent);
       if (component === undefined) continue;
 

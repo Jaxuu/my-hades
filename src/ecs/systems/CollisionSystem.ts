@@ -32,6 +32,34 @@
  * §4.6). Every pre-M3 configuration keeps at least one of the two fields > 0, so
  * its behaviour is bit-for-bit unchanged.
  *
+ * DEATH GATES (M4-T02, spec 08 §4.2). Two guards, in this order, make "dead
+ * entities do not collide" true at the producer:
+ *
+ *  a. **Owner gate** — a hitbox whose owner is DEAD is skipped wholesale, before
+ *     the target loop. A corpse's swing is inert: its in-flight hitboxes deal no
+ *     damage, write no feedback and publish no event. (Note this is keyed on the
+ *     DEATH TAG, not on `world.isAlive`: a hitbox whose owner was *destroyed* keeps
+ *     working, which is the pre-M4 contract — the hitbox snapshots its faction and
+ *     is an independent entity precisely so it survives its owner. Only DEATH
+ *     retires a swing, because death is the one state the whole engine agrees on.)
+ *  b. **Target gate** — a dead target is skipped, so a corpse can never be hit.
+ *     This is what root-fixes "corpse-whipping": no repeated damage settlements, no
+ *     chained hitstop on a body that is already down, and no `hitEntities` entry to
+ *     feed a later hit.
+ *
+ * A THIRD guard closes the same-tick hole those two cannot see. Death is marked at
+ * the END of the tick (`DeathSystem` runs later), so within the tick that kills an
+ * entity the tag is not set yet — two different hitboxes could both settle on it,
+ * the second one writing a redundant (and potentially much longer) hitstop. A
+ * target whose `hp` is already `0` is therefore skipped as well: `applyDamage`
+ * clamps at `0`, so `hp <= 0` is an exact "already out of hit points" predicate and
+ * needs no extra bookkeeping. One entity, one settlement per tick.
+ *
+ * What is deliberately NOT guarded: an attacker whose `hp` reaches `0` earlier in
+ * the SAME tick's resolution still lands its own swing. Tick resolution is atomic —
+ * AC-01 constrains "from the NEXT tick onwards", and a mutual kill on the same tick
+ * is two simultaneous hits, not corpse-whipping (spec 08 §8).
+ *
  * This system stays POLICY-FREE (spec 05 C8): it reports that a hit happened; it
  * never decides what a boon should do about it.
  */
@@ -50,6 +78,7 @@ import { ActionState, StateComponent } from '../components/StateComponent';
 import { applyFreeze } from '../components/FreezeComponent';
 import { KnockbackComponent } from '../components/KnockbackComponent';
 import { INVULNERABLE_TAG, hasTag } from '../components/TagComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class CollisionSystem implements System {
   public readonly name = 'CollisionSystem';
@@ -82,16 +111,38 @@ export class CollisionSystem implements System {
       const hitbox = world.getComponent(hitboxId, HitboxComponent);
       if (hitboxTransform === undefined || hitbox === undefined) continue;
 
+      // (a) Owner gate: a dead entity's swing is inert (M4-T02, spec 08 §4.2).
+      // Checked once per hitbox, before the target loop — it is a property of the
+      // swing, not of any particular target.
+      if (isDead(world, hitbox.ownerEntityId)) continue;
+
       for (const targetId of targetIds) {
         if (targetId === hitboxId) continue;
         if (hitbox.hitEntities.includes(targetId)) continue;
 
+        // (b) Target gate: a corpse is not a hit target at all (M4-T02, spec 08
+        // §4.2). Placed before the component fetch and the geometry test so a dead
+        // body costs one store lookup, never a distance computation.
+        if (isDead(world, targetId)) continue;
+
         const targetTransform = world.getComponent(targetId, TransformComponent);
         const hurtbox = world.getComponent(targetId, HurtboxComponent);
         const targetFaction = world.getComponent(targetId, FactionComponent);
-        if (targetTransform === undefined || hurtbox === undefined || targetFaction === undefined) {
+        const targetHealth = world.getComponent(targetId, HealthComponent);
+        if (
+          targetTransform === undefined ||
+          hurtbox === undefined ||
+          targetFaction === undefined ||
+          targetHealth === undefined
+        ) {
           continue;
         }
+
+        // (c) Same-tick gate: an entity that ran out of hit points earlier in THIS
+        // tick is already settled. Without it, two hitboxes landing on the same
+        // victim in the same tick would both apply damage and both write feedback
+        // (chained hitstop) — the tag is not set until the tick ends (spec 08 §4.2).
+        if (targetHealth.hp <= 0) continue;
 
         // AC-01 — same side never damages itself.
         if (!areHostile(hitbox.faction, targetFaction.faction)) continue;

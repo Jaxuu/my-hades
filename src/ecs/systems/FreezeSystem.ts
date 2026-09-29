@@ -25,6 +25,13 @@
  * stable `remainingTicks = 0` keeps the snapshot shape identical before and after
  * a freeze, avoiding snapshot churn (spec 04 §4.2).
  *
+ * DEAD entities are skipped (M4-T02, spec 08 §4.2), so a corpse's counter stops
+ * where it stood instead of draining to zero. That is safe by construction: every
+ * consumer of `isFrozen` also skips dead entities, so the value is never read
+ * again — it is simply held stable rather than churned. This system is a pure
+ * countdown with no gameplay decision of its own, which is why the gate is a
+ * tidiness rule here and a correctness rule everywhere else.
+ *
  * Holds NO cross-tick hidden state: the whole countdown lives on the component.
  */
 
@@ -33,12 +40,16 @@ import type { World } from '../World';
 import { vec2 } from '../../core/math';
 import { FreezeComponent } from '../components/FreezeComponent';
 import { IntentComponent } from '../components/IntentComponent';
+import { isDead } from '../components/DeadTagComponent';
 
 export class FreezeSystem implements System {
   public readonly name = 'FreezeSystem';
 
   public update(world: World, _ctx: SystemContext): void {
     for (const id of world.query(FreezeComponent)) {
+      // A corpse's freeze is left where it stopped (spec 08 §4.2).
+      if (isDead(world, id)) continue;
+
       const freeze = world.getComponent(id, FreezeComponent);
       if (freeze === undefined) continue;
       if (freeze.remainingTicks <= 0) continue;
