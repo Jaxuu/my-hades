@@ -1,6 +1,7 @@
 /**
- * Room / encounter state. See specs/08_encounter_and_death_spec.md §3.2 / §4.3 and
- * specs/11_roguelike_loop_spec.md §3.1.
+ * Room / encounter state. See specs/08_encounter_and_death_spec.md §3.2 / §4.3,
+ * specs/11_roguelike_loop_spec.md §3.1 and specs/15_economy_and_victory_spec.md
+ * §3.5 (M9-T01 room sequence).
  *
  * POD component: data only, no behaviour. Every state transition lives in
  * `EncounterSystem`; this component is the WHOLE scheduler state, so the machine
@@ -12,12 +13,14 @@
  * hurtbox and no lifespan. `EncounterFactory.spawn` is the only writer of the
  * initial state; `EncounterSystem` is the only writer afterwards, EXCEPT for the
  * reward settlement hand-off (M6-T01): `RewardSystem` clears `pendingRewards` and
- * descends the room (spec 11 AC-04). Those two systems are the only writers, and
- * they write disjoint transitions.
+ * descends the room (spec 11 AC-04) — and, as of M9-T01, it also advances
+ * `currentRoomIndex` and swaps `waves` for the next room's configuration
+ * (spec 15 AC-03). Those two systems are the only writers, and they write
+ * disjoint transitions.
  *
- * The `isWaveCleared` / `findRewardDraft` helpers below are FREE FUNCTIONS (not
- * component methods), so the "components carry no behaviour" contract (spec 00
- * §6.1) stays intact — the same shape `TagComponent.hasTag` and
+ * The `isWaveCleared` / `findRewardDraft` / `isFinalRoom` helpers below are FREE
+ * FUNCTIONS (not component methods), so the "components carry no behaviour"
+ * contract (spec 00 §6.1) stays intact — the same shape `TagComponent.hasTag` and
  * `HealthComponent.isAlive` follow.
  */
 
@@ -130,6 +133,42 @@ export class EncounterStateComponent extends ComponentBase {
   public depth: number;
 
   /**
+   * The RUN's whole room table (M9-T01, spec 15 AC-03).
+   *
+   * `roomWaves[k]` is the wave configuration of room `k`. Immutable for the
+   * lifetime of the encounter, and held on the component (rather than in a module
+   * table) for the same reason `waves` is: the whole run — configuration included
+   * — is visible in the snapshot and replays with no external lookup.
+   *
+   * Room `0` is ALWAYS `waves` (the opening room), so a single-room run is simply
+   * `roomWaves.length === 1` and every pre-M9 call site is unchanged.
+   */
+  public roomWaves: readonly (readonly EncounterWaveConfig[])[];
+
+  /**
+   * How many rooms this run has (M9-T01). Always `roomWaves.length`, and `>= 1`.
+   *
+   * Stored rather than derived at the call site so the "final room" test in
+   * `EncounterSystem` / `RewardSystem` reads as a comparison between two fields of
+   * the same component, and so a snapshot shows the run's total length directly.
+   */
+  public maxRooms: number;
+
+  /**
+   * Index of the room currently being fought (M9-T01). Starts at `0`; incremented
+   * exactly once per settled reward draft, by `RewardSystem`.
+   *
+   * `currentRoomIndex === maxRooms - 1` is the FINAL room — the one whose clear
+   * ends the run with `RUN_WON` instead of rolling another draft (spec 15 AC-04).
+   *
+   * Deliberately NOT `depth`: `depth` is the difficulty dial (spec 11 AC-04) and
+   * counts DESCENTS, while this counts ROOMS. They advance together today, but
+   * keeping them separate means a future run that revisits a room can raise
+   * difficulty without lying about which room the player is in.
+   */
+  public currentRoomIndex: number;
+
+  /**
    * The pending boon draft, or `null` when there is nothing to choose (M6-T01).
    *
    * Written ONCE, by `EncounterSystem`, on the tick the room transitions to
@@ -157,6 +196,9 @@ export class EncounterStateComponent extends ComponentBase {
     trackedEntityIds: EntityId[] = [],
     depth = 0,
     pendingRewards: string[] | null = null,
+    roomWaves: readonly (readonly EncounterWaveConfig[])[] = [waves],
+    currentRoomIndex = 0,
+    maxRooms = roomWaves.length,
   ) {
     super();
     this.waves = waves;
@@ -166,7 +208,29 @@ export class EncounterStateComponent extends ComponentBase {
     this.trackedEntityIds = trackedEntityIds;
     this.depth = depth;
     this.pendingRewards = pendingRewards;
+    this.roomWaves = roomWaves;
+    this.currentRoomIndex = currentRoomIndex;
+    this.maxRooms = maxRooms;
   }
+}
+
+/**
+ * Whether the room the scheduler is working on is the run's FINAL room (M9-T01).
+ *
+ * The whole of AC-04 in one predicate: the final room's clear ends the run instead
+ * of opening a draft. Exported (rather than inlined twice) because two systems ask
+ * the same question — `EncounterSystem` when a room is cleared, and `RewardSystem`
+ * when a draft is settled — and "which room is last" must have exactly one answer.
+ *
+ * A component with `maxRooms === 0` (only reachable by hand-assembling one) is
+ * NOT final: `currentRoomIndex (0) >= maxRooms - 1 (-1)` would be true, and
+ * reporting a room that does not exist as "the last room" is the wrong way to be
+ * wrong. The guard makes the predicate answer `false` for a degenerate config, so
+ * the room keeps behaving as an ordinary one.
+ */
+export function isFinalRoom(encounter: EncounterStateComponent): boolean {
+  if (encounter.maxRooms <= 0) return false;
+  return encounter.currentRoomIndex >= encounter.maxRooms - 1;
 }
 
 /**

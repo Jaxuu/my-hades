@@ -4,10 +4,11 @@
  * and §7 (AC-01 .. AC-06), plus docs/architecture/ADR-004-deterministic-prng.md.
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 15-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
- * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
- * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
- * DeathSystem -> EncounterSystem -> RewardSystem -> LifespanSystem) and REAL
+ * canonical 17-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * -> FreezeSystem -> AISystem -> HazardSystem -> MovementSystem -> DashSystem ->
+ * StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem ->
+ * ModifierSystem -> DeathSystem -> EncounterSystem -> RewardSystem -> PickupSystem
+ * -> LifespanSystem) and REAL
  * prefab-assembled entities. Nothing is mocked, and ticks are advanced one at a time
  * so the timing contract is pinned per tick.
  *
@@ -159,15 +160,21 @@ function makeSim(seed: number = SEED): GameSimulator {
  * A one-wave room holding a single static enemy (no `ai`, so it never moves or
  * attacks — the room is a pure reward harness). Plus a player, so a reward has a
  * recipient and the hold gate has a subject.
+ *
+ * M9-T01: the room is declared as a THREE-room run (`rooms` repeats the same
+ * configuration twice), because clearing a run's LAST room now wins it outright
+ * instead of rolling a draft (spec 15 AC-04). A one-room declaration would make
+ * every descent below the end of the run, so the loop this suite exists to pin
+ * would have nowhere to go. Three rooms is the smallest run that still allows the
+ * two descents G7/G8 exercise.
  */
 function makeRewardRoom(
   sim: GameSimulator,
   enemyHp = 10,
 ): { readonly player: EntityId; readonly room: EntityId } {
+  const waves = [{ delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: enemyHp, hp: enemyHp }] }];
   const player = PlayerFactory.spawn(sim.world, { x: -10, y: 0, maxSpeed: 5 });
-  const room = EncounterFactory.spawn(sim.world, {
-    waves: [{ delayTicks: 0, enemies: [{ x: 6, y: 0, maxHp: enemyHp, hp: enemyHp }] }],
-  });
+  const room = EncounterFactory.spawn(sim.world, { waves, rooms: [waves, waves] });
   return { player, room };
 }
 

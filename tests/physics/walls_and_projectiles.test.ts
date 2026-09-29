@@ -4,10 +4,11 @@
  * contract) and §7 (AC-01 .. AC-04 / AC-06).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL `GameSimulator` with the
- * canonical 15-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
- * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
- * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
- * DeathSystem -> EncounterSystem -> RewardSystem -> LifespanSystem) and REAL
+ * canonical 17-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * -> FreezeSystem -> AISystem -> HazardSystem -> MovementSystem -> DashSystem ->
+ * StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem ->
+ * ModifierSystem -> DeathSystem -> EncounterSystem -> RewardSystem -> PickupSystem
+ * -> LifespanSystem) and REAL
  * prefab-assembled entities. Nothing is mocked, and ticks are advanced one at a time
  * so the timing contract is pinned per tick.
  *
@@ -773,7 +774,7 @@ describe('G6 · a projectile is retired by geometry, and cannot pass through it 
  * G7 · pipeline, pulse gating, determinism                                    *
  * ========================================================================== */
 describe('G7 · pipeline unchanged, pulse gating, determinism (AC-06)', () => {
-  it('keeps the canonical 16-segment order — M7-T01 adds NO segment of its own', () => {
+  it('keeps the canonical 17-segment order — M7-T01 adds NO segment of its own', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'TransformSnapshotSystem',
@@ -791,9 +792,10 @@ describe('G7 · pipeline unchanged, pulse gating, determinism (AC-06)', () => {
       'DeathSystem',
       'EncounterSystem',
       'RewardSystem',
+      'PickupSystem',
       'LifespanSystem',
     ]);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
     expect(names.indexOf('LifespanSystem')).toBe(names.length - 1);
 
     // The two slots M7-T01 RELIES ON (it reorders nothing):

@@ -596,10 +596,18 @@ const RUN_WAVES: readonly EncounterWaveConfig[] = [
   { delayTicks: 0, enemies: [{ x: 5, y: 0, maxHp: 100, hp: 100 }] },
 ];
 
-/** The run shape used by every restart test: one wave, so one wipe clears it. */
+/**
+ * The run shape used by every restart test: one wave, so one wipe clears it.
+ *
+ * M9-T01: the room is declared as a TWO-room run, because clearing a run's LAST
+ * room now wins it outright rather than rolling a draft (spec 15 AC-04). The
+ * determinism test below asserts the DRAFT the room rolls, so room 0 must not be
+ * the final room. The entity count is unaffected (`EncounterFactory.spawn` still
+ * creates exactly one room entity).
+ */
 function runSetup(world: World): void {
   PlayerFactory.spawn(world, { x: 0, y: 0, maxSpeed: MAX_SPEED });
-  EncounterFactory.spawn(world, { waves: RUN_WAVES });
+  EncounterFactory.spawn(world, { waves: RUN_WAVES, rooms: [RUN_WAVES] });
   GameStateFactory.spawn(world);
 }
 
@@ -772,9 +780,10 @@ describe('G5 · pipeline slot and zero regression (AC-10/AC-11)', () => {
       'DeathSystem',
       'EncounterSystem',
       'RewardSystem',
+      'PickupSystem',
       'LifespanSystem',
     ]);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
     expect(names.filter((name) => name === 'HazardSystem')).toHaveLength(1);
 
     const hazard = names.indexOf('HazardSystem');

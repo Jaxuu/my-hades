@@ -37,6 +37,7 @@ import { ActionState, StateComponent } from '../src/ecs/components/StateComponen
 import { isFrozen } from '../src/ecs/components/FreezeComponent';
 import { isDead } from '../src/ecs/components/DeadTagComponent';
 import { HazardComponent } from '../src/ecs/components/HazardComponent';
+import { PickupComponent, PickupKind } from '../src/ecs/components/PickupComponent';
 
 /**
  * The render layer's ONE constant contract: world units -> pixels (spec 09 C8).
@@ -79,6 +80,20 @@ const HURTBOX_STROKE_ALPHA = 0.35;
  * inside it.
  */
 const HAZARD_COLOR = 0xff2d2d;
+
+/**
+ * Pickup colours (M9-T01). Deliberately NOT in the hazard red family: loot is the
+ * one thing on the ground the player is supposed to run TOWARDS, so it must never
+ * be confusable with the one thing they are supposed to run away from.
+ */
+const GOLD_PICKUP_COLOR = 0xffd24d;
+const HEAL_PICKUP_COLOR = 0x4dff88;
+
+/** Pickup fill alpha. Solid enough to read at a glance, light enough to look like an item. */
+const PICKUP_FILL_ALPHA = 0.95;
+
+/** Pickup ring stroke width (px) — a thin outline so the coin reads against any background. */
+const PICKUP_RING_WIDTH = 1;
 
 /** Fill alpha of a hazard's warning circle at the START of its fuse. */
 const HAZARD_FILL_ALPHA_MIN = 0.08;
@@ -133,7 +148,7 @@ function shortestArcDelta(from: number, to: number): number {
 }
 
 /** View classification, decided by component presence (spec 09 §4.3). */
-export type ViewKind = 'hazard' | 'hitbox' | 'player' | 'enemy';
+export type ViewKind = 'pickup' | 'hazard' | 'hitbox' | 'player' | 'enemy';
 
 /** One entity's presentation object, plus the state its lifecycle needs. */
 export interface EntityView {
@@ -446,13 +461,22 @@ export class GameRenderer {
   /**
    * Classify and build the matching placeholder.
    *
-   * Order is hazard -> hitbox -> faction, and the hazard branch MUST come first
-   * (M8-T01): a telegraph owns no `HitboxComponent` and no `FactionComponent`
-   * (spec 14 I1/I2), so without its own branch it would fall through to the
-   * "no visual contract for this entity" early return and be silently invisible —
-   * which for a warning is the worst possible failure mode.
+   * Order is pickup -> hazard -> hitbox -> faction, and the two special branches
+   * MUST come first: a pickup owns no `HitboxComponent` and no `FactionComponent`
+   * (spec 15 I1), and a hazard telegraph owns neither either (spec 14 I1/I2). The
+   * `faction` branch's early return means "no visual contract for this entity", so
+   * without their own branches both would be silently invisible — which for a
+   * warning, or for loot the player is meant to walk towards, is the worst possible
+   * failure mode.
+   *
+   * M8-T01 added the hazard branch; M9-T01 prepended the pickup branch.
    */
   private createView(world: World, id: EntityId): EntityView | undefined {
+    const pickup = world.getComponent(id, PickupComponent);
+    if (pickup !== undefined) {
+      return this.createPickupView(pickup);
+    }
+
     const hazard = world.getComponent(id, HazardComponent);
     if (hazard !== undefined) {
       return this.createHazardView(hazard);
@@ -546,6 +570,36 @@ export class GameRenderer {
       layers.fill.alpha = HAZARD_FILL_ALPHA_MIN + (HAZARD_FILL_ALPHA_MAX - HAZARD_FILL_ALPHA_MIN) * t;
       layers.ring.alpha = HAZARD_RING_ALPHA_MIN + (HAZARD_RING_ALPHA_MAX - HAZARD_RING_ALPHA_MIN) * t;
     }
+  }
+
+  /**
+   * Build a pickup's placeholder (M9-T01): a small filled disc at the pickup's true
+   * radius, plus a thin ring so it reads against any background.
+   *
+   * Geometry is drawn ONCE from `PickupComponent.radius`, so a re-tuned pickup needs
+   * no renderer change — and the drawn size is the same number the logic layer
+   * measures its overlap test against, so "what you see is what you can touch".
+   *
+   * Colour is the only thing that differs between kinds, because gold and health are
+   * different promises and the player has to be able to tell them apart at a glance.
+   *
+   * No animation and no per-frame state: a pickup is a static object, and giving it
+   * a pulse would make it compete visually with the hazard telegraph, which is the
+   * one thing on the ground that must own the player's attention.
+   */
+  private createPickupView(pickup: PickupComponent): EntityView {
+    const color = pickup.kind === PickupKind.HEAL ? HEAL_PICKUP_COLOR : GOLD_PICKUP_COLOR;
+    const radiusPx = pickup.radius * PX_PER_UNIT;
+
+    const container = new Container();
+    const graphic = new Graphics();
+    graphic
+      .circle(0, 0, radiusPx)
+      .fill({ color, alpha: PICKUP_FILL_ALPHA })
+      .stroke({ width: PICKUP_RING_WIDTH, color: 0xffffff, alpha: 0.7 });
+    container.addChild(graphic);
+
+    return { container, kind: 'pickup', isDying: false, deathElapsedMs: 0, lastHp: undefined };
   }
 
   private createHitboxView(hitbox: HitboxComponent): EntityView {

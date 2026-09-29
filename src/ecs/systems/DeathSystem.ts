@@ -1,5 +1,6 @@
 /**
- * DeathSystem — the death transition. See specs/08_encounter_and_death_spec.md §4.1.
+ * DeathSystem — the death transition. See specs/08_encounter_and_death_spec.md §4.1
+ * and specs/15_economy_and_victory_spec.md §4.1 (M9-T01 AC-01).
  *
  * Pipeline position: AFTER `ModifierSystem`, BEFORE `LifespanSystem`. That slot is
  * the whole tick-phase contract of AC-01, so it is worth spelling out:
@@ -25,6 +26,8 @@
  *   1. mount `DeadTagComponent` (`markDead` — idempotent)
  *   2. NEUTRALISE the corpse's intent
  *   3. publish one `EntityDeathEvent`
+ *   4. spawn the entity's LOOT, if it declared any (M9-T01, spec 15 AC-01)
+ *   5. fail the RUN, if the entity that died is the player
  *
  * Step 2 is not cosmetic. Every intent producer (`PlayerControllerSystem`,
  * `AISystem`) now SKIPS dead entities (spec 08 §4.2), which is precisely what
@@ -39,6 +42,20 @@
  * the encounter scheduler must be able to distinguish "my wave member is dead" from
  * "this id never existed", and it can only do that if the corpse keeps its
  * components. Recycling is a separate, opt-in concern for a later milestone.
+ *
+ * WHY LOOT LIVES HERE rather than in a dedicated `LootSystem` segment (M9-T01).
+ * The question loot answers is "what does THIS death leave behind", and this loop
+ * is the one place in the engine that knows a death just resolved and who it was —
+ * exactly the argument `failRunIfPlayer` already records for the run-level
+ * consequence of the same event. A separate segment would have to re-derive "who
+ * died this tick" from the death tag it did not write, and would add a 17th
+ * pipeline slot for a read of data that is right here. The drop therefore happens
+ * at the SAME point in the tick as the tag: a pickup can never outlive the tick
+ * boundary that separates a live enemy from a corpse.
+ *
+ * Because `DeathSystem` (index 12) sits BEFORE `PickupSystem` (index 15), a pickup
+ * dropped this tick is already collectable this tick — see the pipeline docstring
+ * and spec 15 §6.
  *
  * Holds NO cross-tick hidden state: the only field is the injected bus, and it is
  * CLEARED at the start of every update, so the bus can never accumulate events
@@ -57,6 +74,9 @@ import { DeadTagComponent, markDead } from '../components/DeadTagComponent';
 import { IntentComponent } from '../components/IntentComponent';
 import { PlayerInputComponent } from '../components/PlayerInputComponent';
 import { markRunFailed } from '../components/GameStateComponent';
+import { LootComponent } from '../components/LootComponent';
+import { LOOT_DROP_SPACING_UNITS, spawnPickup } from '../components/PickupComponent';
+import { TransformComponent } from '../components/TransformComponent';
 
 export class DeathSystem implements System {
   public readonly name = 'DeathSystem';
@@ -95,6 +115,7 @@ export class DeathSystem implements System {
       markDead(world, id);
       this.neutraliseIntent(world, id);
       this.events.emit({ tick: ctx.tick, entityId: id });
+      this.dropLoot(world, id);
       this.failRunIfPlayer(world, id);
     }
   }
@@ -136,6 +157,50 @@ export class DeathSystem implements System {
   private failRunIfPlayer(world: World, id: EntityId): void {
     if (!world.hasComponent(id, PlayerInputComponent)) return;
     markRunFailed(world);
+  }
+
+  /**
+   * Spawn the dying entity's loot, one pickup per declared drop (M9-T01, spec 15
+   * AC-01).
+   *
+   * Placed on the corpse's CURRENT coordinates, offset along +x by a fixed
+   * `LOOT_DROP_SPACING_UNITS * index` so several drops from one enemy do not stack
+   * into a single visual (and a single assertion). A constant rather than a random
+   * scatter because the drop pattern has to be reproducible — the same "escalation
+   * must be reproducible" rule `DEPTH_SPAWN_SPACING_UNITS` records (spec 11 AC-04).
+   *
+   * Every value is read from the already-resolved `LootComponent` and validated
+   * before it was ever mounted (see `resolveLootDrops`), so nothing in this method
+   * can throw: a malformed drop would have failed the ASSEMBLY, not the tick.
+   *
+   * Missing `LootComponent` (every enemy before M9, and every non-combatant) is a
+   * silent no-op — the same opt-in shape every other component consumer follows.
+   * Missing `TransformComponent` is likewise a no-op: a drop needs somewhere to
+   * land, and inventing an origin would be worse than dropping nothing.
+   *
+   * Creating entities inside the caller's `query(HealthComponent)` loop is safe and
+   * deterministic: `World.query` returns a fresh ascending array, and a pickup owns
+   * no `HealthComponent`, so it can never be visited by the loop that created it.
+   */
+  private dropLoot(world: World, id: EntityId): void {
+    const loot = world.getComponent(id, LootComponent);
+    if (loot === undefined) return;
+
+    const transform = world.getComponent(id, TransformComponent);
+    if (transform === undefined) return;
+
+    for (let index = 0; index < loot.drops.length; index += 1) {
+      const drop = loot.drops[index];
+      if (drop === undefined) continue;
+      spawnPickup(world, {
+        x: transform.x + LOOT_DROP_SPACING_UNITS * index,
+        y: transform.y,
+        kind: drop.kind,
+        amount: drop.amount,
+        radius: drop.radius,
+        lifespanTicks: drop.lifespanTicks,
+      });
+    }
   }
 
   /**

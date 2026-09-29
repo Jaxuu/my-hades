@@ -1,6 +1,8 @@
 /**
- * RewardSystem — settles the boon draft the room rolled (M6-T01).
- * See specs/11_roguelike_loop_spec.md §4.3 / §4.4.
+ * RewardSystem — settles the boon draft the room rolled (M6-T01) and descends the
+ * run to the next room (M9-T01).
+ * See specs/11_roguelike_loop_spec.md §4.3 / §4.4 and
+ * specs/15_economy_and_victory_spec.md §4.5 (AC-03 / AC-04).
  *
  * Pipeline position: AFTER `EncounterSystem`, BEFORE `LifespanSystem`.
  *
@@ -29,13 +31,22 @@
  *   1. read the tick's selection (the FIRST `selectReward` event wins);
  *   2. find the room holding an unsettled draft — no draft, strict no-op;
  *   3. reject the selection unless it is one of the ids the room ITSELF rolled;
- *   4. grant it to the player, clear the draft, and descend the room.
+ *   4. grant it to the player, clear the draft, and advance the room.
  *
  * Step 3 is the security/robustness property of AC-03: the UI sends an ID, never an
  * index, and the logic layer re-validates it against the draft it rolled. A stale
  * click (the draft was already settled) or a forged id is silently ignored — the
  * room simply keeps waiting, which is the honest outcome for "that option was not
  * on offer".
+ *
+ * Step 4's "advance the room" is the M9-T01 addition (spec 15 AC-03): the room
+ * index moves on, `depth` rises, and `waves` is REPLACED by the next room's
+ * configuration, so a run is a sequence of rooms rather than one room replayed
+ * harder. The finality guard in front of it is the settlement-side twin of
+ * `EncounterSystem`'s AC-04 branch: in the shipped configuration the last room
+ * never opens a draft at all, so a draft can only be open on the final room if a
+ * caller hand-assembled one — and in that case the honest outcome is still "the run
+ * is over", never "descend past the end of the room table".
  *
  * Holds NO cross-tick hidden state: no fields at all beyond its name.
  */
@@ -49,7 +60,9 @@ import {
   ENCOUNTER_WAVE_UNSCHEDULED,
   EncounterState,
   findRewardDraft,
+  isFinalRoom,
 } from '../components/EncounterStateComponent';
+import { markRunWon } from '../components/GameStateComponent';
 import { grantReward } from '../rewards/grantReward';
 
 /** The first `selectReward` event in the tick's frame, or `null`. */
@@ -84,11 +97,30 @@ export class RewardSystem implements System {
 
     grantReward(world, playerId, selection);
 
-    // Settle + descend, in ONE place. Clearing the draft is what re-opens the
-    // scheduler: `EncounterSystem`'s `ROOM_CLEARED` gate no longer sees an inert
-    // room, and the emptied roster makes it schedule the next wave (spec 11 AC-04).
+    // Settle the draft in ONE place. Clearing it is what re-opens the scheduler:
+    // `EncounterSystem`'s `ROOM_CLEARED` gate no longer sees an inert room, and the
+    // emptied roster makes it schedule the next wave (spec 11 AC-04).
     room.pendingRewards = null;
+
+    // AC-04's settlement-side guard (spec 15): settling a draft that somehow exists
+    // on the FINAL room wins the run instead of descending past the end of the room
+    // table. Unreachable in the shipped configuration — `EncounterSystem` never
+    // rolls a draft on the final room — which is exactly why it is here: the
+    // alternative to this branch is an out-of-range room index, and "the run is
+    // over" is the honest answer for a room that has no successor.
+    if (isFinalRoom(room)) {
+      markRunWon(world);
+      return;
+    }
+
+    // Descend to the next room (M9-T01, spec 15 AC-03): the index moves on, the
+    // difficulty dial rises, and the room's wave configuration is swapped for the
+    // next entry of the run's table. `?? room.waves` is unreachable for a
+    // factory-assembled room (the index is always inside `roomWaves`), but it keeps
+    // the swap total rather than able to produce `undefined` waves.
+    room.currentRoomIndex += 1;
     room.depth += 1;
+    room.waves = room.roomWaves[room.currentRoomIndex] ?? room.waves;
     room.state = EncounterState.IN_PROGRESS;
     room.currentWaveIndex = 0;
     room.trackedEntityIds = [];

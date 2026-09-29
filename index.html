@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-hades · roguelike loop (M8-T01)</title>
+    <title>my-hades · roguelike run (M9-T01)</title>
     <style>
       html,
       body {
@@ -46,6 +46,24 @@
         font-size: 13px;
         line-height: 1.5;
         pointer-events: none;
+      }
+
+      /* M9-T01 · gold read-out. The one always-on HUD element the UIManager owns;
+         top-right so it never collides with the diagnostics block on the left. */
+      #gold {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        padding: 8px 14px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 210, 77, 0.45);
+        background: rgba(0, 0, 0, 0.55);
+        color: #ffd24d;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        pointer-events: none;
+        white-space: pre;
       }
 
       /* M6-T01 · boon-draft overlay. Hidden unless a draft is pending; the
@@ -120,14 +138,32 @@
         color: #e6e6e6;
         opacity: 0.85;
       }
+
+      /* M9-T01 · victory overlay. Same root element and same structure as the death
+         overlay (only one is ever on screen), restyled into a positive terminal
+         state: a deep teal wash and a wide-tracked gold heading. Deliberately the
+         OPPOSITE temperature from `is-death`, so the two endings are never mistaken
+         for one another at a glance. */
+      #ui-layer.is-win {
+        background: rgba(4, 30, 28, 0.86);
+      }
+
+      #ui-layer.is-win h2 {
+        font-size: 34px;
+        font-weight: 700;
+        color: #ffd24d;
+        letter-spacing: 0.22em;
+        text-shadow: 0 0 18px rgba(255, 210, 77, 0.45);
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="ui-layer"></div>
     <div id="hud"></div>
+    <div id="gold"></div>
     <div id="keys">
-      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 重开（阵亡后）
+      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 重开（终局后）
     </div>
     <script type="module" src="/client/main.ts"></script>
   </body>

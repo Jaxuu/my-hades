@@ -5,12 +5,12 @@
  * specs/07_enemy_ai_spec.md §5.2, specs/08_encounter_and_death_spec.md §5.2 and
  * specs/11_roguelike_loop_spec.md §5.2.
  *
- * Order (HARD CONTRACT, 16 segments):
+ * Order (HARD CONTRACT, 17 segments):
  *   TransformSnapshotSystem -> PlayerControllerSystem -> FreezeSystem -> AISystem
  *     -> HazardSystem -> MovementSystem -> DashSystem -> StateSystem
  *     -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem
  *     -> ModifierSystem -> DeathSystem -> EncounterSystem -> RewardSystem
- *     -> LifespanSystem.
+ *     -> PickupSystem -> LifespanSystem.
  *
  * Why this exact order:
  * -1. TransformSnapshotSystem is the M5-T02 INSERTION and it sits AHEAD of every
@@ -137,9 +137,30 @@
  *     ModifierSystem > CollisionSystem (index 8) slot is what gives an injected
  *     blast its collision test on the FOLLOWING tick (spec 12 §5.2 / §4.4).
  *
+ * 13. PickupSystem is the M9-T01 INSERTION — the 17th segment, sitting immediately
+ *     BEFORE `LifespanSystem` (which stays LAST). All three halves of that slot are
+ *     forced (specs/15_economy_and_victory_spec.md §4.2):
+ *       - AFTER `MovementSystem` (index 5): the overlap test must use the position
+ *         the collector ENDED the tick at, so walking onto a coin takes it on the
+ *         tick the walk completed rather than one tick later.
+ *       - AFTER `DeathSystem` (index 12): a pickup dropped by THIS tick's deaths is
+ *         already in the world, so the drop and its collection share one tick
+ *         boundary. (Contrast the Zeus bolt / Poseidon shockwave, which are
+ *         injected by ModifierSystem AFTER CollisionSystem and therefore need
+ *         `activeTicks = 2` to be tested at all.)
+ *       - BEFORE `LifespanSystem`: a pickup taken this tick is removed at the end of
+ *         this tick, and `PickupSystem` never has to destroy anything itself.
+ *     Why a new segment rather than a tail phase on an existing system: a pickup
+ *     owns an independent lifecycle and an independent read (a ground overlap),
+ *     with nothing to do with motion, damage or scheduling. The cost is real and
+ *     was paid: the seven `toEqual` pipeline pinning tests were updated to 17
+ *     segments. It changes no EXISTING system's relative position, the M1/M2
+ *     Movement/Dash/State trio keeps its exact order and adjacency, and
+ *     `LifespanSystem` stays LAST.
+ *
  * Reordering any of these systems changes observable behaviour and will break the
  * QA tick-by-tick timing assertions (spec 02 §6, spec 03 §6, spec 04 §6, spec 05 §6,
- * spec 07 §6, spec 08 §6, spec 11 §6).
+ * spec 07 §6, spec 08 §6, spec 11 §6, spec 15 §6).
  */
 
 import type { System } from '../System';
@@ -160,6 +181,7 @@ import { ModifierSystem } from './ModifierSystem';
 import { DeathSystem } from './DeathSystem';
 import { EncounterSystem } from './EncounterSystem';
 import { RewardSystem } from './RewardSystem';
+import { PickupSystem } from './PickupSystem';
 import { LifespanSystem } from './LifespanSystem';
 import { TransformSnapshotSystem } from './TransformSnapshotSystem';
 
@@ -205,6 +227,7 @@ export function createDefaultSystems(
     new DeathSystem(deathEvents),
     new EncounterSystem(),
     new RewardSystem(),
+    new PickupSystem(),
     new LifespanSystem(),
   ];
 }

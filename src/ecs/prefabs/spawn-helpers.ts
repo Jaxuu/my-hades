@@ -44,6 +44,9 @@ import {
   DEFAULT_HAZARD_RADIUS,
 } from '../components/HazardComponent';
 import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxComponent';
+import { InventoryComponent } from '../components/InventoryComponent';
+import { LootComponent, resolveLootDrops } from '../components/LootComponent';
+import type { LootDropOptions, ResolvedLootDrop } from '../components/LootComponent';
 
 /** Default locomotion speed in world units per second for any combatant. */
 export const DEFAULT_COMBATANT_MAX_SPEED = 5;
@@ -161,6 +164,22 @@ export interface CombatantSpawnOptions {
    * this one place, so the player and enemy prefabs still cannot drift apart.
    */
   readonly hazard?: HazardCastingOptions;
+  /**
+   * Loot table (M9-T01). When present, a `LootComponent` is mounted and
+   * `DeathSystem` spawns one pickup per entry at this entity's feet on the tick it
+   * dies (spec 15 AC-01).
+   *
+   * Omit it and NO loot component is mounted at all, so every pre-M9 enemy drops
+   * nothing and behaves exactly as before. Like `ai`, `armor` and `hazard`, this
+   * is a CAPABILITY SWITCH rather than an elite-only channel: the component set
+   * stays defined in this one place, so the player and enemy prefabs still cannot
+   * drift apart.
+   *
+   * The table is validated HERE, at assembly time (see `resolveLootDrops`), so a
+   * malformed drop can never throw from inside `step()`. An empty array is a
+   * config bug: omit the field to drop nothing.
+   */
+  readonly loot?: readonly LootDropOptions[];
 }
 
 /**
@@ -287,17 +306,20 @@ export function resolveHazardCasting(options: HazardCastingOptions = {}): Resolv
  * the player and enemy prefabs can never drift apart.
  *
  * The component set above is the MANDATORY one. `PlayerInputComponent` (hardware),
- * `AIControllerComponent` (M4-T01), `ArmorComponent` (M6-T02) and
- * `HazardCasterComponent` (M8-T01) are the four OPT-IN extras. Input and AI are
- * mutually exclusive (the player gets the device, an AI-driven enemy gets the
- * FSM, a plain script-driven enemy gets neither); armor and hazard casting are
- * orthogonal to both — any combatant may carry either.
+ * `AIControllerComponent` (M4-T01), `ArmorComponent` (M6-T02),
+ * `HazardCasterComponent` (M8-T01) and `LootComponent` (M9-T01) are the five
+ * OPT-IN extras, and `InventoryComponent` (M9-T01) rides WITH the hardware device.
+ * Input and AI are mutually exclusive (the player gets the device, an AI-driven
+ * enemy gets the FSM, a plain script-driven enemy gets neither); armor, hazard
+ * casting and loot are orthogonal to both — any combatant may carry any of them.
  *
  * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` / `armor` is not a
  *   positive finite number, if `hp` falls outside `[0, maxHp]`, if any dash override
  *   is invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
  *   {@link resolveAITuning}), if any hazard override is invalid (see
- *   {@link resolveHazardCasting}), or if AI tuning is combined with `hardwareInput`.
+ *   {@link resolveHazardCasting}), if the loot table is empty or any drop in it is
+ *   invalid (see `resolveLootDrops`), or if AI tuning is combined with
+ *   `hardwareInput`.
  */
 export function spawnCombatant(
   world: World,
@@ -343,6 +365,13 @@ export function spawnCombatant(
   // the capabilities were added.
   const hazard = options.hazard === undefined ? undefined : resolveHazardCasting(options.hazard);
 
+  // Loot is the fourth OPT-IN capability (M9-T01) and it is orthogonal to all of
+  // the above: it only decides what a DEATH leaves behind. Resolved (and
+  // rejected) here rather than at drop time because the drop happens inside
+  // `step()` — see `resolveLootDrops`.
+  const loot: ResolvedLootDrop[] | undefined =
+    options.loot === undefined ? undefined : resolveLootDrops(options.loot);
+
   const entity = world.createEntity();
   world.addComponent(
     entity.id,
@@ -352,6 +381,11 @@ export function spawnCombatant(
   world.addComponent(entity.id, new IntentComponent());
   if (hardwareInput) {
     world.addComponent(entity.id, new PlayerInputComponent());
+    // The wallet rides with the device (M9-T01): `PlayerInputComponent` is the
+    // engine's structural "this is the player" marker (spec 01 §3.3), so mounting
+    // the inventory on the same branch keeps "the player owns a wallet" true by
+    // construction and makes it impossible to hand an AI enemy one.
+    world.addComponent(entity.id, new InventoryComponent());
   }
   world.addComponent(entity.id, new StateComponent());
   world.addComponent(
@@ -390,6 +424,9 @@ export function spawnCombatant(
       entity.id,
       new HazardCasterComponent(hazard.radius, hazard.damage, hazard.delayTicks),
     );
+  }
+  if (loot !== undefined) {
+    world.addComponent(entity.id, new LootComponent(loot));
   }
   return entity.id;
 }

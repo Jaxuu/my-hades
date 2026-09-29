@@ -4,10 +4,11 @@
  * contract) and §7 (AC-01 .. AC-06).
  *
  * Fresh-eyes harness suite: every assertion drives the REAL GameSimulator with the
- * canonical 15-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
- * -> FreezeSystem -> AISystem -> MovementSystem -> DashSystem -> StateSystem ->
- * CombatActionSystem -> CollisionSystem -> StatusEffectSystem -> ModifierSystem ->
- * DeathSystem -> EncounterSystem -> RewardSystem -> LifespanSystem) and REAL
+ * canonical 17-segment pipeline (TransformSnapshotSystem -> PlayerControllerSystem
+ * -> FreezeSystem -> AISystem -> HazardSystem -> MovementSystem -> DashSystem ->
+ * StateSystem -> CombatActionSystem -> CollisionSystem -> StatusEffectSystem ->
+ * ModifierSystem -> DeathSystem -> EncounterSystem -> RewardSystem -> PickupSystem
+ * -> LifespanSystem) and REAL
  * prefab-assembled entities. Nothing is mocked, and ticks are advanced one at a
  * time so the timing contract is pinned per tick.
  *
@@ -706,7 +707,7 @@ describe('G4 · DashSystem publishes one DashEvent per dash entry (AC-03)', () =
  * G5 · pipeline + zero regression + elite assembly                           *
  * ========================================================================== */
 describe('G5 · pipeline unchanged, zero regression, elite assembly (AC-05 / AC-06)', () => {
-  it('keeps the canonical 16-segment order, with ModifierSystem after DashSystem', () => {
+  it('keeps the canonical 17-segment order, with ModifierSystem after DashSystem', () => {
     const names = createDefaultSystems().map((system) => system.name);
     expect(names).toEqual([
       'TransformSnapshotSystem',
@@ -724,6 +725,7 @@ describe('G5 · pipeline unchanged, zero regression, elite assembly (AC-05 / AC-
       'DeathSystem',
       'EncounterSystem',
       'RewardSystem',
+      'PickupSystem',
       'LifespanSystem',
     ]);
 

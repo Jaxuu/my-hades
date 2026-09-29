@@ -40,7 +40,7 @@ import { ATTACK_KEY, CAST_KEY, DASH_KEY, PlayerInputComponent } from '../compone
 import { IntentComponent } from '../components/IntentComponent';
 import { isDead } from '../components/DeadTagComponent';
 import { findRewardDraft } from '../components/EncounterStateComponent';
-import { isRunFailed } from '../components/GameStateComponent';
+import { isRunOver } from '../components/GameStateComponent';
 
 export class PlayerControllerSystem implements System {
   public readonly name = 'PlayerControllerSystem';
@@ -146,17 +146,20 @@ export class PlayerControllerSystem implements System {
    * exactly as long as the draft is genuinely open.
    *
    * M8-T01 adds the SECOND suppression reason to the same boolean (spec 14
-   * AC-05): a `RUN_FAILED` run holds the player's intent. The two are folded
-   * into ONE `suppressed` verdict on purpose — this is the single intent
-   * generation choke point, so "the player's input is dead" can only ever be
-   * half-applied if it were checked in two places. Note the overlap with the
-   * death gate below is deliberate rather than redundant: the death gate covers
-   * the CORPSE, while this covers the RUN, so "no intent" holds at the choke
-   * point instead of depending on a downstream system happening to consult the
-   * death tag too.
+   * AC-05): a `RUN_FAILED` run holds the player's intent. M9-T01 widens it to the
+   * whole terminal family (spec 15 AC-04) — a `RUN_WON` run holds it too, which is
+   * the "the win screen stops receiving operation intent" requirement, and is why
+   * the predicate asked here is `isRunOver` rather than `isRunFailed`. The two
+   * suppression reasons are folded into ONE `suppressed` verdict on purpose — this
+   * is the single intent generation choke point, so "the player's input is dead"
+   * can only ever be half-applied if it were checked in two places. Note the
+   * overlap with the death gate below is deliberate rather than redundant: the
+   * death gate covers the CORPSE, while this covers the RUN, so "no intent" holds
+   * at the choke point instead of depending on a downstream system happening to
+   * consult the death tag too.
    */
   private deriveIntent(world: World): void {
-    const suppressed = findRewardDraft(world) !== undefined || isRunFailed(world);
+    const suppressed = findRewardDraft(world) !== undefined || isRunOver(world);
 
     for (const id of world.query(PlayerInputComponent, IntentComponent)) {
       // A corpse must not have its neutralised intent re-derived from the device

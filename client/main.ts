@@ -1,12 +1,14 @@
 /**
  * main — the composition root of the presentation layer.
  * See specs/09_renderer_bridge_spec.md §1.2 / §5.3,
- * specs/11_roguelike_loop_spec.md §4.5 and
- * specs/14_aoe_and_run_lifecycle_spec.md §4.5 / §4.6.
+ * specs/11_roguelike_loop_spec.md §4.5,
+ * specs/14_aoe_and_run_lifecycle_spec.md §4.5 / §4.6 and
+ * specs/15_economy_and_victory_spec.md §4.6.
  *
  * Wires the headless simulation core to PixiJS AND to the DOM:
- *   GameSimulator (16-system pipeline)  ->  GameRenderer (read-only)  ->  PixiJS
+ *   GameSimulator (17-system pipeline)  ->  GameRenderer (read-only)  ->  PixiJS
  *   GameSimulator                       ->  UIManager    (read-only)  ->  #ui-layer
+ *   GameSimulator                       ->  UIManager    (read-only)  ->  #gold
  *   KeyboardInput  ->  per-tick injection  ->  GameSimulator.step(1)
  *   UIManager click ->  selectReward injection  ->  GameSimulator.step(1)
  *   UIManager  R key ->  onRestart callback     ->  GameSimulator.restartRun()
@@ -16,13 +18,20 @@
  * a three-option draft -> the overlay appears -> picking a boon descends the room
  * and spawns a bigger wave.
  *
- * M8-T01 closes the loop at both ends:
+ * M8-T01 closed the loop at both ends:
  *   - `buildRun` is handed to the simulator as its `runSetup`, so "what a run
  *     looks like" is declared ONCE and `restartRun()` can rebuild it without the
  *     simulator learning a single game concept (spec 14 §4.5);
  *   - dying now shows the death overlay and `R` starts a fresh run, with the
  *     player id re-resolved every frame rather than captured — after a restart the
  *     player is a BRAND NEW entity, and a captured id would point at a corpse.
+ *
+ * M9-T01 gives the run a middle and an end:
+ *   - the room is declared as a MULTI-room run, so the boon draft leads somewhere
+ *     instead of re-running the same room forever (spec 15 AC-03);
+ *   - enemies drop gold and flasks, the player's wallet is on screen, and clearing
+ *     the LAST room ends the run with the victory overlay instead of a draft
+ *     (spec 15 AC-01 / AC-02 / AC-04). `R` restarts from either terminal overlay.
  *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
@@ -41,8 +50,12 @@ import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
-import { findRewardDraft } from '../src/ecs/components/EncounterStateComponent';
-import { isRunFailed } from '../src/ecs/components/GameStateComponent';
+import { PickupKind } from '../src/ecs/components/PickupComponent';
+import {
+  EncounterStateComponent,
+  findRewardDraft,
+} from '../src/ecs/components/EncounterStateComponent';
+import { findGameState, GameStatus } from '../src/ecs/components/GameStateComponent';
 
 import { GameRenderer } from './GameRenderer';
 import { GameLoop } from './GameLoop';
@@ -51,7 +64,7 @@ import { UIManager } from './UIManager';
 
 /**
  * The run's seed. Fixed here so a reload reproduces the same drafts; `restartRun`
- * increments it, so each death gives a genuinely different next run while staying
+ * increments it, so each ending gives a genuinely different next run while staying
  * fully deterministic (spec 14 AC-08).
  */
 const SEED = 0x12345678;
@@ -62,6 +75,15 @@ const ENEMY_MAX_HP = 40;
 /** Windup / cooldown shared by every demo enemy, in ticks. */
 const ENEMY_WINDUP_TICKS = 36;
 const ENEMY_COOLDOWN_TICKS = 60;
+
+/** What a regular demo enemy leaves behind (M9-T01): a small purse, always. */
+const ENEMY_LOOT = [{ kind: PickupKind.GOLD, amount: 5 }] as const;
+
+/** What the bomber leaves behind: a purse plus a flask, so both pickup kinds appear. */
+const BOMBER_LOOT = [
+  { kind: PickupKind.GOLD, amount: 10 },
+  { kind: PickupKind.HEAL, amount: 15 },
+] as const;
 
 function mountCanvas(app: Application): void {
   const mount = document.getElementById('app');
@@ -86,7 +108,7 @@ function main(): void {
 }
 
 /**
- * Assemble ONE run: the player, the room and the run's state singleton.
+ * Assemble ONE run: the player, the rooms and the run's state singleton.
  *
  * Declared as a plain function rather than a closure over `sim` so it can be
  * handed to the simulator as `runSetup` and reused for the very first run without
@@ -96,6 +118,11 @@ function main(): void {
  * Enemies use `ai` WITHOUT an explicit `targetEntityId`: the FSM auto-acquires the
  * nearest hostile, so this function never needs to know the player's id — which
  * matters because after a restart the player has a new one.
+ *
+ * M9-T01: the run is TWO rooms. Room 1 is the opening fight and rolls a draft on
+ * clear; room 2 is the boss room, and clearing it ends the run with `RUN_WON`
+ * instead of a draft (spec 15 AC-04). Every enemy drops loot, so the wallet in the
+ * HUD has something to fill it.
  */
 function buildRun(world: World): void {
   PlayerFactory.spawn(world, {
@@ -117,29 +144,43 @@ function buildRun(world: World): void {
       windupTicks: ENEMY_WINDUP_TICKS,
       cooldownTicks: ENEMY_COOLDOWN_TICKS,
     },
+    loot: ENEMY_LOOT,
   });
 
   /**
    * The bomb planter (M8-T01): the same enemy, plus `hazard`. On every windup it
    * plants a 30-tick telegraph at the player's feet AND swings — the telegraphed
-   * AoE is what makes standing still a decision rather than a default.
+   * AoE is what makes standing still a decision rather than a default. It pays out
+   * more, and leaves a flask (M9-T01).
    */
   const bomber = (x: number, y: number) => ({
     ...enemy(x, y),
     hazard: { radius: 2.5, damage: 25, delayTicks: 30 },
+    loot: BOMBER_LOOT,
   });
 
-  // A two-wave room. AI enemies (`ai` and hardware input are mutually exclusive —
-  // the player is the device-driven one) so the fight plays itself out.
+  /**
+   * A two-wave opening room, then a two-wave boss room. AI enemies (`ai` and
+   * hardware input are mutually exclusive — the player is the device-driven one) so
+   * the fight plays itself out.
+   */
   EncounterFactory.spawn(world, {
     waves: [
       { delayTicks: 0, enemies: [enemy(5, 0)] },
       { delayTicks: 120, enemies: [enemy(-5, 2), bomber(5, -2)] },
     ],
+    rooms: [
+      [
+        { delayTicks: 0, enemies: [enemy(-6, 0), enemy(6, 0)] },
+        { delayTicks: 120, enemies: [enemy(-6, 3), bomber(6, -3)] },
+      ],
+    ],
   });
 
   // The run's state singleton (M8-T01). Without it a player death would be an
-  // ordinary death and the death overlay could never appear (spec 14 AC-11).
+  // ordinary death and the death overlay could never appear (spec 14 AC-11) — and
+  // without it clearing the last room could never raise the victory overlay
+  // (spec 15 AC-04).
   GameStateFactory.spawn(world);
 }
 
@@ -172,6 +213,9 @@ function start(app: Application): void {
       ? null
       : new UIManager({
           root: uiRoot,
+          // The gold read-out (M9-T01). `null` when the markup is absent, which the
+          // UIManager treats as "no HUD" rather than an error.
+          hud: document.getElementById('gold'),
           onSelect: (rewardId: string) => {
             // A click is an EXTERNAL, tick-aligned command. `sim.tick` is stable
             // between frames, and `GameLoop` flushes input BEFORE `step`, so this
@@ -183,7 +227,9 @@ function start(app: Application): void {
             // `R` is also an external command, but unlike a click it is not
             // tick-aligned: a restart is a RUN-BOUNDARY operation, not a
             // simulation input, so it does not ride the input queue. It rewinds
-            // the clock and rebuilds the world immediately (spec 14 §4.5).
+            // the clock and rebuilds the world immediately (spec 14 §4.5). The same
+            // callback serves BOTH terminal overlays, because a won run and a lost
+            // one are restarted by exactly the same operation.
             sim.restartRun();
           },
         });
@@ -202,7 +248,7 @@ function start(app: Application): void {
   installHud(app, sim, renderer);
 }
 
-/** Minimal HUD: tick / run status / player hp / counts / the live reward draft. */
+/** Minimal diagnostics HUD: tick / run status / player hp / counts / live draft. */
 function installHud(app: Application, sim: GameSimulator, renderer: GameRenderer): void {
   const hud = document.getElementById('hud');
   if (hud === null) return;
@@ -222,12 +268,23 @@ function installHud(app: Application, sim: GameSimulator, renderer: GameRenderer
         ? 'reward  —'
         : `reward  ${String(draft.pendingRewards?.length ?? 0)} options · depth ${String(draft.depth)}`;
 
-    const status = isRunFailed(sim.world) ? 'RUN_FAILED' : 'PLAYING';
+    // The room is resolved by COMPONENT, not through `findRewardDraft` — the latter
+    // only answers while a draft is open, so it would report "—" for the whole fight.
+    const roomId = sim.world.query(EncounterStateComponent)[0];
+    const room = roomId === undefined ? undefined : sim.world.getComponent(roomId, EncounterStateComponent);
+    const roomLine =
+      room === undefined
+        ? 'room    —'
+        : `room    ${String(room.currentRoomIndex + 1)} / ${String(room.maxRooms)} · depth ${String(room.depth)}`;
+
+    const status = findGameState(sim.world)?.status ?? GameStatus.PLAYING;
 
     hud.textContent =
       `tick ${sim.tick} · ${status}\n` +
       `player hp ${hp} / ${maxHp}\n` +
       `entities ${sim.world.entityCount} · views ${renderer.viewCount}\n` +
+      roomLine +
+      '\n' +
       rewardLine;
   });
 }
