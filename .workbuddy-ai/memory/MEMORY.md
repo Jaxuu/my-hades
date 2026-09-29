@@ -105,6 +105,6 @@
 | M3-T02 修饰器注册表 + DoT | ✅ 165 用例 · `02208b7` |
 | M4-T01 敌方 AI + 攻击预警 | ✅ 186 用例 · `f2ea2fc` |
 | M4-T02 死亡生命周期 + 房间波次 | ✅ 209 用例 · `25bd435` |
-| M5-T01 渲染表现层基建 + PixiJS 桥接 | ✅ 212 用例 · 未提交 |
+| M5-T01 渲染表现层基建 + PixiJS 桥接 | ✅ 212 用例 · `d9aef43` · CI 全绿 |
 
 - 权威规格：`specs/00_harness_spec.md` … `specs/08_encounter_and_death_spec.md`（+ M5 的 `specs/09_renderer_bridge_spec.md`）。
