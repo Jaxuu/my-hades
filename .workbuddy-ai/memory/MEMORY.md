@@ -81,21 +81,25 @@
 | M2-T02 | 意图解耦 / 顿帧 Hitstop / 受击硬直与击退 / CI 门禁 ESLint 化 | ✅ PASS（10 文件 / **116 用例全绿**） |
 | M3-T01 | 变异引擎基础与事件拦截管道（`HitEvent` / `EventQueue` / `ModifierComponent` / `ModifierSystem` / Zeus Strike） | ✅ PASS（11 文件 / 143 用例全绿，已提交 `7f4bd93`） |
 | M3-T02 | 修饰器注册表 + 状态异常容器 + DoT（`ModifierRegistry` / `IModifierHandler` / `StatusEffectComponent` / `StatusEffectSystem` / `DionysusBlightModifier`） | ✅ PASS（12 文件 / **165 用例全绿**，已提交 `02208b7`） |
-| M4-T01 | 敌方状态机 AI 与攻击预警（`AIControllerComponent` / `AIState` / `AISystem` / `IntentComponent.aimRadians` / `resolveAITuning`）+ 确定性技术债（`localeCompare` → 码元序，ADR-001 R6） | ✅ PASS（13 文件 / **186 用例全绿**，未提交） |
+| M4-T01 | 敌方状态机 AI 与攻击预警（`AIControllerComponent` / `AIState` / `AISystem` / `IntentComponent.aimRadians` / `resolveAITuning`）+ 确定性技术债（`localeCompare` → 码元序，ADR-001 R6） | ✅ PASS（13 文件 / **186 用例全绿**，已提交 `f2ea2fc`） |
+| M4-T02 | 死亡生命周期与房间波次调度（`DeadTagComponent` / `DeathSystem` / `EntityDeathEvent` / 九道死亡门 + `CollisionSystem` 三重门 / `EncounterStateComponent` / `EncounterSystem` / `EncounterFactory`） | ✅ PASS（14 文件 / **209 用例全绿**，未提交） |
 
-- 规范管道（**硬契约，不得重排，11 段**）：
+- 规范管道（**硬契约，不得重排，13 段**）：
   `PlayerControllerSystem → FreezeSystem → AISystem → MovementSystem → DashSystem → StateSystem
-   → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem → LifespanSystem`（`createDefaultSystems()`）。
+   → CombatActionSystem → CollisionSystem → StatusEffectSystem → ModifierSystem
+   → DeathSystem → EncounterSystem → LifespanSystem`（`createDefaultSystems(events?, deathEvents?)`）。
   `PlayerControllerSystem`（硬件→意图）取代原 `MovementSystem.bindInput` 成为首段；
   `FreezeSystem` 紧随其后，必须在所有"逐实体推进"系统之前；
   `AISystem`（AI→意图，M4-T01）**必须在 `FreezeSystem` 之后、所有推进系统之前**——它要看到**递减后**的冻结判据，
   否则顿帧恢复拍会与运动系统错开一拍（相位契约，不是风格）；`StatusEffectSystem` **必须在 `CollisionSystem` 之后
   且 `ModifierSystem` 之前**（DoT 相位契约的唯一实现手段，见下）；`ModifierSystem` **必须在 `CollisionSystem` 之后
-  （读本 Tick 事件）、`LifespanSystem` 之前（注入的判定圆需被判定过才销毁）**；`LifespanSystem` **必须最后**
-  （否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
+  （读本 Tick 事件）、`DeathSystem` 之前**；`DeathSystem`（M4-T02）**必须在所有伤害来源
+  （`CollisionSystem` / `StatusEffectSystem`）与 `ModifierSystem` 之后**——「Tick 先完整播完，再清点死者」；
+  `EncounterSystem` **必须在 `DeathSystem` 之后**（它的全部输入就是死亡标签）且 `LifespanSystem` 之前；
+  `LifespanSystem` **必须最后**（否则判定圆少一个 Tick 有效窗口）。M1/M2 六段相对顺序**一字不改**。
 - 权威规格：`specs/00_harness_spec.md`、`specs/01_character_controller_spec.md`、`specs/02_dash_and_state_spec.md`、
   `specs/03_combat_hitbox_spec.md`、`specs/04_combat_feedback_spec.md`、`specs/05_boon_modifier_spec.md`、
-  `specs/06_status_effect_and_dot_spec.md`、`specs/07_enemy_ai_spec.md`。
+  `specs/06_status_effect_and_dot_spec.md`、`specs/07_enemy_ai_spec.md`、`specs/08_encounter_and_death_spec.md`。
 - **变异引擎（M3-T01）铁律**：
   - 事件总线 `EventQueue<T = HitEvent>` 由 `createDefaultSystems(events?)` **构造注入**（不塞 `SystemContext`、
     不挂 `World`）；`ModifierSystem` 每 Tick 全量 `drain()` ⇒ **Tick 边界 `size === 0`**（非隐藏状态）。
@@ -139,6 +143,58 @@
     （`[...base.slice(0,3), probe, ...base.slice(3)]`），并以 `base[2].name === 'AISystem'` 钉住插入点。
     判定圆在**出手同拍**生成（不是下一拍），并在下一拍仍存活。
   - **自动索敌**：`query` 升序 + **严格 `<`** ⇒ 等距取较小 id；目标**粘性**（锁定后不换，除非失效）。
+- **死亡生命周期与遭遇（M4-T02）铁律**：
+  - **`DeadTagComponent` 是「死亡」的唯一权威**：零字段组件，**只能**由 `DeathSystem` 在 Tick 末尾挂载
+    （`markDead` 幂等）。造成伤害的系统**绝不**自己标记死亡——这是「转移恰好一次、在一个可审计的点」的保证。
+    所有门控一律 `isDead(world, id)`，**不得**改用 `hp <= 0` 重新推导（未来加治疗/复活会静默失效）。
+  - **`isDead` 对已销毁 id 返回 `false`**（靠 `isAlive` 守卫）。「已销毁」是**独立的**跳过理由，
+    **绝不能**折叠进「已死」——`CollisionSystem` 的 owner 门因此保住了「判定圆可以比主人活得久」这条 M1–M3 契约。
+  - **死亡是状态，不是删除**：本里程碑**永不销毁战斗单位**。尸体保留全部组件，
+    否则房间调度器无法区分「我的成员死了」与「这个 id 从未存在」。
+  - **AC-01 是「当 Tick 末尾 / 次 Tick 起」**：标签在致死拍末才挂，所以**同 Tick 之内标签还不存在**。
+    ⇒ `CollisionSystem` 需要**三道**门：(a) **owner 门**（死者挥砍整颗失效，在目标循环之前）、
+    (b) **target 门**（尸体不是命中目标）、(c) **同 Tick 门**（`targetHealth.hp <= 0` → 跳过，
+    堵住「两颗判定圆在同一 Tick 都结算、第二颗写一次多余顿帧」的洞）。**一实体一 Tick 只结算一次。**
+    **同归于尽被刻意允许**：Tick 结算原子，AC-01 只约束「次 Tick 起」。
+  - **(b) 被 (c) 完全覆盖**（死亡定义就是 `hp <= 0`）⇒ (b) 是**廉价提前退出**，不是唯一防线。
+    想独立断言 (b)，必须构造「带标签但 `hp > 0`」的实体——正常玩法产不出来，但这钉住了「门的键是标签」。
+  - **门控顺序不可交换**：死亡 > 冻结（暂停，计时原地冻结）> 硬直（打断，重置 `IDLE`，作废前摇不补触发）。
+    死亡是唯一**永不失效**的门。`MovementSystem` 的死亡门是**第 0 优先级**（高于冻结）。
+  - **`LifespanSystem` 故意不加死亡门**：判定圆不是战斗单位、没有 `HealthComponent`；
+    死者的挥砍仍按原计划老化，保住 spec 03 §6 的「恰好活 `activeTicks` 拍」契约。
+    死者挥砍的退役由 owner 门在**使用点**执行。
+  - **`DeathSystem` 中和意图**（`moveVector=(0,0)` / 两脉冲 `false` / `aimRadians=null`）不是装饰：
+    意图生产者跳过死物 ⇒ 再没人写尸体的意图 ⇒ 不清零就会把死时的值**永久冻结**在快照里。
+  - **死亡总线是独立的 `EventQueue<EntityDeathEvent>`**（`createDefaultSystems(events?, deathEvents?)` 第二参）。
+    `EntityDeathEvent` 只有 `{ tick, entityId }`，**不含策略**。**无强制消费者** ⇒ `DeathSystem` 每拍开头 `clear()`，
+    于是 `step()` 后总线上装的**恰好是刚处理那一拍**的死亡，永不积压。
+  - **房间 = 挂 `EncounterStateComponent` 的全局单例实体**（无 Transform / 无受击盒 / 无寿命）。
+    三态 `IN_PROGRESS / WAVE_CLEAR / ROOM_CLEARED`。`EncounterSystem` **零字段**。
+  - **`trackedEntityIds` 空列表 = 「本波尚未生成」**（因此一波必须至少声明一个敌人，否则房间永久卡死）。
+    **`isWaveCleared` 对空列表返回 `false`**。
+    **提升到下一波（`WAVE_CLEAR`）时清空名单；进入 `ROOM_CLEARED` 时保留最后一波名单**
+    （留空等于对已打完的房间说谎）。
+  - **`nextSpawnTick` 存绝对 Tick（`-1` = 未排期），不存倒计时**：倒计时在「上一波被清空那一拍」启动时必然差一拍。
+    第 0 波在**首个被处理的 Tick** 惰性排期，生成于 `p₀ + delayTicks`；第 `k>0` 波生成于 `q + delayTicks`
+    （`q` = 上一波被**检测清空**的拍）。**清空判定与死亡同拍**（`DeathSystem` 在 `EncounterSystem` 之前）
+    ⇒ 「从最后一击到下一波生成恰好 `delayTicks` 拍」。
+    **`delayTicks = 0` 有不对称**：第 0 波同拍、后续波下一拍（分支 2 先于 3 且 `continue`，生成永不与清空判定同拍）。
+  - **`EncounterFactory.spawn` 不生成第一波**（生成是逐 Tick 的决定）⇒ 调用方**必须至少 `step()` 一次**房间才有敌人。
+    校验（`resolveEncounterConfig`）在**加载期**做，且对每个敌人规格**dry-run 装配一遍**（一次性 `World`）——
+    不抄 `spawnCombatant` 的规则，避免第二真相源。理由：`EncounterSystem` 在 `step()` 内部调 `EnemyFactory.spawn`，
+    坏规格若在生成时才暴露会**打断模拟**。
+  - **`EnemySpawnOptions` 声明在 `spawn-helpers.ts`**（`= CombatantSpawnOptions`），`EnemyFactory.ts` 再导出。
+    理由：`components` 层要能描述一波敌人而**不反向依赖 `prefabs` 的工厂实现**。
+    **坑**：`export type { X } from './y'` **不会**把 `X` 带进本地作用域，工厂内部使用还需 `import type`。
+  - **`step()` 处理的拍数与相位**（M4-T02 实测）：在 Tick `T` 生成的波次，其成员**首次行动在 `T+1`**。
+- **QA 纪律补充（M4-T02 实战验证，强烈建议沿用）**：
+  - **变异测试是「门控类」改动的必做步骤**：把 `if (isDead(...))` 临时改成 `if (false && isDead(...))`，
+    跑单文件测试，确认**有断言失败**，再还原。本项目 13 处变异全部被捕获（见 `tests/combat/death_and_encounter.test.ts`）。
+  - **冗余门会掩盖测试空洞**：先看清「还有哪道门顺手拦住了它」，再设计能**独立**观测该门的场景。
+    典型手法：用 `hitstopTicks = 0, knockbackForce > 0` 的判定圆造出「有在飞击退但没冻结」的尸体；
+    或直接给尸体手工写 `wantsToAttack` / `wantsToDash` / 手工挂 poison 作为**对抗性探针**。
+  - **`grep` vitest 摘要行必须加 `NO_COLOR=1`**，否则 ANSI 转义码会让 `^ *Tests +[0-9]` 匹配失败
+    （且 `Failed Tests 1` 会假匹配 `Tests +[0-9]`）。
 - **"输入是全局帧"的局限已被根治**（M2-T02）：意图层解耦后敌人**不持有**硬件组件，
   同一 Tick 的按键事件只作用于玩家。残留局限：玩家键位仍是全局的（`DASH_KEY`/`ATTACK_KEY` 不按实体绑定），
   多玩家/重映射需在 `PlayerInputComponent` 上加 `dashKey`/`attackKey`（属 M3）。
