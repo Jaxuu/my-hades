@@ -15,7 +15,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveCircleAABB } from '../../src';
+import { dotVec2, reflectVec2, resolveCircleAABB, vec2 } from '../../src';
+import type { Vec2 } from '../../src';
 
 /** The reference box: left = 0, top = 0, right = 2, bottom = 2. */
 const BOX = { x: 0, y: 0, w: 2, h: 2 } as const;
@@ -263,5 +264,91 @@ describe('M5 · determinism and the tie-break order', () => {
         }
       }
     }
+  });
+});
+
+/* ========================================================================== *
+ * M11-T01 · dotVec2 + reflectVec2                                             *
+ * ========================================================================== */
+
+/** The acute angle (radians) between `v` and the LINE through `n` (undirected). */
+function angleToNormalLine(v: Vec2, n: Vec2): number {
+  const dot = Math.abs(dotVec2(v, n));
+  const scale = Math.hypot(v.x, v.y) * Math.hypot(n.x, n.y);
+  return Math.acos(Math.min(1, dot / scale));
+}
+
+describe('M11 · dotVec2 and reflectVec2 (spec 18 AC-01)', () => {
+  it('dotVec2 is the scalar product a·b = ax*bx + ay*by', () => {
+    expect(dotVec2(vec2(3, 4), vec2(2, -1))).toBe(2); // 6 - 4
+    expect(dotVec2(vec2(1, 0), vec2(0, 1))).toBe(0); // orthogonal
+    expect(dotVec2(vec2(2, 3), vec2(2, 3))).toBe(13); // self-dot = |v|²
+    expect(dotVec2(vec2(0, 0), vec2(9, -9))).toBe(0);
+  });
+
+  it('reflects a head-on incidence straight back along the normal', () => {
+    // A projectile travelling (0, -1) into a surface whose outward normal is (0, -1).
+    const reflected = reflectVec2(vec2(0, -1), vec2(0, -1));
+    expect(reflected.x).toBeCloseTo(0, 12);
+    expect(reflected.y).toBeCloseTo(1, 12);
+  });
+
+  it('reflects a 45-degree incidence to the mirror image across the normal', () => {
+    const inv = 1 / Math.SQRT2;
+    const reflected = reflectVec2(vec2(inv, inv), vec2(0, -1));
+    expect(reflected.x).toBeCloseTo(inv, 12);
+    expect(reflected.y).toBeCloseTo(-inv, 12);
+  });
+
+  it('conserves the angle to the normal line (angle of incidence = reflection)', () => {
+    const n = vec2(0, -1);
+    const samples: readonly Vec2[] = [
+      vec2(0, -1),
+      vec2(1 / Math.SQRT2, 1 / Math.SQRT2),
+      vec2(0.5, -0.8660254037844386),
+      vec2(-0.8, -0.6),
+    ];
+    for (const v of samples) {
+      const reflected = reflectVec2(v, n);
+      expect(angleToNormalLine(reflected, n)).toBeCloseTo(angleToNormalLine(v, n), 12);
+    }
+  });
+
+  it('is invariant to the LENGTH of the normal (it normalizes internally)', () => {
+    const v = vec2(1, 1);
+    const unit = reflectVec2(v, vec2(0, -1));
+    expect(reflectVec2(v, vec2(0, -5))).toEqual(unit);
+    expect(reflectVec2(v, vec2(0, 0.0001))).toEqual(unit);
+  });
+
+  it('returns the input UNCHANGED for a zero normal (degenerate plane)', () => {
+    const v = vec2(3, -4);
+    expect(reflectVec2(v, vec2(0, 0))).toEqual({ x: 3, y: -4 });
+  });
+
+  it('preserves the length of the reflected vector', () => {
+    const samples: readonly Vec2[] = [vec2(0, -1), vec2(1, 1), vec2(-0.8, -0.6), vec2(2.5, 0)];
+    for (const v of samples) {
+      const reflected = reflectVec2(v, vec2(0, -1));
+      expect(Math.hypot(reflected.x, reflected.y)).toBeCloseTo(Math.hypot(v.x, v.y), 9);
+    }
+  });
+
+  it('is an involution: reflecting twice returns the original direction', () => {
+    const n = vec2(0, -1);
+    const v = vec2(1 / Math.SQRT2, 1 / Math.SQRT2);
+    const twice = reflectVec2(reflectVec2(v, n), n);
+    expect(twice.x).toBeCloseTo(v.x, 12);
+    expect(twice.y).toBeCloseTo(v.y, 12);
+  });
+
+  it('is a pure function: identical input yields bit-identical output', () => {
+    const v = vec2(0.3, -0.7);
+    const n = vec2(0.6, -0.8);
+    const first = reflectVec2(v, n);
+    const second = reflectVec2(v, n);
+    expect(second).toEqual(first);
+    expect(Object.is(second.x, first.x)).toBe(true);
+    expect(Object.is(second.y, first.y)).toBe(true);
   });
 });

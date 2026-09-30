@@ -36,8 +36,22 @@
  * walks the table are byte-for-byte stable across machines.
  */
 
-import { SchemaError, parseEncounterTable, parseEnemyConfig, parseModifierConfig } from './schemas';
-import type { EncounterRoomTemplate, EncounterWaveTemplate, EnemyConfig, ModifierConfig } from './schemas';
+import {
+  SchemaError,
+  parseEncounterTable,
+  parseEnemyConfig,
+  parseHazardConfig,
+  parseModifierConfig,
+  parseProjectileConfig,
+} from './schemas';
+import type {
+  EncounterRoomTemplate,
+  EncounterWaveTemplate,
+  EnemyConfig,
+  HazardConfig,
+  ModifierConfig,
+  ProjectileConfig,
+} from './schemas';
 
 /**
  * The raw tables, exactly as they appear in `assets/data/*.json`.
@@ -52,11 +66,20 @@ import type { EncounterRoomTemplate, EncounterWaveTemplate, EnemyConfig, Modifie
  * tool, a focused test, a future mini-build) is not forced to invent an empty
  * room table. An omitted table is treated as "no rooms configured", which
  * `getEncounterWaves` reports loudly rather than silently returning nothing.
+ *
+ * M11-T01 adds two more OPTIONAL id-keyed tables on the same terms:
+ * `projectiles` (`assets/data/projectiles.json`, projectile TYPE templates) and
+ * `hazards` (`assets/data/hazards.json`, composite-hazard templates referenced by
+ * `onExplodeConfigId`). An omitted table means "this bundle ships no templates of
+ * that kind", and `loadAll` treats it as an empty registry — exactly the
+ * absent-vs-empty distinction `encounters` draws.
  */
 export interface RawConfigTables {
   readonly enemies: Readonly<Record<string, unknown>>;
   readonly modifiers: Readonly<Record<string, unknown>>;
   readonly encounters?: readonly unknown[];
+  readonly projectiles?: Readonly<Record<string, unknown>>;
+  readonly hazards?: Readonly<Record<string, unknown>>;
 }
 
 /** Deterministic (locale-free) string ordering — UTF-16 code units, not collation. */
@@ -70,6 +93,20 @@ export class DataManager {
   private static readonly enemies = new Map<string, EnemyConfig>();
   private static readonly modifiers = new Map<string, ModifierConfig>();
   /**
+   * Projectile TYPE templates (M11-T01), keyed by id.
+   *
+   * `readonly` (the field is never reassigned); `loadAll` clears and refills it ONLY
+   * after every table has parsed cleanly, so a failed load leaves the previous
+   * templates untouched — the same atomicity rule the enemy / modifier maps follow.
+   */
+  private static readonly projectiles = new Map<string, ProjectileConfig>();
+  /**
+   * Composite-hazard templates (M11-T01), keyed by id. Referenced by
+   * `onExplodeConfigId` and re-spawned by `HazardSystem.detonate`. Refilled only
+   * after a fully successful parse, like every other table.
+   */
+  private static readonly hazards = new Map<string, HazardConfig>();
+  /**
    * The room sequence a run is built from (M10-T02), indexed by depth.
    *
    * An array rather than a `Map`: `depth` is validated to equal the entry's
@@ -82,7 +119,7 @@ export class DataManager {
   /**
    * Validate a whole config bundle and install it as THE registry (AC-01/AC-02).
    *
-   * Atomic: all three tables are parsed into fresh structures first, and the
+   * Atomic: all tables are parsed into fresh structures first, and the
    * registry is only replaced once EVERY one has parsed cleanly. A boot that
    * fails on the third enemy therefore leaves the previous tables untouched
    * instead of half-loaded — "some configs are live" is the worst possible state
@@ -96,9 +133,17 @@ export class DataManager {
    * inside `step()` at the moment the wave is due (spec 08 AC-05's "fail at the
    * seam" discipline).
    *
+   * M11-T01 adds two more tables and a second cross-table rule: every
+   * `onExplodeConfigId` — whether it appears on an entry of the `hazards` table or on
+   * an enemy's `hazard` block — must resolve to a hazard id loaded in THIS SAME
+   * load. Same rationale as the encounter check: the reference is only knowable with
+   * all tables in hand, and it must fail at load time rather than from inside
+   * `step()` when a hazard finally detonates.
+   *
    * @throws SchemaError from the first entry that fails validation, labelled with
-   *   its full path (`enemies.grunt.maxHp`, `encounters[1].waves[0].enemies[2]`),
-   *   so a boot failure names the exact field to fix.
+   *   its full path (`enemies.grunt.maxHp`, `encounters[1].waves[0].enemies[2]`,
+   *   `hazards.poison_cloud.onExplodeConfigId`), so a boot failure names the exact
+   *   field to fix.
    */
   public static loadAll(tables: RawConfigTables): void {
     const enemies = DataManager.parseTable(tables.enemies, 'enemies', parseEnemyConfig);
@@ -110,13 +155,34 @@ export class DataManager {
     // nothing to fight — a config bug, and `parseEncounterTable` rejects it.
     const encounters =
       tables.encounters === undefined ? [] : parseEncounterTable(tables.encounters, 'encounters');
+    // Same absent-vs-present rule for the two M11 tables: an omitted table is an
+    // empty registry (a bundle that ships no projectile / hazard templates), which is
+    // legitimate — so we skip `parseTable` rather than force an empty object.
+    const projectiles =
+      tables.projectiles === undefined
+        ? new Map<string, ProjectileConfig>()
+        : DataManager.parseTable(tables.projectiles, 'projectiles', (id, data) =>
+            parseProjectileConfig(id, data),
+          );
+    const hazards =
+      tables.hazards === undefined
+        ? new Map<string, HazardConfig>()
+        : DataManager.parseTable(tables.hazards, 'hazards', (id, data) =>
+            parseHazardConfig(data, `hazards.${id}`),
+          );
 
     DataManager.assertEncounterEnemiesExist(encounters, enemies);
+    DataManager.assertHazardRefsExist(hazards, enemies);
+    DataManager.assertHazardGraphAcyclic(hazards, enemies);
 
     DataManager.enemies.clear();
     for (const [id, config] of enemies) DataManager.enemies.set(id, config);
     DataManager.modifiers.clear();
     for (const [id, config] of modifiers) DataManager.modifiers.set(id, config);
+    DataManager.projectiles.clear();
+    for (const [id, config] of projectiles) DataManager.projectiles.set(id, config);
+    DataManager.hazards.clear();
+    for (const [id, config] of hazards) DataManager.hazards.set(id, config);
     DataManager.encounters = encounters;
   }
 
@@ -192,6 +258,66 @@ export class DataManager {
   /** How many modifier configs are loaded. */
   public static get modifierCount(): number {
     return DataManager.modifiers.size;
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * Projectile + hazard templates (M11-T01)                                 *
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * The parsed projectile template for `id`.
+   *
+   * @throws SchemaError when the registry is EMPTY (Bootstrap never ran) or when
+   *   `id` is not in the table (listing the known ids), exactly like
+   *   {@link getEnemyConfig}.
+   */
+  public static getProjectileConfig(id: string): ProjectileConfig {
+    const config = DataManager.projectiles.get(id);
+    if (config === undefined) {
+      throw new SchemaError(
+        DataManager.unknownIdMessage('projectile', id, DataManager.projectiles.size),
+      );
+    }
+    return config;
+  }
+
+  /** @throws SchemaError under the conditions listed on {@link getProjectileConfig}. */
+  public static getHazardConfig(id: string): HazardConfig {
+    const config = DataManager.hazards.get(id);
+    if (config === undefined) {
+      throw new SchemaError(DataManager.unknownIdMessage('hazard', id, DataManager.hazards.size));
+    }
+    return config;
+  }
+
+  /** Whether a projectile template with this id is loaded. */
+  public static hasProjectile(id: string): boolean {
+    return DataManager.projectiles.has(id);
+  }
+
+  /** Whether a hazard template with this id is loaded. */
+  public static hasHazard(id: string): boolean {
+    return DataManager.hazards.has(id);
+  }
+
+  /** Every loaded projectile id, ascending. Sorted so the order is byte-for-byte stable. */
+  public static get projectileIds(): readonly string[] {
+    return [...DataManager.projectiles.keys()].sort(compareIds);
+  }
+
+  /** Every loaded hazard id, ascending. */
+  public static get hazardIds(): readonly string[] {
+    return [...DataManager.hazards.keys()].sort(compareIds);
+  }
+
+  /** How many projectile templates are loaded. */
+  public static get projectileCount(): number {
+    return DataManager.projectiles.size;
+  }
+
+  /** How many hazard templates are loaded. */
+  public static get hazardCount(): number {
+    return DataManager.hazards.size;
   }
 
   /* ---------------------------------------------------------------------- *
@@ -278,6 +404,8 @@ export class DataManager {
   public static clear(): void {
     DataManager.enemies.clear();
     DataManager.modifiers.clear();
+    DataManager.projectiles.clear();
+    DataManager.hazards.clear();
     DataManager.encounters = [];
   }
 
@@ -316,6 +444,114 @@ export class DataManager {
     }
   }
 
+  /**
+   * The cross-table rule of M11-T01: every `onExplodeConfigId` — on an entry of the
+   * `hazards` table OR on an enemy's `hazard` block — must name a hazard that is
+   * being installed IN THE SAME LOAD.
+   *
+   * Same reasoning as {@link assertEncounterEnemiesExist}: the reference is only
+   * resolvable with all tables in hand, so it must be checked here and fail at load
+   * time. `HazardSystem.detonate` then performs a plain lookup that cannot throw
+   * (spec 18 I5), which is what keeps the runtime free of config validation.
+   *
+   * Both sources are walked in ascending id order so the FIRST offending reference
+   * is deterministic across machines (no `localeCompare`).
+   *
+   * @throws SchemaError naming the offending path and listing the loaded hazard ids.
+   */
+  private static assertHazardRefsExist(
+    hazards: ReadonlyMap<string, HazardConfig>,
+    enemies: ReadonlyMap<string, EnemyConfig>,
+  ): void {
+    const known = [...hazards.keys()].sort(compareIds);
+
+    for (const id of known) {
+      const config = hazards.get(id);
+      if (config === undefined) continue;
+      const ref = config.onExplodeConfigId;
+      if (ref === undefined || hazards.has(ref)) continue;
+      throw new SchemaError(
+        `hazards.${id}.onExplodeConfigId references unknown hazard id '${ref}'. Loaded hazard ids: ${known.join(', ')}.`,
+      );
+    }
+
+    for (const enemyId of [...enemies.keys()].sort(compareIds)) {
+      const config = enemies.get(enemyId);
+      if (config === undefined) continue;
+      const ref = config.hazard?.onExplodeConfigId;
+      if (ref === undefined || hazards.has(ref)) continue;
+      throw new SchemaError(
+        `enemies.${enemyId}.hazard.onExplodeConfigId references unknown hazard id '${ref}'. Loaded hazard ids: ${known.join(', ')}.`,
+      );
+    }
+  }
+
+  /**
+   * The acyclicity rule of M11-T01 (spec 18 §4.4): the `onExplodeConfigId` reference
+   * graph — over the `hazards` table AND every `enemies.<id>.hazard` block — must be
+   * a DAG.
+   *
+   * WHY: `HazardSystem.advanceHazards` drains a WORK QUEUE, so a hazard detonated on
+   * tick `T` appends its child to the SAME tick's drain. That is what makes "planted
+   * on tick `T` with `delayTicks = N` detonates on tick `T + N`" hold for phase-A and
+   * phase-B hazards alike — but it also means a CYCLE would let a chain re-enter
+   * itself within one `step()`. A DAG is the precondition that makes the same-tick
+   * drain provably finite; the `MAX_HAZARD_CHAIN_PER_TICK` cap is only defence in
+   * depth for a config that somehow slipped past this check. A self-reference
+   * (`hazards.x -> hazards.x`) is the smallest cycle and is rejected here too.
+   *
+   * Existence is checked FIRST ({@link assertHazardRefsExist}), so every edge this
+   * walk follows already points at a loaded hazard id.
+   *
+   * Determinism: start nodes are visited in ascending id order and each node has AT
+   * MOST one successor (an `onExplodeConfigId`), so this is a plain functional-graph
+   * walk — no `localeCompare`, no reliance on `Map` insertion order.
+   *
+   * @throws SchemaError naming the cycle path, e.g.
+   *   `hazards.a -> hazards.b -> hazards.a`.
+   */
+  private static assertHazardGraphAcyclic(
+    hazards: ReadonlyMap<string, HazardConfig>,
+    enemies: ReadonlyMap<string, EnemyConfig>,
+  ): void {
+    // Node labels: `hazards.<id>` and `enemies.<id>.hazard`. Each node has at most one
+    // outgoing edge, so the graph is FUNCTIONAL — the walk below is exhaustive.
+    const successor = new Map<string, string>();
+
+    for (const id of [...hazards.keys()].sort(compareIds)) {
+      const ref = hazards.get(id)?.onExplodeConfigId;
+      if (ref !== undefined) successor.set(`hazards.${id}`, `hazards.${ref}`);
+    }
+    for (const enemyId of [...enemies.keys()].sort(compareIds)) {
+      const ref = enemies.get(enemyId)?.hazard?.onExplodeConfigId;
+      if (ref !== undefined) successor.set(`enemies.${enemyId}.hazard`, `hazards.${ref}`);
+    }
+
+    const settled = new Set<string>();
+    for (const start of [...successor.keys()].sort(compareIds)) {
+      if (settled.has(start)) continue;
+
+      const path: string[] = [];
+      const onPath = new Map<string, number>();
+      let node: string | undefined = start;
+
+      while (node !== undefined && !settled.has(node)) {
+        const seenAt = onPath.get(node);
+        if (seenAt !== undefined) {
+          const cycle = [...path.slice(seenAt), node];
+          throw new SchemaError(
+            `onExplodeConfigId forms a cycle: ${cycle.join(' -> ')}. A composite-hazard chain must be finite (spec 18 §4.4).`,
+          );
+        }
+        onPath.set(node, path.length);
+        path.push(node);
+        node = successor.get(node);
+      }
+
+      for (const visited of path) settled.add(visited);
+    }
+  }
+
   /** Parse a whole id-keyed table, keys in ascending order for stable error reporting. */
   private static parseTable<T>(    table: Readonly<Record<string, unknown>>,
     label: string,
@@ -331,12 +567,28 @@ export class DataManager {
     return parsed;
   }
 
+  /** Every loaded id of a given config `kind`, ascending — the "known ids" list. */
+  private static idsFor(kind: string): readonly string[] {
+    switch (kind) {
+      case 'enemy':
+        return DataManager.enemyIds;
+      case 'modifier':
+        return DataManager.modifierIds;
+      case 'projectile':
+        return DataManager.projectileIds;
+      case 'hazard':
+        return DataManager.hazardIds;
+      default:
+        return [];
+    }
+  }
+
   /** The two distinct "no config" messages, so a boot error reads as what it is. */
   private static unknownIdMessage(kind: string, id: string, loaded: number): string {
     if (loaded === 0) {
       return `no config tables are loaded, so ${kind} '${id}' cannot be resolved: run the Bootstrap phase (bootstrapData()) before constructing a GameSimulator (spec 16 AC-03).`;
     }
-    const known = kind === 'enemy' ? DataManager.enemyIds : DataManager.modifierIds;
+    const known = DataManager.idsFor(kind);
     return `unknown ${kind} id '${id}'. Loaded ${kind} ids: ${known.join(', ')}.`;
   }
 }

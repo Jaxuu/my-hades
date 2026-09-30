@@ -878,3 +878,93 @@ describe('G5 · pipeline slot and zero regression (AC-10/AC-11)', () => {
     expect(hpOf(sim, playerIdOf(sim))).toBe(100);
   });
 });
+
+/* ========================================================================== *
+ * G6 · composite-chain timing (M11-T01 AC-03)                                *
+ * ========================================================================== */
+describe('G6 · a composite chain detonates on T+N for BOTH phases (M11-T01 AC-03)', () => {
+  /**
+   * A STATIC dummy: Transform + Hurtbox + Faction + Health, and NOTHING else.
+   *
+   * Deliberately no `Intent` and no `State`. `CollisionSystem` writes a
+   * `KnockbackComponent` on a landed hit, but `MovementSystem` only applies the
+   * forced displacement to a body that is BOTH in `HITSTUN` (needs a `StateComponent`)
+   * AND visited by its move query (needs `Intent` + `Velocity`). The dummy owns none
+   * of those, so it never moves: both blasts are measured against the SAME standing
+   * position, and it is the TIMING — not a drifting target — that the assertions pin.
+   */
+  function spawnStaticDummy(sim: GameSimulator, x: number, y: number, hp = 100): EntityId {
+    const entity = sim.world.createEntity();
+    sim.world.addComponent(entity.id, new TransformComponent(x, y, 0));
+    sim.world.addComponent(entity.id, new HurtboxComponent(0.5));
+    sim.world.addComponent(entity.id, new FactionComponent(Faction.Player));
+    sim.world.addComponent(entity.id, new HealthComponent(hp, hp));
+    return entity.id;
+  }
+
+  it('main (delayTicks 30) blows on tick 30, child (delayTicks 10) on tick 40 — never 39 or 41', () => {
+    const sim = new GameSimulator({ fps: FPS, systems: createDefaultSystems() });
+    const dummy = spawnStaticDummy(sim, 0, 0);
+
+    const MAIN_DAMAGE = 25;
+    const CHILD_DAMAGE = 8; // = poison_cloud.damage (the TEMPLATE, not the root's 25)
+    const mainId = spawnHazard(sim.world, {
+      x: 0,
+      y: 0,
+      radius: 2,
+      damage: MAIN_DAMAGE,
+      delayTicks: 30,
+      faction: Faction.Enemy,
+      ownerEntityId: -1,
+      onExplodeConfigId: 'poison_cloud', // shipped child template: delayTicks 10
+    });
+
+    // Ticks 0..29 — the main fuse burns down; NOTHING lands and the child does not exist.
+    for (let tick = 0; tick < 30; tick += 1) {
+      sim.step(1);
+      expect(hpOf(sim, dummy)).toBe(100);
+      expect(sim.world.query(HazardComponent)).toEqual([mainId]);
+    }
+    expect(sim.tick).toBe(30);
+    expect(hazardOf(sim, mainId).delayTicks).toBe(0);
+    expect(sim.world.isAlive(mainId)).toBe(true);
+
+    // Tick 30 — the MAIN detonates. Its child is born in the SAME phase-B drain and is
+    // APPENDED to the queue, so its fuse is already decremented once (10 -> 9). This is
+    // the whole fix: a hazard planted on tick T starts its fuse on tick T, whatever
+    // phase planted it.
+    sim.step(1);
+    expect(hpOf(sim, dummy)).toBe(100 - MAIN_DAMAGE);
+    expect(sim.world.isAlive(mainId)).toBe(false);
+    const afterMain = sim.world.query(HazardComponent);
+    expect(afterMain).toHaveLength(1);
+    const childId = at(afterMain, 0);
+    expect(childId).not.toBe(mainId);
+    // The child's numbers come from the TEMPLATE (poison_cloud: 2.5 / 8 / 10), not the root.
+    const child = hazardOf(sim, childId);
+    expect(child.radius).toBe(2.5);
+    expect(child.damage).toBe(CHILD_DAMAGE);
+    expect(child.totalDelayTicks).toBe(10);
+    expect(child.delayTicks).toBe(9);
+
+    // Ticks 31..39 — the child burns down; it must NOT blow at tick 39 (the off-by-one
+    // the previous snapshot-based drain produced).
+    for (let tick = 31; tick <= 39; tick += 1) {
+      sim.step(1);
+      expect(hpOf(sim, dummy)).toBe(100 - MAIN_DAMAGE);
+      expect(sim.world.isAlive(childId)).toBe(true);
+    }
+    expect(sim.tick).toBe(40);
+    expect(hazardOf(sim, childId).delayTicks).toBe(0);
+
+    // Tick 40 — the CHILD detonates, exactly 30 + 10 after the root was planted.
+    sim.step(1);
+    expect(hpOf(sim, dummy)).toBe(100 - MAIN_DAMAGE - CHILD_DAMAGE);
+    expect(sim.world.isAlive(childId)).toBe(false);
+
+    // Tick 41 — nothing lingers (the chain ends: poison_cloud has no onExplodeConfigId).
+    sim.step(1);
+    expect(hpOf(sim, dummy)).toBe(100 - MAIN_DAMAGE - CHILD_DAMAGE);
+    expect(sim.world.query(HazardComponent)).toEqual([]);
+  });
+});

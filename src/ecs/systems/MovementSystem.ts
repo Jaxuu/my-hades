@@ -25,6 +25,24 @@
  * change the pipeline hard contract (and its six pinning tests) for zero behavioural
  * gain — see spec 13 §10 trade-off 1.
  *
+ * AC-01 BOUNCE (M11-T01, spec 18 §4.1). Consequence 2 of wall resolution is now a
+ * branch: a `destroyOnWall` body that is ALSO a projectile with `bounceCount > 0` is
+ * REFLECTED instead of destroyed. The reflection is the Householder mirror
+ *
+ *     V' = V - 2 * (V · N) * N
+ *
+ * where `N` is the unit normal — and the normal is the NORMALIZED accumulated push
+ * `(pushX, pushY)` of this tick's pass. That push is exactly the outward normal of
+ * the geometry the body is being extruded from, so a single normalization yields it
+ * without any second geometry query. Reflecting ONCE per entity per tick (never in a
+ * `while`/retry loop) is what keeps the pass a single finite traversal: the loop is
+ * `for (const id of ...)` over a fixed snapshot, and each body is touched once, so a
+ * wall-bouncing projectile can never spin the tick.
+ *
+ * With `bounceCount === 0` (every pre-M11 projectile) — or for any non-projectile
+ * `destroyOnWall` body — the branch is not taken and the historic destroy-on-contact
+ * path runs unchanged.
+ *
  * --- phase 1: per-entity dispatch inside `integrate`, in priority order ---
  *
  *   0. DEAD (death tag)    -> skip entirely: a corpse is not displaced, not even by
@@ -55,7 +73,7 @@
  * against the state decided on the previous tick (spec 02 §5, hard timing contract).
  */
 
-import { resolveCircleAABB, clampMagnitude, vec2 } from '../../core/math';
+import { resolveCircleAABB, clampMagnitude, normalizeVec2, reflectVec2, vec2 } from '../../core/math';
 import type { System, SystemContext } from '../System';
 import type { World } from '../World';
 import type { EntityId } from '../Entity';
@@ -203,6 +221,15 @@ export class MovementSystem implements System {
    * de-penetrated either. A body that dies inside a wall therefore stays inside it —
    * deliberate, and the same "death is an absolute skip" rule every other system
    * follows.
+   *
+   * BOUNCE (M11-T01, spec 18 §4.1). When a pushed body is a `destroyOnWall` hitbox
+   * that ALSO carries a `ProjectileComponent` with `bounceCount > 0`, it is not
+   * destroyed: the allowance is spent and its `VelocityComponent.directionVector` is
+   * mirrored about the normalized accumulated push. Exactly one reflection per body
+   * per tick — no `while`, no retry — so the pass stays a single finite traversal and
+   * a corner can never make a projectile ping-pong within one tick. A body that is
+   * not a projectile, or whose allowance is exhausted, falls through to the historic
+   * `destroyOnWall` destruction.
    */
   private resolveWalls(world: World): void {
     const wallIds = world.query(WallComponent);
@@ -256,7 +283,20 @@ export class MovementSystem implements System {
       if (!world.isAlive(id)) continue;
       const hitbox = world.getComponent(id, HitboxComponent);
       if (hitbox !== undefined && hitbox.destroyOnWall) {
-        world.destroyEntity(id);
+        const projectile = world.getComponent(id, ProjectileComponent);
+        if (projectile !== undefined && projectile.bounceCount > 0) {
+          // M11-T01 AC-01 — 镜面反射：法线 = 本 Tick 累积推力的归一化方向。
+          projectile.bounceCount -= 1;
+          const velocity = world.getComponent(id, VelocityComponent);
+          if (velocity !== undefined) {
+            velocity.directionVector = reflectVec2(
+              velocity.directionVector,
+              normalizeVec2(vec2(pushX, pushY)),
+            );
+          }
+        } else {
+          world.destroyEntity(id);
+        }
       }
     }
   }

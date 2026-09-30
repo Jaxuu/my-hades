@@ -1,0 +1,3 @@
+{
+  "poison_cloud": { "radius": 2.5, "damage": 8, "delayTicks": 10 }
+}

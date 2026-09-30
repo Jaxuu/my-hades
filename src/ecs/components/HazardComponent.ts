@@ -40,6 +40,14 @@
  * owner of the blast hitbox — see `HazardSystem.detonate` and spec 14 §4.1: a
  * bomb that has already been planted must still go off after the enemy that
  * planted it dies, and `CollisionSystem`'s owner gate would otherwise retire it.
+ *
+ * `onExplodeConfigId` (M11-T01, spec 18 §4.3) is the COMPOSITE-HAZARD hook: when it
+ * is a non-null string, it names a template in the `hazards` config table and
+ * `HazardSystem.detonate` spawns one more hazard IN PLACE, right after this one's
+ * blast, before destroying this telegraph. `null` (the default, and every pre-M11
+ * hazard) means "a plain, terminal explosion". The id's EXISTENCE is guaranteed by
+ * the load-time cross-table check in `DataManager.loadAll`, so the runtime lookup
+ * inside `detonate` can never throw (spec 18 I5).
  */
 
 import { ComponentBase } from '../Component';
@@ -126,6 +134,17 @@ export class HazardComponent extends ComponentBase {
    */
   public ownerEntityId: EntityId;
 
+  /**
+   * Composite-hazard template id (M11-T01, spec 18 §4.3), or `null` for a plain
+   * terminal explosion.
+   *
+   * A non-null value names a template in the `hazards` config table;
+   * `HazardSystem.detonate` spawns one such hazard in place immediately after this
+   * one's blast. The referenced id is guaranteed to exist by the load-time
+   * cross-table check, so the runtime lookup cannot fail.
+   */
+  public onExplodeConfigId: string | null;
+
   constructor(
     radius = DEFAULT_HAZARD_RADIUS,
     damage = DEFAULT_HAZARD_DAMAGE,
@@ -133,6 +152,7 @@ export class HazardComponent extends ComponentBase {
     totalDelayTicks = delayTicks,
     faction: Faction = Faction.Enemy,
     ownerEntityId: EntityId = -1,
+    onExplodeConfigId: string | null = null,
   ) {
     super();
     this.radius = radius;
@@ -141,6 +161,7 @@ export class HazardComponent extends ComponentBase {
     this.totalDelayTicks = totalDelayTicks;
     this.faction = faction;
     this.ownerEntityId = ownerEntityId;
+    this.onExplodeConfigId = onExplodeConfigId;
   }
 }
 
@@ -167,6 +188,13 @@ export interface HazardSpawnOptions {
   readonly faction?: Faction;
   /** The planting entity, for audit; defaults to `-1` (nobody). */
   readonly ownerEntityId?: EntityId;
+  /**
+   * Composite-hazard template id (M11-T01); defaults to `null` (a plain terminal
+   * explosion). When a non-empty string, it names a `hazards` config template that
+   * `HazardSystem.detonate` re-spawns in place after this blast. An empty string is
+   * rejected at the seam.
+   */
+  readonly onExplodeConfigId?: string | null;
 }
 
 /** @throws RangeError if `value` is not a positive finite number. */
@@ -201,12 +229,13 @@ function assertNonNegativeInteger(value: number, label: string): void {
  * hazard leaks no entity.
  *
  * @throws RangeError if `x` / `y` is not finite, or `radius` / `damage` /
- *   `delayTicks` fails its validation.
+ *   `delayTicks` / `onExplodeConfigId` fails its validation.
  */
 export function spawnHazard(world: World, options: HazardSpawnOptions): EntityId {
   const radius = options.radius ?? DEFAULT_HAZARD_RADIUS;
   const damage = options.damage ?? DEFAULT_HAZARD_DAMAGE;
   const delayTicks = options.delayTicks ?? DEFAULT_HAZARD_DELAY_TICKS;
+  const onExplodeConfigId = options.onExplodeConfigId ?? null;
 
   if (!Number.isFinite(options.x)) {
     throw new RangeError(`hazard.x must be a finite number, received: ${String(options.x)}`);
@@ -217,6 +246,14 @@ export function spawnHazard(world: World, options: HazardSpawnOptions): EntityId
   assertPositiveFinite(radius, 'hazard.radius');
   assertNonNegativeFinite(damage, 'hazard.damage');
   assertNonNegativeInteger(delayTicks, 'hazard.delayTicks');
+  if (
+    onExplodeConfigId !== null &&
+    (typeof onExplodeConfigId !== 'string' || onExplodeConfigId.length === 0)
+  ) {
+    throw new RangeError(
+      `hazard.onExplodeConfigId must be a non-empty string when provided, received: ${String(onExplodeConfigId)}`,
+    );
+  }
 
   const entity = world.createEntity();
   world.addComponent(entity.id, new TransformComponent(options.x, options.y, 0));
@@ -229,6 +266,7 @@ export function spawnHazard(world: World, options: HazardSpawnOptions): EntityId
       delayTicks,
       options.faction ?? Faction.Enemy,
       options.ownerEntityId ?? -1,
+      onExplodeConfigId,
     ),
   );
   return entity.id;

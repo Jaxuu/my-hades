@@ -13,6 +13,14 @@
  * the hitbox (rather than looked up through the attacker each tick) so the hitbox
  * keeps working even if the attacker is destroyed mid-swing, and so hit resolution
  * never depends on the attacker still being alive.
+ *
+ * PIERCING (M11-T01, spec 18 AC-02). Two fields describe a hitbox that is not
+ * retired by its first landed hit: `pierceCount` (how many MORE targets it may
+ * strike) and `damageFalloff` (the fraction removed from `damage` after each
+ * pierce). When `pierceCount > 0`, `CollisionSystem` does NOT destroy the hitbox on
+ * a landed hit — it decrements the allowance and multiplies `damage` by
+ * `(1 - damageFalloff)` for the FOLLOW-UP targets, then continues its target loop.
+ * `pierceCount === 0` is the historic behaviour, bit-for-bit.
  */
 
 import { ComponentBase } from '../Component';
@@ -48,6 +56,25 @@ export const DEFAULT_HITSTOP_TICKS = 4;
  * the hit direction during HITSTUN. See specs/04_combat_feedback_spec.md AC-03.
  */
 export const DEFAULT_KNOCKBACK_FORCE = 12;
+
+/**
+ * Default remaining pierce allowance of a hitbox (M11-T01 AC-02).
+ *
+ * `0` means "no piercing": the hitbox is retired on its first landed hit when
+ * `destroyOnHit` is set, which is the historic (M7) behaviour. A positive value is
+ * the number of ADDITIONAL targets the hitbox may strike before it retires.
+ */
+export const DEFAULT_HITBOX_PIERCE_COUNT = 0;
+
+/**
+ * Default per-pierce damage falloff of a hitbox (M11-T01 AC-02).
+ *
+ * The FRACTION of damage removed after each pierce: `0` keeps every subsequent
+ * hit at full damage (the historic behaviour); `0.5` halves it each time. Must lie
+ * in `[0, 1)` — `1` would zero every follow-up hit, which is a config bug rather
+ * than a legal "no damage" (omit piercing instead).
+ */
+export const DEFAULT_HITBOX_DAMAGE_FALLOFF = 0;
 
 export class HitboxComponent extends ComponentBase {
   /** Hit radius in world units. Overlap requires `dist < radius + hurtbox.radius`. */
@@ -122,6 +149,33 @@ export class HitboxComponent extends ComponentBase {
    */
   public destroyOnWall: boolean;
 
+  /**
+   * Remaining pierce allowance (M11-T01, spec 18 AC-02).
+   *
+   * `0` (the default, and every pre-M11 hitbox) means NO piercing: on the first
+   * landed hit `CollisionSystem` retires the hitbox if `destroyOnHit` is set, which
+   * is the historic behaviour. When `> 0` the hitbox SURVIVES a landed hit: the
+   * allowance is decremented by one and the target loop continues, so the hitbox may
+   * reach further victims. Piercing is only meaningful together with `destroyOnHit`
+   * — a hitbox that never retires on a hit already strikes every hostile in it.
+   *
+   * Read and mutated by `CollisionSystem` only.
+   */
+  public pierceCount: number;
+
+  /**
+   * Fractional damage removed after each pierce (M11-T01, spec 18 AC-02), in
+   * `[0, 1)`.
+   *
+   * After a hit that consumes one pierce, `damage` is multiplied by
+   * `(1 - damageFalloff)`, so the falloff applies to the FOLLOW-UP targets — the
+   * victim that was just struck takes the damage it was owed, and the `HitEvent`
+   * reports that pre-decay value. `0` keeps every hit at full damage; `0.5` halves
+   * the damage per pierce. Values are validated at the assembly seam
+   * (`spawnProjectile`), never inside the component.
+   */
+  public damageFalloff: number;
+
   constructor(
     radius: number,
     damage: number,
@@ -134,6 +188,8 @@ export class HitboxComponent extends ComponentBase {
     sourceModifier: string | null = null,
     destroyOnHit = false,
     destroyOnWall = false,
+    pierceCount = DEFAULT_HITBOX_PIERCE_COUNT,
+    damageFalloff = DEFAULT_HITBOX_DAMAGE_FALLOFF,
   ) {
     super();
     this.radius = radius;
@@ -147,5 +203,7 @@ export class HitboxComponent extends ComponentBase {
     this.sourceModifier = sourceModifier;
     this.destroyOnHit = destroyOnHit;
     this.destroyOnWall = destroyOnWall;
+    this.pierceCount = pierceCount;
+    this.damageFalloff = damageFalloff;
   }
 }

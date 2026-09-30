@@ -31,6 +31,8 @@
 import enemiesJson from '../../assets/data/enemies.json';
 import modifiersJson from '../../assets/data/modifiers.json';
 import encountersJson from '../../assets/data/encounters.json';
+import projectilesJson from '../../assets/data/projectiles.json';
+import hazardsJson from '../../assets/data/hazards.json';
 import { DataManager } from './DataManager';
 import type { RawConfigTables } from './DataManager';
 
@@ -45,15 +47,27 @@ import type { RawConfigTables } from './DataManager';
  * It travels through the same seam as the other two so the room layout is
  * validated — including the cross-table "every wave names a real enemy" check —
  * during Bootstrap, before a single tick has been simulated.
+ *
+ * M11-T01 adds `projectiles` (`assets/data/projectiles.json`, projectile TYPE
+ * templates) and `hazards` (`assets/data/hazards.json`, composite-hazard templates).
+ * Both travel through the same seam, so their fields AND the cross-table
+ * "every `onExplodeConfigId` names a real hazard" rule are validated during
+ * Bootstrap.
  */
 export function bundledConfigTables(): RawConfigTables {
-  return { enemies: enemiesJson, modifiers: modifiersJson, encounters: encountersJson };
+  return {
+    enemies: enemiesJson,
+    modifiers: modifiersJson,
+    encounters: encountersJson,
+    projectiles: projectilesJson,
+    hazards: hazardsJson,
+  };
 }
 
 /** How a Bootstrap obtains its raw tables. Async by contract — see the file docstring. */
 export type ConfigTableReader = () => Promise<RawConfigTables>;
 
-/** The default reader: the three JSON files that ship with the repository. */
+/** The default reader: the JSON files that ship with the repository. */
 export async function readBundledConfigTables(): Promise<RawConfigTables> {
   return bundledConfigTables();
 }

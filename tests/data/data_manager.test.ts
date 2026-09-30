@@ -48,6 +48,9 @@ import {
   bootstrapData,
   isEnemyConfig,
   isModifierConfig,
+  isProjectileConfig,
+  parseHazardConfig,
+  parseProjectileConfig,
 } from '../../src';
 import type { RawConfigTables } from '../../src';
 
@@ -438,5 +441,244 @@ describe('G4 · the registry refuses to answer before Bootstrap (AC-03)', () => 
     expect(DataManager.getModifierConfig('zeus_strike').lifespanTicks).toBeGreaterThanOrEqual(2);
     expect(DataManager.hasEnemy('grunt')).toBe(true);
     expect(DataManager.hasEnemy('elite')).toBe(true);
+  });
+});
+
+/* ========================================================================== *
+ * G5 · projectile + hazard templates (M11-T01)                                *
+ * ========================================================================== */
+describe('G5 · projectile + hazard config templates (M11-T01)', () => {
+  it('parses and exposes projectile templates, leaving absent fields absent', () => {
+    DataManager.loadAll({
+      enemies: { mock_enemy: { ...MOCK_ENEMY } },
+      modifiers: {},
+      projectiles: {
+        arrow: {},
+        bouncing_bolt: { bounceCount: 2 },
+        piercing_dart: { pierceCount: 1, damageFalloff: 0.5 },
+      },
+    });
+
+    // `{}` is a legal, plain projectile type: an absent field is "defer to the
+    // assembly default", NOT a present-but-undefined key.
+    expect(DataManager.getProjectileConfig('arrow')).toEqual({});
+    expect('bounceCount' in DataManager.getProjectileConfig('arrow')).toBe(false);
+    expect(DataManager.getProjectileConfig('bouncing_bolt').bounceCount).toBe(2);
+    expect(DataManager.getProjectileConfig('piercing_dart')).toEqual({
+      pierceCount: 1,
+      damageFalloff: 0.5,
+    });
+    expect(DataManager.hasProjectile('arrow')).toBe(true);
+    expect(DataManager.hasProjectile('nope')).toBe(false);
+    expect(DataManager.projectileIds).toEqual(['arrow', 'bouncing_bolt', 'piercing_dart']);
+    expect(DataManager.projectileCount).toBe(3);
+  });
+
+  it('rejects an out-of-domain projectile field, naming the full path', () => {
+    const bundle = (projectiles: Readonly<Record<string, unknown>>): RawConfigTables => ({
+      enemies: {},
+      modifiers: {},
+      projectiles,
+    });
+
+    expect(() => DataManager.loadAll(bundle({ bad: { bounceCount: -1 } }))).toThrow(
+      /projectiles\.bad\.bounceCount must be a non-negative integer/,
+    );
+    expect(() => DataManager.loadAll(bundle({ bad: { pierceCount: 1.5 } }))).toThrow(
+      /projectiles\.bad\.pierceCount must be a non-negative integer/,
+    );
+    expect(() => DataManager.loadAll(bundle({ bad: { damageFalloff: 1 } }))).toThrow(
+      /projectiles\.bad\.damageFalloff must be a finite number in \[0, 1\)/,
+    );
+    expect(() => DataManager.loadAll(bundle({ bad: { damageFalloff: -0.1 } }))).toThrow(
+      /projectiles\.bad\.damageFalloff/,
+    );
+    expect(() => DataManager.loadAll(bundle({ bad: { speed: 0 } }))).toThrow(
+      /projectiles\.bad\.speed must be a positive finite number/,
+    );
+  });
+
+  it('parses hazard templates and their onExplodeConfigId hook', () => {
+    DataManager.loadAll({
+      enemies: {},
+      modifiers: {},
+      hazards: {
+        poison_cloud: { radius: 2.5, damage: 8, delayTicks: 10 },
+        chain: { radius: 1, damage: 2, delayTicks: 3, onExplodeConfigId: 'poison_cloud' },
+      },
+    });
+
+    expect(DataManager.getHazardConfig('poison_cloud')).toEqual({
+      radius: 2.5,
+      damage: 8,
+      delayTicks: 10,
+    });
+    expect('onExplodeConfigId' in DataManager.getHazardConfig('poison_cloud')).toBe(false);
+    expect(DataManager.getHazardConfig('chain').onExplodeConfigId).toBe('poison_cloud');
+    expect(DataManager.hasHazard('poison_cloud')).toBe(true);
+    expect(DataManager.hasHazard('nope')).toBe(false);
+    expect(DataManager.hazardIds).toEqual(['chain', 'poison_cloud']);
+    expect(DataManager.hazardCount).toBe(2);
+  });
+
+  it('rejects an EMPTY-STRING onExplodeConfigId (an id that cannot exist)', () => {
+    expect(() =>
+      DataManager.loadAll({
+        enemies: {},
+        modifiers: {},
+        hazards: { bad: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: '' } },
+      }),
+    ).toThrow(/hazards\.bad\.onExplodeConfigId must be a non-empty string/);
+  });
+
+  it('cross-checks onExplodeConfigId from BOTH the hazards table and an enemy hazard block', () => {
+    // (a) A hazards-table entry referencing a missing hazard.
+    expect(() =>
+      DataManager.loadAll({
+        enemies: {},
+        modifiers: {},
+        hazards: { chain: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'ghost' } },
+      }),
+    ).toThrow(
+      /hazards\.chain\.onExplodeConfigId references unknown hazard id 'ghost'\. Loaded hazard ids: chain\./,
+    );
+
+    // (b) An enemy's `hazard` block referencing a missing hazard.
+    expect(() =>
+      DataManager.loadAll({
+        enemies: {
+          bomber: {
+            ...MOCK_ENEMY,
+            hazard: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'ghost' },
+          },
+        },
+        modifiers: {},
+        hazards: {},
+      }),
+    ).toThrow(
+      /enemies\.bomber\.hazard\.onExplodeConfigId references unknown hazard id 'ghost'\. Loaded hazard ids: \./,
+    );
+  });
+
+  it('rejects a CYCLIC onExplodeConfigId graph, naming the cycle path', () => {
+    const bundle = (hazards: Readonly<Record<string, unknown>>): RawConfigTables => ({
+      enemies: {},
+      modifiers: {},
+      hazards,
+    });
+
+    // (a) Self-reference — the smallest cycle (`hazards.a -> hazards.a`).
+    expect(() =>
+      DataManager.loadAll(bundle({ a: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'a' } })),
+    ).toThrow(/hazards\.a -> hazards\.a/);
+
+    // (b) Two-node cycle, named from the lowest id.
+    expect(() =>
+      DataManager.loadAll(
+        bundle({
+          a: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'b' },
+          b: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'a' },
+        }),
+      ),
+    ).toThrow(/hazards\.a -> hazards\.b -> hazards\.a/);
+
+    // (c) Longer cycle — still a SchemaError (a same-tick drain must be provably finite).
+    expect(() =>
+      DataManager.loadAll(
+        bundle({
+          a: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'b' },
+          b: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'c' },
+          c: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'a' },
+        }),
+      ),
+    ).toThrow(SchemaError);
+  });
+
+  it('accepts an ACYCLIC chain, including one rooted at an enemy hazard block', () => {
+    // A diamond/merge (two roots -> b) is NOT a cycle: the reference graph is a DAG,
+    // so the same-tick drain is finite. `enemies.bomber.hazard` is a valid root edge.
+    expect(() =>
+      DataManager.loadAll({
+        enemies: {
+          bomber: {
+            ...MOCK_ENEMY,
+            hazard: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'b' },
+          },
+        },
+        modifiers: {},
+        hazards: {
+          a: { radius: 1, damage: 1, delayTicks: 1, onExplodeConfigId: 'b' },
+          b: { radius: 1, damage: 1, delayTicks: 1 },
+        },
+      }),
+    ).not.toThrow();
+    expect(DataManager.hazardIds).toEqual(['a', 'b']);
+  });
+
+  it('names an unknown projectile / hazard id and lists what is loaded', () => {
+    DataManager.loadAll({
+      enemies: {},
+      modifiers: {},
+      projectiles: { arrow: {} },
+      hazards: { poison_cloud: { radius: 1, damage: 1, delayTicks: 1 } },
+    });
+
+    expect(() => DataManager.getProjectileConfig('nope')).toThrow(
+      /unknown projectile id 'nope'\. Loaded projectile ids: arrow\./,
+    );
+    expect(() => DataManager.getHazardConfig('nope')).toThrow(
+      /unknown hazard id 'nope'\. Loaded hazard ids: poison_cloud\./,
+    );
+  });
+
+  it('exposes non-throwing projectile predicates that agree with the parser', () => {
+    expect(isProjectileConfig({})).toBe(true);
+    expect(isProjectileConfig({ bounceCount: 2 })).toBe(true);
+    expect(isProjectileConfig({ bounceCount: -1 })).toBe(false);
+    expect(isProjectileConfig({ damageFalloff: 1 })).toBe(false);
+    expect(isProjectileConfig(null)).toBe(false);
+    expect(isProjectileConfig([])).toBe(false);
+  });
+
+  it('parseHazardConfig carries onExplodeConfigId through, and parseProjectileConfig is field-wise', () => {
+    expect(parseHazardConfig({ radius: 1, damage: 2, delayTicks: 3 }, 'hazards.x')).toEqual({
+      radius: 1,
+      damage: 2,
+      delayTicks: 3,
+    });
+    expect(
+      parseHazardConfig(
+        { radius: 1, damage: 2, delayTicks: 3, onExplodeConfigId: 'y' },
+        'hazards.x',
+      ),
+    ).toEqual({ radius: 1, damage: 2, delayTicks: 3, onExplodeConfigId: 'y' });
+    expect(() =>
+      parseHazardConfig(
+        { radius: 1, damage: 2, delayTicks: 3, onExplodeConfigId: '' },
+        'hazards.x',
+      ),
+    ).toThrow(SchemaError);
+
+    expect(parseProjectileConfig('arrow', {})).toEqual({});
+    expect(parseProjectileConfig('p', { speed: 30, lifespanTicks: 5 })).toEqual({
+      speed: 30,
+      lifespanTicks: 5,
+    });
+    expect(() => parseProjectileConfig('p', { lifespanTicks: 0 })).toThrow(
+      /projectiles\.p\.lifespanTicks/,
+    );
+  });
+
+  it('the shipped bundle boots with the M11 projectile + hazard templates', async () => {
+    await bootstrapData();
+
+    expect(DataManager.hasProjectile('arrow')).toBe(true);
+    expect(DataManager.getProjectileConfig('bouncing_bolt').bounceCount).toBe(2);
+    expect(DataManager.getProjectileConfig('piercing_dart')).toEqual({
+      pierceCount: 1,
+      damageFalloff: 0.5,
+    });
+    expect(DataManager.hasHazard('poison_cloud')).toBe(true);
+    expect(DataManager.getHazardConfig('poison_cloud').damage).toBe(8);
   });
 });

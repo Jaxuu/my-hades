@@ -182,3 +182,46 @@ export function resolveCircleAABB(
 
   return [bestX, bestY];
 }
+
+/**
+ * The scalar (dot) product of two 2-D vectors: `a.x * b.x + a.y * b.y`.
+ *
+ * Pure arithmetic, no side effects — the same "no DOM, no wall clock, no
+ * randomness" family as `clamp` / `normalizeVec2` (ADR-001 R1/R2). It exists as a
+ * named function rather than an inline expression because it is the primitive both
+ * {@link reflectVec2} and the wall-slam predicate are stated in terms of, and a
+ * single spelling cannot drift between its callers.
+ */
+export function dotVec2(a: Vec2, b: Vec2): number {
+  return a.x * b.x + a.y * b.y;
+}
+
+/**
+ * Mirror reflection of `v` about the plane whose (outward) normal is `normal`
+ * (M11-T01 AC-01). See specs/18_advanced_ballistics_and_hazards_spec.md §4.1.
+ *
+ * The formula is the standard Householder reflection
+ *
+ *     V' = V - 2 * (V · N) * N
+ *
+ * where `N` is the UNIT normal `normalizeVec2(normal)`. The normal is normalized
+ * here rather than trusted, so a caller may pass a raw push vector (any magnitude)
+ * and still get a correct reflection — which is exactly how `MovementSystem` uses
+ * it: the accumulated wall push of one tick IS the outward normal, up to length.
+ *
+ * ZERO-NORMAL DEGENERACY: if `normal` has zero length, `normalizeVec2` returns
+ * `(0, 0)` and there is no plane to reflect about; the function returns `v`
+ * UNCHANGED (a copy, `{ x: v.x, y: v.y }`). This keeps it a TOTAL function — every
+ * `number` input has a defined answer — and makes a degenerate normal a documented
+ * no-op rather than a `NaN` poison.
+ *
+ * Pure: no side effects, and identical inputs always yield bit-identical output.
+ * A `NaN` component propagates as `NaN` (ordinary arithmetic semantics) and never
+ * throws.
+ */
+export function reflectVec2(v: Vec2, normal: Vec2): Vec2 {
+  const n = normalizeVec2(normal);
+  if (n.x === 0 && n.y === 0) return { x: v.x, y: v.y };
+  const factor = 2 * dotVec2(v, n);
+  return { x: v.x - factor * n.x, y: v.y - factor * n.y };
+}

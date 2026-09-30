@@ -1,0 +1,5 @@
+{
+  "arrow": {},
+  "bouncing_bolt": { "bounceCount": 2 },
+  "piercing_dart": { "pierceCount": 1, "damageFalloff": 0.5 }
+}

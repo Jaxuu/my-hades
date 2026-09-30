@@ -87,6 +87,16 @@
  *
  * This system stays POLICY-FREE (spec 05 C8): it reports that a hit happened; it
  * never decides what a boon should do about it.
+ *
+ * PIERCING (M11-T01, spec 18 AC-02). Step 8 above is now a two-branch settlement. If
+ * the hitbox still has `pierceCount > 0`, a landed hit SPENDS one pierce and decays
+ * `damage` by `(1 - damageFalloff)` for the FOLLOW-UP targets, then the target loop
+ * `continue`s to the next candidate instead of retiring the hitbox. Only when the
+ * allowance is exhausted does the historic `destroyOnHit` retirement apply. With the
+ * default `pierceCount === 0` the new branch is never taken, so every pre-M11 hitbox
+ * behaves bit-for-bit as before. The loop is a finite array over a set that only
+ * shrinks, and every target is guarded by `hitEntities`, so piercing can never loop
+ * forever within a single tick.
  */
 
 import type { System, SystemContext } from '../System';
@@ -256,6 +266,23 @@ export class CollisionSystem implements System {
           sourceModifier: hitbox.sourceModifier,
         };
         this.events.emit(event);
+
+        // M11-T01 (spec 18 AC-02) — PIERCING. While the hitbox still has pierce
+        // allowance, a landed hit does NOT retire it: the allowance is spent, the
+        // damage is decayed for the FOLLOW-UP targets, and the target loop carries
+        // on. `hitEntities` already holds this target (pushed above), so the
+        // multi-hit guard makes `continue` skip it on any later tick and there is no
+        // way to strike the same victim twice.
+        //
+        // The loop is a finite array over a set that only shrinks, and every target
+        // is guarded by `hitEntities`, so this cannot iterate forever within a tick.
+        // The `HitEvent` ABOVE carries the damage THIS hit was owed — the decay
+        // applies strictly to the hits that follow, never to the one just resolved.
+        if (hitbox.pierceCount > 0) {
+          hitbox.pierceCount -= 1;
+          hitbox.damage = hitbox.damage * (1 - hitbox.damageFalloff);
+          continue;
+        }
 
         // M7-T01 (spec 13 AC-04 / I5) — a PIERCELESS hitbox retires on its first
         // landed hit. Destroying the entity here, rather than merely marking it, is

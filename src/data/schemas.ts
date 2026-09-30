@@ -87,6 +87,16 @@ export interface HazardConfig {
   readonly radius: number;
   readonly damage: number;
   readonly delayTicks: number;
+  /**
+   * Optional composite-hazard hook (M11-T01, spec 18 §3). When present, it names a
+   * template in the `hazards` config table that `HazardSystem.detonate` re-spawns in
+   * place after this hazard's blast. Omit it for a plain terminal explosion.
+   *
+   * This field is shared by BOTH tables that use `HazardConfig`: an enemy's `hazard`
+   * block and an entry of the `hazards` table. The `DataManager` cross-table check
+   * guarantees every reference resolves within the same load.
+   */
+  readonly onExplodeConfigId?: string;
 }
 
 /**
@@ -189,6 +199,40 @@ export interface ModifierConfig {
   readonly hitstopTicks: number;
   /** Knockback speed the hitbox requests. Non-negative finite; `0` = no shove. */
   readonly knockbackForce: number;
+}
+
+/**
+ * One projectile TYPE, as written in `assets/data/projectiles.json` (M11-T01,
+ * spec 18 §3.2).
+ *
+ * EVERY field is optional, and that is the deliberate shape: an omitted field is not
+ * a missing value but a DECISION TO DEFER to the assembly defaults, which
+ * `spawnProjectile` applies from the `DEFAULT_CAST_*` constants. This mirrors
+ * `EnemyConfig.dash` exactly — the schema states what a legal projectile IS; the
+ * assembly seam supplies the fallback. So `{}` is a perfectly valid projectile type
+ * (a plain cast), and `{ "bounceCount": 2 }` is "a cast that also bounces twice".
+ *
+ * The `projectiles` table does NOT import `src/ecs`: the default values live at the
+ * assembly layer (`spawnProjectile` / `spawnProjectileFromConfig`), never here, so
+ * the data layer stays self-contained.
+ */
+export interface ProjectileConfig {
+  /** Flight speed, in world units per second. Positive finite. */
+  readonly speed?: number;
+  /** Hitbox radius, in world units. Positive finite. */
+  readonly radius?: number;
+  /** Damage on a landed hit. Non-negative finite (`0` is legal). */
+  readonly damage?: number;
+  /** Lifetime in ticks. Positive integer. */
+  readonly lifespanTicks?: number;
+  /** Knockback speed, in world units per second. Non-negative finite. */
+  readonly knockback?: number;
+  /** Remaining wall reflections. Non-negative integer. */
+  readonly bounceCount?: number;
+  /** Remaining pierce allowance. Non-negative integer. */
+  readonly pierceCount?: number;
+  /** Fractional damage removed per pierce. Finite and in `[0, 1)`. */
+  readonly damageFalloff?: number;
 }
 
 /**
@@ -345,6 +389,56 @@ function optionalPositiveInteger(
   return source[key] === undefined ? undefined : requirePositiveInteger(source, key, label);
 }
 
+/** The same check, but "omitted" is legal and yields `undefined`. */
+function optionalNonNegativeInteger(
+  source: Record<string, unknown>,
+  key: string,
+  label: string,
+): number | undefined {
+  return source[key] === undefined ? undefined : requireNonNegativeInteger(source, key, label);
+}
+
+/**
+ * @throws SchemaError unless the field is absent or a NON-EMPTY string.
+ *
+ * An empty string is rejected rather than treated as "no reference": a blank
+ * `onExplodeConfigId` would be a reference to an id that cannot exist, and it would
+ * surface later as an "unknown hazard id ''" that names no real typo (the same
+ * reasoning `requireNonEmptyStringArray` records). Omit the field for "no hook".
+ */
+function optionalNonEmptyString(
+  source: Record<string, unknown>,
+  key: string,
+  label: string,
+): string | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    fail(`${label}.${key}`, 'a non-empty string', value);
+  }
+  return value;
+}
+
+/**
+ * @throws SchemaError unless the field is absent or a finite number in `[0, 1)`.
+ *
+ * The half-open interval is the point: `1` would zero every follow-up hit (a config
+ * bug, not a legal "no damage" — omit piercing instead) and a negative value would
+ * AMPLIFY damage on each pierce, which is never what a falloff means.
+ */
+function optionalUnitInterval(
+  source: Record<string, unknown>,
+  key: string,
+  label: string,
+): number | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value >= 1) {
+    fail(`${label}.${key}`, 'a finite number in [0, 1)', value);
+  }
+  return value;
+}
+
 /**
  * @throws SchemaError unless the field is a NON-EMPTY array of non-empty strings.
  *
@@ -407,13 +501,55 @@ export function parseAIConfig(data: unknown, label: string): AIConfig {
   return { sightRadius, attackRadius, windupTicks, cooldownTicks };
 }
 
-/** @throws SchemaError for a non-positive radius, a negative damage, or a fractional delay. */
+/**
+ * @throws SchemaError for a non-positive radius, a negative damage, a fractional
+ *   delay, or an empty-string `onExplodeConfigId`.
+ */
 export function parseHazardConfig(data: unknown, label: string): HazardConfig {
   const source = asRecord(data, label);
+  const onExplodeConfigId = optionalNonEmptyString(source, 'onExplodeConfigId', label);
   return {
     radius: requirePositiveFinite(source, 'radius', label),
     damage: requireNonNegativeFinite(source, 'damage', label),
     delayTicks: requireNonNegativeInteger(source, 'delayTicks', label),
+    ...(onExplodeConfigId === undefined ? {} : { onExplodeConfigId }),
+  };
+}
+
+/**
+ * Parse (and validate) one projectile TYPE from `assets/data/projectiles.json`
+ * (M11-T01, spec 18 §3.2).
+ *
+ * Every field is optional (see {@link ProjectileConfig}); a field that is absent
+ * stays absent in the result — it is NOT filled with a default, because the default
+ * belongs to the assembly layer. `{}` is a valid, plain projectile type.
+ *
+ * @param id Table key, echoed into the error label.
+ * @throws SchemaError for a non-object entry, or for any present field that is
+ *   mistyped or out of domain (`speed` / `radius` positive finite; `damage` /
+ *   `knockback` non-negative finite; `lifespanTicks` positive integer; `bounceCount`
+ *   / `pierceCount` non-negative integer; `damageFalloff` finite in `[0, 1)`).
+ */
+export function parseProjectileConfig(id: string, data: unknown): ProjectileConfig {
+  const label = `projectiles.${id}`;
+  const source = asRecord(data, label);
+  const speed = optionalPositiveFinite(source, 'speed', label);
+  const radius = optionalPositiveFinite(source, 'radius', label);
+  const damage = optionalNonNegativeFinite(source, 'damage', label);
+  const lifespanTicks = optionalPositiveInteger(source, 'lifespanTicks', label);
+  const knockback = optionalNonNegativeFinite(source, 'knockback', label);
+  const bounceCount = optionalNonNegativeInteger(source, 'bounceCount', label);
+  const pierceCount = optionalNonNegativeInteger(source, 'pierceCount', label);
+  const damageFalloff = optionalUnitInterval(source, 'damageFalloff', label);
+  return {
+    ...(speed === undefined ? {} : { speed }),
+    ...(radius === undefined ? {} : { radius }),
+    ...(damage === undefined ? {} : { damage }),
+    ...(lifespanTicks === undefined ? {} : { lifespanTicks }),
+    ...(knockback === undefined ? {} : { knockback }),
+    ...(bounceCount === undefined ? {} : { bounceCount }),
+    ...(pierceCount === undefined ? {} : { pierceCount }),
+    ...(damageFalloff === undefined ? {} : { damageFalloff }),
   };
 }
 
@@ -641,6 +777,16 @@ export function isEnemyConfig(data: unknown): boolean {
 export function isModifierConfig(data: unknown): boolean {
   try {
     parseModifierConfig('__probe__', data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The non-throwing twin of {@link parseProjectileConfig} (M11-T01). */
+export function isProjectileConfig(data: unknown): boolean {
+  try {
+    parseProjectileConfig('__probe__', data);
     return true;
   } catch {
     return false;

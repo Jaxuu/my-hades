@@ -36,6 +36,18 @@
  * orthogonal timelines. Nothing here reads `isFrozen`, for the hazard itself or
  * for its author.
  *
+ * AC-03 COMPOSITE HAZARDS (M11-T01, spec 18 §4.3). `detonate` gains one optional
+ * tail: a hazard whose `onExplodeConfigId` is non-null spawns one further hazard in
+ * place (from the `hazards` config table) right after its blast, and RETURNS its id.
+ * `advanceHazards` drains a WORK QUEUE rather than a fixed snapshot, so the child is
+ * appended and its fuse starts on the very tick that spawned it — exactly like a
+ * hazard planted by phase A. That keeps ONE rule for both phases: "planted on tick
+ * `T` with `delayTicks = N` detonates on tick `T + N`". `MAX_HAZARD_CHAIN_PER_TICK`
+ * bounds a single tick's detonations as defence in depth; a well-formed config can
+ * never reach it, and `DataManager.loadAll` rejects a cyclic `onExplodeConfigId`
+ * graph outright. The referenced id is guaranteed to exist by the load-time
+ * cross-table check, so the runtime lookup never throws.
+ *
  * Holds NO cross-tick hidden state: the entire lifecycle is `delayTicks` on the
  * component (spec 00 §6.1). The class owns only its name.
  */
@@ -59,6 +71,18 @@ import { TransformComponent } from '../components/TransformComponent';
 import { FactionComponent } from '../components/FactionComponent';
 import { AIControllerComponent } from '../components/AIControllerComponent';
 import { isDead } from '../components/DeadTagComponent';
+import { DataManager } from '../../data/DataManager';
+
+/**
+ * 单 Tick 内最多引爆多少个 Hazard（含连锁）。
+ *
+ * 纵深防御（defence in depth），不是一条玩法规则：合法配置**永远**达不到它。
+ * `DataManager.loadAll` 在加载期就把 `onExplodeConfigId` 引用图断言为 DAG，所以一条
+ * 链的每一步都严格前进、单帧引爆数被「当前存活 Hazard 数」自然约束；这个上限只可能
+ * 被**畸形配置**（一个绕过了加载期校验的环）触碰。触及后 `advanceHazards` 不再向队列
+ * 追加子雷；已经生成的子雷不受影响，仍以正常引信在后续 Tick 被处理。
+ */
+export const MAX_HAZARD_CHAIN_PER_TICK = 256;
 
 export class HazardSystem implements System {
   public readonly name = 'HazardSystem';
@@ -160,22 +184,52 @@ export class HazardSystem implements System {
    * detonates on tick `T + N`. Decrementing first would blow it one tick early
    * and make the constant lie by one (spec 14 §4.1).
    *
+   * WORK QUEUE, not a fixed snapshot (M11-T01, spec 18 §4.3). The queue starts as
+   * every hazard alive at the START of this tick; a hazard detonated during this
+   * same drain APPENDS its child (via `detonate`'s return value) to the queue. The
+   * child is therefore processed by THIS tick's loop, so its fuse is decremented on
+   * the tick it was born — which is what makes "planted on tick `T` with
+   * `delayTicks = N` detonates on tick `T + N`" hold for phase-A and phase-B hazards
+   * alike. (A fixed snapshot would let the child slip one tick — the exact off-by-one
+   * this queue removes.)
+   *
+   * DETERMINISM: the queue is id-ascending to begin with (`World.query` returns a
+   * fresh ascending array), and every child id is GREATER than every id already in
+   * the queue (`nextId` is monotonic), so appends preserve the ascending order and
+   * the drain order is byte-for-byte reproducible.
+   *
+   * BOUNDED: `MAX_HAZARD_CHAIN_PER_TICK` stops appends after that many detonations in
+   * one tick (defence in depth — see the constant). The load-time DAG check in
+   * `DataManager.loadAll` makes the cap unreachable for a well-formed config.
+   *
    * No freeze gate and no death gate — see the class docstring and spec 14 I4.
-   * `World.query` returns a fresh ascending array, so destroying entities while
-   * iterating is safe and stays deterministic.
+   * Destroying entities while iterating is safe: the loop indexes a plain array and
+   * simply never revisits an id it has already consumed.
    */
   private advanceHazards(world: World): void {
-    for (const id of world.query(HazardComponent)) {
+    // 工作队列：Tick 开始时的全部 Hazard，外加本次排空过程中被引爆者新生成的子雷。
+    // 这样"在 Tick T 播种、delayTicks = N ⇒ 在 T + N 爆炸"对相位 A 与相位 B 一律成立。
+    const queue: EntityId[] = [...world.query(HazardComponent)];
+    let detonationsThisTick = 0;
+
+    for (let index = 0; index < queue.length; index += 1) {
+      const id = queue[index];
+      if (id === undefined) continue;
+
       const hazard = world.getComponent(id, HazardComponent);
       const transform = world.getComponent(id, TransformComponent);
       if (hazard === undefined || transform === undefined) continue;
 
       if (hazard.delayTicks > 0) {
-        hazard.delayTicks -= 1;
+        hazard.delayTicks -= 1; // 判减顺序不变：先判后减
         continue;
       }
 
-      this.detonate(world, id, hazard, transform);
+      const childId = this.detonate(world, id, hazard, transform);
+      detonationsThisTick += 1;
+      if (childId !== null && detonationsThisTick < MAX_HAZARD_CHAIN_PER_TICK) {
+        queue.push(childId);
+      }
     }
   }
 
@@ -200,13 +254,34 @@ export class HazardSystem implements System {
    *
    * Order matters: create the blast BEFORE destroying the telegraph, so the
    * owner id is still a real (if doomed) entity at creation time.
+   *
+   * AC-03 COMPOSITE / CHAINED EXPLOSIONS (M11-T01, spec 18 §4.3). When the hazard
+   * carries a non-null `onExplodeConfigId`, one more hazard is spawned IN PLACE —
+   * after the blast, before this telegraph is destroyed — from the referenced
+   * `hazards` config template, and its id is RETURNED so `advanceHazards` can append
+   * it to THIS tick's drain queue (so the child's fuse starts on the tick it was
+   * born). Two properties make this safe and terminating:
+   *
+   *  - The id's EXISTENCE is guaranteed by the load-time cross-table check in
+   *    `DataManager.loadAll`, so the `getHazardConfig` lookup here can never throw
+   *    (runtime stays validation-free, spec 18 I5).
+   *  - The `onExplodeConfigId` reference graph is asserted ACYCLIC at load time
+   *    (`DataManager.loadAll`), so following the chain can never revisit a template;
+   *    combined with `MAX_HAZARD_CHAIN_PER_TICK`, a single `step()` cannot explode
+   *    without bound (spec 18 risk R1).
+   *
+   * Order matters and is unchanged: create the blast BEFORE destroying the telegraph
+   * (so the owner id is still a real entity at creation time), and spawn the child
+   * AFTER the blast but BEFORE the destroy (so the child is never the blast's owner).
+   *
+   * @returns the child hazard's id when one was spawned, otherwise `null`.
    */
   private detonate(
     world: World,
     hazardId: EntityId,
     hazard: HazardComponent,
     transform: TransformComponent,
-  ): void {
+  ): EntityId | null {
     const blast = world.createEntity();
     world.addComponent(blast.id, new TransformComponent(transform.x, transform.y, 0));
     world.addComponent(
@@ -225,6 +300,24 @@ export class HazardSystem implements System {
         false, // destroyOnWall — a static blast is never wall-resolved anyway
       ),
     );
+
+    // M11-T01 AC-03 — 复合危险地形：爆炸后按模板原地再生成一个次级 Hazard。
+    let childId: EntityId | null = null;
+    if (hazard.onExplodeConfigId !== null) {
+      const child = DataManager.getHazardConfig(hazard.onExplodeConfigId);
+      childId = spawnHazard(world, {
+        x: transform.x,
+        y: transform.y,
+        radius: child.radius,
+        damage: child.damage,
+        delayTicks: child.delayTicks,
+        faction: hazard.faction,
+        ownerEntityId: hazard.ownerEntityId,
+        ...(child.onExplodeConfigId === undefined ? {} : { onExplodeConfigId: child.onExplodeConfigId }),
+      });
+    }
+
     world.destroyEntity(hazardId);
+    return childId;
   }
 }
