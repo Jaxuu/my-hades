@@ -5,3 +5,4 @@ export * from './input';
 export * from './scheduler';
 export * from './snapshot-utils';
 export * from './GameSimulator';
+export * from './LevelLoader';

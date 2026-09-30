@@ -49,6 +49,13 @@
  * is over", never "descend past the end of the room table".
  *
  * Holds NO cross-tick hidden state: no fields at all beyond its name.
+ *
+ * M12-T01 gives the descent a SECOND half. `descendEncounterRoom` swaps the room's
+ * CONFIGURATION; `LevelLoader.enterRoom` swaps the room's SCENE — old walls and this
+ * fight's leftovers out, the new room's walls in, the player hard-reset onto its
+ * spawn tile, and the new room's enemy landing pool published on the singleton. Both
+ * happen in this one system call, i.e. within a single tick, and both are skipped
+ * entirely for a room that declares no topology (spec 19 §4.3 / I8 / I10).
  */
 
 import type { System, SystemContext } from '../System';
@@ -56,8 +63,9 @@ import type { World } from '../World';
 import type { EntityId } from '../Entity';
 import type { InputEvent } from '../../core/input';
 import { PlayerInputComponent } from '../components/PlayerInputComponent';
-import { findRewardDraft, isFinalRoom } from '../components/EncounterStateComponent';
+import { currentRoomId, findRewardDraft, isFinalRoom } from '../components/EncounterStateComponent';
 import { descendEncounterRoom } from '../prefabs/EncounterFactory';
+import { LevelLoader } from '../../core/LevelLoader';
 import { markRunWon } from '../components/GameStateComponent';
 import { grantReward } from '../rewards/grantReward';
 
@@ -121,6 +129,24 @@ export class RewardSystem implements System {
     // back to `DataManager` BY DEPTH (AC-02's 循环复用 / 兜底生成). Either way this
     // system re-implements no wave assembly of its own.
     descendEncounterRoom(room);
+
+    // M12-T01: "descend" is now TWO halves, and they are deliberately separate
+    // calls. `descendEncounterRoom` is a pure STATE transition (it cannot see the
+    // world); `LevelLoader.enterRoom` is the SCENE transition — tear the old room's
+    // geometry and leftovers down, build the new room's walls, hard-reset the
+    // player onto its spawn tile and publish its enemy landing pool.
+    //
+    // Both halves run inside THIS tick. `EncounterSystem` has already run for this
+    // tick, so the new room's opening wave is scheduled on the next one — the
+    // engine's existing one-tick phase, not a new delay (spec 19 I8 / §4.5).
+    //
+    // The room is looked up by `currentRoomId`, which is `undefined` for a room that
+    // declares no topology — the shape every pre-M12 run has, and the reason this is
+    // a conditional rather than an unconditional call (spec 19 I10).
+    const nextRoomId = currentRoomId(room);
+    if (nextRoomId !== undefined) {
+      LevelLoader.enterRoom(world, { roomId: nextRoomId, playerId, encounter: room });
+    }
   }
 
   /**

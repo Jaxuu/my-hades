@@ -41,6 +41,19 @@ export interface GameSimulatorOptions {
    * Omit it and `restartRun` still clears the world, reseeds and rewinds the
    * clock; the world is simply left empty. That is the honest behaviour for a
    * simulator whose caller never declared a run shape.
+   *
+   * M12-T01 — THE ROOM-TOPOLOGY CONTRACT, and why it is expressed HERE rather than
+   * as a new option. As of M12 a run's opening room has a TILEMAP: walls to build,
+   * a spawn tile to place the player on, and a pool of enemy landing spots. That
+   * work is `LevelLoader.enterRoom`, and it belongs to `runSetup` — the callback
+   * that already answers "what does a run look like". Adding an `initialRoomId`
+   * option would move the same assembly from the caller into the simulator and make
+   * `src/core` — which deliberately knows nothing about players, rooms or waves
+   * (see the class docstring) — start knowing about all three. The contract is
+   * therefore: a `runSetup` that has a topology calls `LevelLoader.enterRoom` for
+   * room 0, and because `restartRun` calls `runSetup` on EVERY restart, a restarted
+   * run necessarily gets room 0's walls and an exactly-placed player
+   * (spec 19 §4.3, pinned by `tests/world/tilemap_and_topology.test.ts` G2).
    */
   readonly runSetup?: (world: World) => void;
 }
@@ -206,7 +219,12 @@ export class GameSimulator {
    *    contents (the death bus deliberately keeps the tick's deaths, spec 08
    *    §3.3, and those events reference entities step 1 just destroyed).
    *  5. `clock.reset()` — back to tick `0`.
-   *  6. `runSetup(world)` — rebuild the run's entities.
+   *  6. `runSetup(world)` — rebuild the run's entities. For a run with a room
+   *    topology this is also where room 0's TILEMAP is loaded: `runSetup` calls
+   *    `LevelLoader.enterRoom`, so every restart rebuilds the opening room's walls
+   *    and pins the player to its spawn tile (spec 19 §4.3). Note `clearEntities`
+   *    in step 1 has already removed the previous run's geometry, so "build the
+   *    new room" needs no teardown of its own.
    *
    * Steps 1–2 happen BEFORE 6 so that `runSetup` sees an empty world with the new
    * generator, i.e. the same conditions a fresh construction has. Anything

@@ -43,6 +43,7 @@ import {
   parseHazardConfig,
   parseModifierConfig,
   parseProjectileConfig,
+  parseRoomTable,
 } from './schemas';
 import type {
   EncounterRoomTemplate,
@@ -51,6 +52,7 @@ import type {
   HazardConfig,
   ModifierConfig,
   ProjectileConfig,
+  RoomConfig,
 } from './schemas';
 
 /**
@@ -73,6 +75,11 @@ import type {
  * `onExplodeConfigId`). An omitted table means "this bundle ships no templates of
  * that kind", and `loadAll` treats it as an empty registry — exactly the
  * absent-vs-empty distinction `encounters` draws.
+ *
+ * M12-T01 adds `rooms` (`assets/data/rooms.json`, the terrain library). Same
+ * optional-id-keyed shape, and the same absent-vs-empty reading. Its ONE extra rule
+ * is cross-table and lives in `loadAll`: every `roomId` an encounter declares must
+ * resolve to a room installed in the SAME load (spec 19 §4.1).
  */
 export interface RawConfigTables {
   readonly enemies: Readonly<Record<string, unknown>>;
@@ -80,6 +87,7 @@ export interface RawConfigTables {
   readonly encounters?: readonly unknown[];
   readonly projectiles?: Readonly<Record<string, unknown>>;
   readonly hazards?: Readonly<Record<string, unknown>>;
+  readonly rooms?: Readonly<Record<string, unknown>>;
 }
 
 /** Deterministic (locale-free) string ordering — UTF-16 code units, not collation. */
@@ -106,6 +114,14 @@ export class DataManager {
    * after a fully successful parse, like every other table.
    */
   private static readonly hazards = new Map<string, HazardConfig>();
+  /**
+   * Room terrain templates (M12-T01), keyed by id.
+   *
+   * Referenced by `EncounterRoomTemplate.roomId` and consumed by `LevelLoader`.
+   * Refilled only after a fully successful parse, like every other table — a
+   * rejected edit leaves the terrain the running run was built against in place.
+   */
+  private static readonly rooms = new Map<string, RoomConfig>();
   /**
    * The room sequence a run is built from (M10-T02), indexed by depth.
    *
@@ -140,6 +156,11 @@ export class DataManager {
    * all tables in hand, and it must fail at load time rather than from inside
    * `step()` when a hazard finally detonates.
    *
+   * M12-T01 adds the `rooms` terrain library and a third cross-table rule: every
+   * `roomId` an encounter declares must resolve to a room loaded in THIS SAME load
+   * (see {@link assertEncounterRoomsExist}). A room with no `roomId` is legal and
+   * skipped — that is the "no topology" shape every pre-M12 table uses.
+   *
    * @throws SchemaError from the first entry that fails validation, labelled with
    *   its full path (`enemies.grunt.maxHp`, `encounters[1].waves[0].enemies[2]`,
    *   `hazards.poison_cloud.onExplodeConfigId`), so a boot failure names the exact
@@ -170,8 +191,14 @@ export class DataManager {
         : DataManager.parseTable(tables.hazards, 'hazards', (id, data) =>
             parseHazardConfig(data, `hazards.${id}`),
           );
+    // M12-T01: the room terrain library. Same absent-vs-present rule — a bundle
+    // that ships no rooms is legitimate, and the failure for a roomId that resolves
+    // to nothing is reported by the cross-table check below rather than here.
+    const rooms =
+      tables.rooms === undefined ? new Map<string, RoomConfig>() : parseRoomTable(tables.rooms, 'rooms');
 
     DataManager.assertEncounterEnemiesExist(encounters, enemies);
+    DataManager.assertEncounterRoomsExist(encounters, rooms);
     DataManager.assertHazardRefsExist(hazards, enemies);
     DataManager.assertHazardGraphAcyclic(hazards, enemies);
 
@@ -183,6 +210,8 @@ export class DataManager {
     for (const [id, config] of projectiles) DataManager.projectiles.set(id, config);
     DataManager.hazards.clear();
     for (const [id, config] of hazards) DataManager.hazards.set(id, config);
+    DataManager.rooms.clear();
+    for (const [id, config] of rooms) DataManager.rooms.set(id, config);
     DataManager.encounters = encounters;
   }
 
@@ -321,6 +350,47 @@ export class DataManager {
   }
 
   /* ---------------------------------------------------------------------- *
+   * Room terrain library (M12-T01)                                          *
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * The parsed terrain of the room with this id.
+   *
+   * `LevelLoader` is the only engine caller, and it calls this from INSIDE
+   * `step()` (a room transition happens mid-tick). That is exactly why the lookup
+   * throws a `SchemaError` rather than returning `undefined`: every roomId that can
+   * ever be asked for was already resolved by `loadAll`'s cross-table check, so an
+   * unknown id here is a wiring bug, and returning `undefined` would push it into
+   * `LevelLoader` as a "no walls" room — a silent, invisible failure.
+   *
+   * @throws SchemaError when the registry is EMPTY (Bootstrap never ran) or when
+   *   `id` is not in the table (listing the known ids), exactly like
+   *   {@link getEnemyConfig}.
+   */
+  public static getRoomConfig(id: string): RoomConfig {
+    const config = DataManager.rooms.get(id);
+    if (config === undefined) {
+      throw new SchemaError(DataManager.unknownIdMessage('room', id, DataManager.rooms.size));
+    }
+    return config;
+  }
+
+  /** Whether a room with this id is loaded. */
+  public static hasRoom(id: string): boolean {
+    return DataManager.rooms.has(id);
+  }
+
+  /** Every loaded room id, ascending. Sorted so the order is byte-for-byte stable. */
+  public static get roomIds(): readonly string[] {
+    return [...DataManager.rooms.keys()].sort(compareIds);
+  }
+
+  /** How many rooms the terrain library holds. */
+  public static get roomCount(): number {
+    return DataManager.rooms.size;
+  }
+
+  /* ---------------------------------------------------------------------- *
    * Encounter table (M10-T02)                                              *
    * ---------------------------------------------------------------------- */
 
@@ -386,6 +456,37 @@ export class DataManager {
   }
 
   /**
+   * The TERRAIN id of the room at `depth`, or `undefined` when that room declares
+   * no topology (M12-T01, spec 19 §3.3).
+   *
+   * The sibling of {@link getEncounterWaves} and it follows the same depth rule,
+   * cycle included — the two must agree on which room a depth names, or a run would
+   * fight one room's waves on another room's terrain.
+   *
+   * `undefined` is a legitimate answer (the room has no grid), NOT an error: a
+   * hand-written room table omits `roomId` entirely and must keep working
+   * (spec 19 I10). Only a `roomId` that names a room which is not LOADED is an
+   * error, and `loadAll` already rejected that at Bootstrap.
+   *
+   * @throws SchemaError when no encounter table is loaded, or when `depth` is not a
+   *   non-negative integer (see {@link getEncounterWaves}).
+   */
+  public static getEncounterRoomId(depth: number): string | undefined {
+    const table = DataManager.encounters;
+    if (table.length === 0) {
+      throw new SchemaError(
+        'no encounter config is loaded, so the room terrain cannot be resolved: run the Bootstrap phase (bootstrapData()) before constructing a GameSimulator (spec 17 AC-01).',
+      );
+    }
+    if (!Number.isInteger(depth) || depth < 0) {
+      throw new SchemaError(
+        `encounter depth must be a non-negative integer, received ${String(depth)}.`,
+      );
+    }
+    return table[depth % table.length]?.roomId;
+  }
+
+  /**
    * Whether any config is loaded, i.e. whether Bootstrap has run.
    *
    * Encounters are deliberately NOT part of this answer: they are an optional
@@ -406,6 +507,7 @@ export class DataManager {
     DataManager.modifiers.clear();
     DataManager.projectiles.clear();
     DataManager.hazards.clear();
+    DataManager.rooms.clear();
     DataManager.encounters = [];
   }
 
@@ -441,6 +543,39 @@ export class DataManager {
           );
         }
       }
+    }
+  }
+
+  /**
+   * The cross-table rule of M12-T01: every `roomId` an encounter room declares must
+   * name a room installed IN THE SAME LOAD (spec 19 §4.1).
+   *
+   * Checked against the freshly parsed `rooms` map for the same reason
+   * {@link assertEncounterEnemiesExist} checks against the freshly parsed enemy
+   * map: `loadAll` must be atomic, so a bundle that renames a room without updating
+   * the room table is rejected as a whole instead of being accepted against the
+   * outgoing registry and then failing inside `step()` at the moment the player
+   * clears the previous room — the one place a failure cannot be recovered from.
+   *
+   * A room with NO `roomId` is skipped: that is the legitimate "this room has no
+   * grid" shape every pre-M12 table uses (spec 19 I10).
+   *
+   * @throws SchemaError naming the offending path and listing what IS loaded, so a
+   *   renamed or deleted room is obvious rather than mysterious.
+   */
+  private static assertEncounterRoomsExist(
+    encounters: readonly EncounterRoomTemplate[],
+    rooms: ReadonlyMap<string, RoomConfig>,
+  ): void {
+    for (let roomIndex = 0; roomIndex < encounters.length; roomIndex += 1) {
+      const room = encounters[roomIndex];
+      if (room === undefined) continue;
+      const roomId = room.roomId;
+      if (roomId === undefined || rooms.has(roomId)) continue;
+      const known = [...rooms.keys()].sort(compareIds);
+      throw new SchemaError(
+        `encounters[${String(roomIndex)}].roomId references unknown room id '${roomId}'. Loaded room ids: ${known.join(', ')}.`,
+      );
     }
   }
 
@@ -578,6 +713,8 @@ export class DataManager {
         return DataManager.projectileIds;
       case 'hazard':
         return DataManager.hazardIds;
+      case 'room':
+        return DataManager.roomIds;
       default:
         return [];
     }

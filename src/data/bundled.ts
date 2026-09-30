@@ -33,6 +33,7 @@ import modifiersJson from '../../assets/data/modifiers.json';
 import encountersJson from '../../assets/data/encounters.json';
 import projectilesJson from '../../assets/data/projectiles.json';
 import hazardsJson from '../../assets/data/hazards.json';
+import roomsJson from '../../assets/data/rooms.json';
 import { DataManager } from './DataManager';
 import type { RawConfigTables } from './DataManager';
 
@@ -53,6 +54,11 @@ import type { RawConfigTables } from './DataManager';
  * Both travel through the same seam, so their fields AND the cross-table
  * "every `onExplodeConfigId` names a real hazard" rule are validated during
  * Bootstrap.
+ *
+ * M12-T01 adds `rooms` (`assets/data/rooms.json`, the terrain library). It travels
+ * through the same seam so the grid shape, the tile domain and the "at least one
+ * player spawn" rule are validated — and so the cross-table "every `roomId` names a
+ * real room" rule runs — during Bootstrap, before a single tick has been simulated.
  */
 export function bundledConfigTables(): RawConfigTables {
   return {
@@ -61,6 +67,7 @@ export function bundledConfigTables(): RawConfigTables {
     encounters: encountersJson,
     projectiles: projectilesJson,
     hazards: hazardsJson,
+    rooms: roomsJson,
   };
 }
 

@@ -261,6 +261,68 @@ export interface EncounterWaveTemplate {
   readonly enemies: readonly string[];
 }
 
+/* ========================================================================== *
+ * Room topology / tilemap (M12-T01, spec 19 §3)                              *
+ * ========================================================================== */
+
+/**
+ * The four tile codes a room grid may use (spec 19 §3.1).
+ *
+ * Plain integer constants rather than an enum, for the same reason
+ * `LootDropConfig.kind` is a lowercase string: the value is written in a JSON
+ * file, and a JSON file cannot name a TypeScript enum. Exported so `LevelLoader`,
+ * the render layer and the tests all spell the codes the same way instead of
+ * repeating bare `1`s.
+ */
+export const TILE_FLOOR = 0;
+export const TILE_WALL = 1;
+export const TILE_PLAYER_SPAWN = 2;
+export const TILE_ENEMY_SPAWN = 3;
+
+/** Every legal tile code, as the "what IS allowed" list the validator reports. */
+export const TILE_CODES: readonly number[] = [
+  TILE_FLOOR,
+  TILE_WALL,
+  TILE_PLAYER_SPAWN,
+  TILE_ENEMY_SPAWN,
+];
+
+/**
+ * One room's TERRAIN (M12-T01, spec 19 §3.4).
+ *
+ * Before M12 a room was a wave table and nothing else: it had no shape, so the
+ * arena was the same infinite plane every time and walls could only be placed by
+ * hand from test code. A `RoomConfig` is the missing half — the grid the run is
+ * played on.
+ *
+ * `grid` is ALWAYS a flat, ROW-MAJOR array of length `width * height`, even though
+ * the file may declare it either as a flat array or as an array of rows (see
+ * {@link parseRoomConfig}). Normalising at the parse boundary is what lets every
+ * downstream consumer — `LevelLoader`, the render layer, the tests — ask exactly
+ * one question ("what is at `row * width + col`?") instead of branching on the
+ * input shape forever.
+ *
+ * Derived quantities (which tiles are walls, where the player starts, where
+ * enemies may spawn) are deliberately NOT fields. They are pure functions of
+ * `grid` (`LevelLoader.collectWallTiles` / `findPlayerSpawn` /
+ * `collectEnemySpawnPoints`), so there is no second copy that can drift the
+ * moment an author edits the grid.
+ */
+export interface RoomConfig {
+  /** Table key this config was loaded under. */
+  readonly id: string;
+  /** Grid width in tiles. Positive integer. */
+  readonly width: number;
+  /** Grid height in tiles. Positive integer. */
+  readonly height: number;
+  /**
+   * Row-major flat grid; `grid[row * width + col]` is the tile at `(col, row)`.
+   * Length is exactly `width * height`, and every entry is one of
+   * {@link TILE_CODES}.
+   */
+  readonly grid: readonly number[];
+}
+
 /**
  * One room template, keyed by the depth it belongs to (M10-T02).
  *
@@ -277,6 +339,23 @@ export interface EncounterWaveTemplate {
 export interface EncounterRoomTemplate {
   /** Must equal this entry's index in the table (`0`, `1`, `2`, …). */
   readonly depth: number;
+  /**
+   * The TERRAIN this room is played on (M12-T01, spec 19 §3.3), as a key of the
+   * `rooms` table. Omit it and the room has no topology: no walls are built, the
+   * player keeps the position the caller gave it, and waves keep their
+   * centre-line formation (spec 19 I10).
+   *
+   * Declared on the ROOM rather than on a wave because terrain is a property of
+   * the place, not of one fight: all of a room's waves share one grid.
+   *
+   * Optional on purpose — every pre-M12 room table (and every hand-written test
+   * fixture) omits it and must keep parsing. The shipped
+   * `assets/data/encounters.json` declares it on every room, so "a wave config
+   * references a roomId" is satisfied by the DATA, not imposed on every caller by
+   * the schema (the same `absent != empty` discipline `encounters` and `loot`
+   * already follow).
+   */
+  readonly roomId?: string;
   /** Ordered, non-empty list of waves. Index `0` is the room's opening wave. */
   readonly waves: readonly EncounterWaveTemplate[];
 }
@@ -671,6 +750,155 @@ export function parseModifierConfig(id: string, data: unknown): ModifierConfig {
 }
 
 /**
+ * @throws SchemaError unless the field is a legal tile code (`0` / `1` / `2` / `3`).
+ *
+ * Integrality is part of the contract rather than a formality: `1.5` would make
+ * "is this tile a wall?" a question with a fractional answer, and every consumer
+ * compares tiles by equality against {@link TILE_CODES}. Rejecting it here means no
+ * consumer ever has to reason about a half-wall.
+ */
+function requireTileCode(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || !TILE_CODES.includes(value)) {
+    fail(label, `an integer tile code (${TILE_CODES.join(' / ')})`, value);
+  }
+  return value;
+}
+
+/**
+ * Normalise a room's `grid` to a flat ROW-MAJOR array (M12-T01, spec 19 §3.1).
+ *
+ * TWO SHAPES ARE ACCEPTED, and the reason is readability rather than leniency:
+ *
+ *  - an array of ROWS (`[[1,1],[1,0]]`) is the only form a human can edit without
+ *    losing their place — a 10x10 room written flat is a 100-number blob;
+ *  - a flat array is the form a script emits and the form the milestone's own
+ *    example uses, and re-flattening it by hand is pure busywork.
+ *
+ * Both are checked against `width` / `height` and then collapsed into ONE shape, so
+ * "which form was this?" is a question only this function ever asks.
+ *
+ * @throws SchemaError when the grid is not an array, when its dimensions disagree
+ *   with the declared `width` / `height`, or when any entry is not a legal tile
+ *   code.
+ */
+function parseRoomGrid(value: unknown, width: number, height: number, label: string): readonly number[] {
+  if (!Array.isArray(value)) fail(label, 'an array of tiles (flat or one array per row)', value);
+
+  // 2D is detected by the FIRST element: a tile is a number, a row is an array.
+  // An empty grid therefore falls into the flat path and is rejected on length,
+  // which is the honest reading of "a room with no tiles".
+  const first: unknown = value[0];
+  if (Array.isArray(first)) {
+    if (value.length !== height) {
+      throw new SchemaError(
+        `${label} declares ${String(value.length)} row(s) but ${label.replace(/\.grid$/, '')}.height is ${String(height)}.`,
+      );
+    }
+    const flat: number[] = [];
+    for (let row = 0; row < value.length; row += 1) {
+      const source = value[row];
+      if (!Array.isArray(source) || source.length !== width) {
+        fail(`${label}[${String(row)}]`, `an array of ${String(width)} tiles`, source);
+      }
+      for (let col = 0; col < source.length; col += 1) {
+        flat.push(requireTileCode(source[col], `${label}[${String(row)}][${String(col)}]`));
+      }
+    }
+    return flat;
+  }
+
+  const expected = width * height;
+  if (value.length !== expected) {
+    throw new SchemaError(
+      `${label} holds ${String(value.length)} tile(s) but the declared ${String(width)} x ${String(height)} room needs exactly ${String(expected)}.`,
+    );
+  }
+  const flat: number[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    flat.push(requireTileCode(value[index], `${label}[${String(index)}]`));
+  }
+  return flat;
+}
+
+/**
+ * Parse (and validate) one room's terrain (M12-T01, spec 19 §3.4).
+ *
+ * @param id Table key, echoed into the error label and stamped onto the result.
+ * @throws SchemaError for a non-object entry, a non-positive / non-integer
+ *   `width` / `height`, a grid whose shape disagrees with them, an out-of-domain
+ *   tile code, or a grid with NO player spawn tile. The last rule is the one the
+ *   milestone's AC-03 rests on: "hard-reset the player to the centre of the `2`
+ *   tile" is unsatisfiable for a room that declares none, and a boot failure is
+ *   the only place that can be said loudly (spec 19 I12).
+ */
+export function parseRoomConfig(id: string, data: unknown): RoomConfig {
+  const label = `rooms.${id}`;
+  const source = asRecord(data, label);
+  const width = requirePositiveInteger(source, 'width', label);
+  const height = requirePositiveInteger(source, 'height', label);
+  const grid = parseRoomGrid(source.grid, width, height, `${label}.grid`);
+
+  if (!grid.includes(TILE_PLAYER_SPAWN)) {
+    throw new SchemaError(
+      `${label}.grid declares no player spawn tile (${String(TILE_PLAYER_SPAWN)}): every room must say where the player enters it (spec 19 AC-01).`,
+    );
+  }
+
+  return { id, width, height, grid };
+}
+
+/**
+ * Parse (and validate) the whole room table — the terrain library a run's rooms
+ * are built from (M12-T01, spec 19 §3.1).
+ *
+ * An id-keyed object, exactly like `enemies` / `modifiers` / `projectiles` /
+ * `hazards`: a room has no natural order, and "which room comes next" is
+ * `encounters.json`'s job. An EMPTY table is legal here for the same reason
+ * `enemies: {}` is — it is a registry, not a declared sequence; the cross-table
+ * rule in `DataManager.loadAll` is what reports a `roomId` that resolves to
+ * nothing.
+ *
+ * Cross-table validation ("does every referenced `roomId` exist?") deliberately
+ * does NOT live here: this parser sees one table, and only `loadAll` sees both
+ * (the same split `assertEncounterEnemiesExist` follows).
+ *
+ * @throws SchemaError under the conditions listed on {@link parseRoomConfig}, or
+ *   when the table is not an id-keyed object.
+ */
+export function parseRoomTable(data: unknown, label: string): ReadonlyMap<string, RoomConfig> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new SchemaError(`${label} must be an object keyed by room id.`);
+  }
+  const source = data as Record<string, unknown>;
+  const parsed = new Map<string, RoomConfig>();
+  for (const id of Object.keys(source).sort(compareCodeUnits)) {
+    parsed.set(id, parseRoomConfig(id, source[id]));
+  }
+  return parsed;
+}
+
+/**
+ * Deterministic (locale-free) string ordering — UTF-16 code units, not collation
+ * (ADR-001 R6). A local copy rather than an import, because `schemas.ts` is the
+ * bottom of the data layer and must not depend on `DataManager`.
+ */
+function compareCodeUnits(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/** The non-throwing twin of {@link parseRoomConfig} (M12-T01). */
+export function isRoomConfig(data: unknown): boolean {
+  try {
+    parseRoomConfig('__probe__', data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parse (and validate) one wave of a room template (M10-T02).
  *
  * @throws SchemaError for a non-object entry, a missing / mistyped `delayTicks`,
@@ -692,8 +920,8 @@ export function parseEncounterWaveTemplate(data: unknown, label: string): Encoun
  *   `depth` — see {@link EncounterRoomTemplate} for why the redundancy is
  *   deliberate rather than a drift hazard.
  * @throws SchemaError for a non-object entry, a `depth` that is not a
- *   non-negative integer, a `depth` that disagrees with `index`, or a `waves`
- *   list that is empty or holds an invalid wave.
+ *   non-negative integer, a `depth` that disagrees with `index`, an empty-string
+ *   `roomId`, or a `waves` list that is empty or holds an invalid wave.
  */
 export function parseEncounterRoomTemplate(
   data: unknown,
@@ -708,6 +936,13 @@ export function parseEncounterRoomTemplate(
     );
   }
 
+  // M12-T01: the room's TERRAIN reference. An empty string is rejected rather
+  // than treated as "no topology" — a blank `roomId` is a reference to an id that
+  // cannot exist, and it would surface later as "unknown room id ''" naming no
+  // real typo (the same reasoning `optionalNonEmptyString` records for
+  // `onExplodeConfigId`). Omit the field for "this room has no grid".
+  const roomId = optionalNonEmptyString(source, 'roomId', label);
+
   const waves = source.waves;
   if (!Array.isArray(waves) || waves.length === 0) {
     fail(`${label}.waves`, 'a non-empty array of waves', waves);
@@ -716,7 +951,11 @@ export function parseEncounterRoomTemplate(
     parseEncounterWaveTemplate(wave, `${label}.waves[${String(waveIndex)}]`),
   );
 
-  return { depth, waves: parsedWaves };
+  return {
+    depth,
+    ...(roomId === undefined ? {} : { roomId }),
+    waves: parsedWaves,
+  };
 }
 
 /**

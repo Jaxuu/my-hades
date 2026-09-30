@@ -1,6 +1,7 @@
 [
   {
     "depth": 0,
+    "roomId": "start_room",
     "waves": [
       { "delayTicks": 0, "enemies": ["raider"] },
       { "delayTicks": 120, "enemies": ["raider", "bomber"] }
@@ -8,6 +9,7 @@
   },
   {
     "depth": 1,
+    "roomId": "arena_room",
     "waves": [
       { "delayTicks": 0, "enemies": ["raider", "raider"] },
       { "delayTicks": 120, "enemies": ["raider", "bomber"] }

@@ -42,6 +42,16 @@
  *     editing a table re-validates it through `DataManager.loadAll` and re-opens the
  *     same run against it, with the render layer reset so no FX survive (AC-03).
  *
+ * M12-T01 gives the run a PLACE to happen in:
+ *   - `buildRun` now assembles the opening room's TILEMAP through
+ *     `LevelLoader.enterRoom` — one `WallComponent` per `1` tile of
+ *     `assets/data/rooms.json`, the player hard-reset onto the room's `2` tile, and
+ *     the room's `3` tiles published as the enemy landing pool (spec 19 §4.3);
+ *   - because `restartRun` re-runs `buildRun`, a restart rebuilds room 0's geometry
+ *     and re-places the player exactly, with no extra code here;
+ *   - `GameRenderer` draws the floor and the walls as flat colour blocks, so the
+ *     room's SHAPE is visible in the browser (spec 19 AC-08).
+ *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
  * seed is chosen, which is what keeps the wall clock and any entropy out of `src/`
@@ -61,9 +71,11 @@ import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import {
   EncounterStateComponent,
+  currentRoomId,
   findRewardDraft,
 } from '../src/ecs/components/EncounterStateComponent';
 import { findGameState, GameStatus } from '../src/ecs/components/GameStateComponent';
+import { LevelLoader } from '../src/core/LevelLoader';
 
 import { GameRenderer } from './GameRenderer';
 import { GameLoop } from './GameLoop';
@@ -144,7 +156,12 @@ void main();
  * rebuilds the run from the new numbers.
  */
 function buildRun(world: World): void {
-  PlayerFactory.spawn(world, {
+  // The player is spawned BEFORE the room so the loader has something to place.
+  // Its initial pose is immediately overwritten by `LevelLoader.enterRoom` — the
+  // room's `2` tile is the authority on where a run begins (M12-T01 AC-03), and
+  // passing a placeholder here is what keeps "the first run and every restart go
+  // through the same code" true.
+  const player = PlayerFactory.spawn(world, {
     x: 0,
     y: 0,
     facingRadians: 0,
@@ -153,7 +170,19 @@ function buildRun(world: World): void {
   });
 
   // The run's rooms, read by depth from `assets/data/encounters.json`.
-  EncounterFactory.spawnFromData(world);
+  const roomEntity = EncounterFactory.spawnFromData(world);
+  const encounter = world.getComponent(roomEntity, EncounterStateComponent);
+
+  // M12-T01: build room 0's terrain — one `WallComponent` per `1` tile, the player
+  // hard-reset onto the `2` tile's centre, and the room's `3` tiles collected into
+  // the enemy landing pool the encounter scheduler draws from. This is the ONE
+  // place the opening room is assembled, and `restartRun` reaches it again through
+  // `runSetup`, which is why a restart is a genuinely fresh room rather than a
+  // reused one (spec 19 §4.3).
+  const openingRoomId = encounter === undefined ? undefined : currentRoomId(encounter);
+  if (encounter !== undefined && openingRoomId !== undefined) {
+    LevelLoader.enterRoom(world, { roomId: openingRoomId, playerId: player, encounter });
+  }
 
   // The run's state singleton (M8-T01). Without it a player death would be an
   // ordinary death and the death overlay could never appear (spec 14 AC-11) — and

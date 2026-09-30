@@ -51,6 +51,20 @@ export interface EncounterRoomConfig {
    * `assets/data/encounters.json` (see {@link EncounterFactory.spawnFromData}).
    */
   readonly rooms?: readonly (readonly EncounterWaveConfig[])[];
+  /**
+   * The terrain id of each room, index-aligned with the run's room table
+   * (`[waves, ...rooms]`) — i.e. `roomIds[k]` is the grid room `k` is played on
+   * (M12-T01, spec 19 §3.5).
+   *
+   * Omit it and the run has NO topology: no walls are built, the player keeps
+   * whatever pose the caller gave it, and waves keep the centre-line formation.
+   * That is exactly what every pre-M12 call site declares, so nothing there
+   * changes (spec 19 I10).
+   *
+   * A `undefined` ENTRY is legal and means "this one room has no grid" — which is
+   * why the element type is nullable rather than the array being all-or-nothing.
+   */
+  readonly roomIds?: readonly (string | undefined)[];
 }
 
 /**
@@ -234,6 +248,14 @@ export function resolveEncounterConfig(config: EncounterRoomConfig): readonly En
  * `depth` and `currentRoomIndex` both rise because they answer different questions
  * (descents vs. rooms, spec 15 §3.5); keeping them in one write is what stops them
  * drifting apart here.
+ *
+ * M12-T01 adds the ONE field that must be CLEARED rather than carried:
+ * `enemySpawnPoints` describes "the room being fought", and the instant the index
+ * moves it describes a room that no longer exists. Clearing it here (rather than
+ * relying on `LevelLoader` to overwrite it) is what keeps the "no topology" case
+ * honest: a room without a grid would otherwise inherit the previous room's landing
+ * spots, and the bug would only appear on a `with-grid -> without-grid` descent.
+ * `LevelLoader.enterRoom` then publishes the NEW room's pool, in the same tick.
  */
 export function descendEncounterRoom(room: EncounterStateComponent): void {
   room.currentRoomIndex += 1;
@@ -243,6 +265,7 @@ export function descendEncounterRoom(room: EncounterStateComponent): void {
   room.currentWaveIndex = 0;
   room.trackedEntityIds = [];
   room.nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED;
+  room.enemySpawnPoints = [];
 }
 
 export class EncounterFactory {
@@ -284,6 +307,8 @@ export class EncounterFactory {
         roomWaves,
         0,
         roomWaves.length,
+        config.roomIds ?? [],
+        [],
       ),
     );
     return entity.id;
@@ -314,8 +339,14 @@ export class EncounterFactory {
    */
   public static spawnFromData(world: World): EntityId {
     const roomWaves: (readonly EncounterWaveConfig[])[] = [];
+    // M12-T01: the terrain id of each room, index-aligned with `roomWaves`. A room
+    // that declares no `roomId` contributes an explicit `undefined`, so the two
+    // arrays stay aligned without a sentinel and `currentRoomId` can answer "does
+    // this room have a grid" for any index (spec 19 §3.5).
+    const roomIds: (string | undefined)[] = [];
     for (const depth of DataManager.encounterDepths) {
       roomWaves.push(resolveEncounterWaves(depth));
+      roomIds.push(DataManager.getEncounterRoomId(depth));
     }
 
     const opening = roomWaves[0];
@@ -325,6 +356,10 @@ export class EncounterFactory {
       );
     }
 
-    return EncounterFactory.spawn(world, { waves: opening, rooms: roomWaves.slice(1) });
+    return EncounterFactory.spawn(world, {
+      waves: opening,
+      rooms: roomWaves.slice(1),
+      roomIds,
+    });
   }
 }

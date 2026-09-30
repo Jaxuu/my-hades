@@ -18,6 +18,13 @@
  * Items 2 and 3 are OBSERVATIONS: they read component state and read the ticker's
  * real delta for their own visual lifetime; they never feed back into `src/`.
  *
+ * M12-T01 adds item 0 — STATIC GEOMETRY. A room's walls carry no
+ * `TransformComponent` (spec 13 §3.2), so they cannot come through the
+ * transform-keyed view path at all; they get their own lazily-created layer on the
+ * `stage`, holding one colour block per wall plus a floor block behind them. That
+ * layer exists only while the world contains a wall, which is what keeps the
+ * pre-M12 scene graph — and the frozen M5 render assertions about it — untouched.
+ *
  * One-way dependency: this module imports `src/` (types + components) but `src/`
  * must never import it back (enforced by ESLint, spec 09 AC-01).
  */
@@ -38,6 +45,7 @@ import { isFrozen } from '../src/ecs/components/FreezeComponent';
 import { isDead } from '../src/ecs/components/DeadTagComponent';
 import { HazardComponent } from '../src/ecs/components/HazardComponent';
 import { PickupComponent, PickupKind } from '../src/ecs/components/PickupComponent';
+import { WallComponent } from '../src/ecs/components/WallComponent';
 
 /**
  * The render layer's ONE constant contract: world units -> pixels (spec 09 C8).
@@ -127,6 +135,17 @@ const NO_TINT = 0xffffff;
  */
 const HIT_FLASH_TINT = 0xff0000;
 
+/**
+ * Static-geometry colours (M12-T01, spec 19 AC-08).
+ *
+ * Deliberately muted and LOW-CONTRAST: the floor and the walls are the room's
+ * BACKGROUND, and the one thing on screen that must stay loudest is the hazard
+ * telegraph's saturated warning red. A floor that competed with it would make the
+ * room's shape readable at the cost of the room's danger being readable.
+ */
+const FLOOR_COLOR = 0x232733;
+const WALL_COLOR = 0x4a5266;
+
 const TWO_PI = Math.PI * 2;
 
 /**
@@ -201,6 +220,48 @@ export class GameRenderer {
   private readonly floatingTexts: FloatingText[] = [];
 
   /**
+   * The static-geometry layer (M12-T01): one colour block per `WallComponent`, plus
+   * a floor block behind them.
+   *
+   * WHY IT IS ATTACHED TO THE `stage` AND NOT TO `root`
+   * --------------------------------------------------
+   * Walls carry NO `TransformComponent` (spec 13 §3.2) — they are geometry, not
+   * movers — so they can never come through `createMissingViews`, which is keyed on
+   * `query(TransformComponent)`. They therefore need their own layer, and the only
+   * question is where it hangs.
+   *
+   * Hanging it under `root` would shift every index the M5 render suites depend on:
+   * `root.children[0]` must be the first ENTITY view and
+   * `root.children[root.children.length - 1]` must be the FX layer (spec 09 §4.3).
+   * Hanging it on the stage at index 0 leaves `root` and its children completely
+   * untouched and still draws below every entity, because the stage renders its
+   * children in order.
+   *
+   * `null` until the world contains at least one wall, and torn back down to `null`
+   * when it contains none. That laziness is what makes the whole feature
+   * non-invasive: a world with no walls — every pre-M12 rig, and every frozen M5
+   * render test — sees a scene graph byte-for-byte identical to before, including
+   * `app.stage.children[0] === root`.
+   */
+  private staticLayer: Container | null = null;
+
+  /** The floor block. Child 0 of {@link staticLayer}; redrawn only when the extent moves. */
+  private floorGraphic: Graphics | null = null;
+
+  /** One colour block per wall entity. Dropped when a wall is destroyed. */
+  private readonly wallViews = new Map<EntityId, Graphics>();
+
+  /**
+   * Signature of the last drawn floor extent (`minX,minY,maxX,maxY,count`).
+   *
+   * The floor is a function of the WALL SET, and the wall set only changes at a room
+   * boundary — so redrawing the block every frame would be pure churn on a scene
+   * graph that is static by definition. Comparing a short string is the cheapest way
+   * to say "the geometry changed" without keeping a second copy of the geometry.
+   */
+  private floorSignature = '';
+
+  /**
    * Ids whose death FX has ALREADY finished. Such an id must never be re-viewed.
    *
    * This exists because a corpse is never destroyed (spec 08 §4.4 / §10 trade-off
@@ -237,6 +298,11 @@ export class GameRenderer {
     return this.views.size;
   }
 
+  /** Live static-geometry block count (diagnostics / HUD). Zero when there are no walls. */
+  public get wallViewCount(): number {
+    return this.wallViews.size;
+  }
+
   /** Attach the render root (and its FX layer) to the stage. Call once, after `app.init`. */
   public init(): void {
     this.app.stage.addChild(this.root);
@@ -249,9 +315,9 @@ export class GameRenderer {
 
   /**
    * Sync one frame of the logic world into the scene graph. Steps, in order:
-   * create missing views, sync transforms (interpolated by `alpha` + hit flash),
-   * age existing damage floaters, spawn new ones, advance death FX, recycle
-   * destroyed views.
+   * draw the room's static geometry, create missing views, sync transforms
+   * (interpolated by `alpha` + hit flash), age existing damage floaters, spawn new
+   * ones, advance death FX, recycle destroyed views.
    *
    * `alpha` is the interpolation factor in [0, 1]: 0 draws the previous tick, 1
    * draws the current tick. It is clamped here so a caller cannot extrapolate.
@@ -267,6 +333,10 @@ export class GameRenderer {
    */
   public syncWorld(world: World, alpha = 1): void {
     const clampedAlpha = Math.min(1, Math.max(0, alpha));
+    // M12-T01: the room's geometry is drawn FIRST so it lands behind everything —
+    // both inside the static layer (floor before walls) and on the stage (the layer
+    // sits at index 0, below the render root).
+    this.syncStaticGeometry(world);
     this.createMissingViews(world);
     this.syncTransforms(world, clampedAlpha);
     // M8-T01: hazard warnings are animated from their own countdown, so they are
@@ -288,6 +358,10 @@ export class GameRenderer {
     this.views.clear();
     this.retired.clear();
     this.floatingTexts.length = 0;
+    // M12-T01: the static layer lives on the STAGE (not under `root`), so destroying
+    // `root` does not reach it — it has to be torn down explicitly or its blocks
+    // would outlive the renderer.
+    this.teardownStaticLayer();
     // Recursively destroys fxLayer and every floater still parented to it.
     this.root.destroy({ children: true });
   }
@@ -346,6 +420,146 @@ export class GameRenderer {
     // Safe at a run boundary: ids are never reused (`World.nextId` is never
     // reset), so every id in the set belongs to the run that just ended.
     this.retired.clear();
+
+    // M12-T01: the room's geometry belongs to the run being thrown away. Dropping
+    // the blocks here (rather than waiting for the next sync to notice the walls are
+    // gone) keeps `reset()` a complete "forget the previous run" operation, which is
+    // what the hot-reload path relies on.
+    this.teardownStaticLayer();
+  }
+
+  /**
+   * Step ⓪ — draw the room's static geometry (M12-T01, spec 19 AC-08).
+   *
+   * One colour block per `WallComponent`, plus a floor block spanning their bounding
+   * box. That is deliberately ALL it is: the milestone asks for "极简的地板和墙体色块
+   * 绘制，以便能在浏览器中直观看到房间形状", and the room's SHAPE is exactly what a
+   * wall-per-tile rendering conveys. There is no camera, no tile atlas and no
+   * auto-tiling (spec 19 §1.3), so the room is drawn at the world origin in the
+   * canvas's top-left corner.
+   *
+   * Pure reads: `WallComponent` is read and nothing is written back to `World`
+   * (spec 09 AC-01). The blocks are cached per entity id and only rebuilt when a wall
+   * APPEARS, because a wall's AABB can never change — a room transition destroys the
+   * old walls and creates new ones, which is precisely the "appears / disappears"
+   * event this cache keys on.
+   *
+   * An empty wall set tears the whole layer down (see `staticLayer`), so a world with
+   * no geometry is byte-for-byte the pre-M12 scene graph.
+   */
+  private syncStaticGeometry(world: World): void {
+    const wallIds = world.query(WallComponent);
+    if (wallIds.length === 0) {
+      this.teardownStaticLayer();
+      return;
+    }
+
+    const layer = this.ensureStaticLayer();
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    for (const id of wallIds) {
+      const wall = world.getComponent(id, WallComponent);
+      if (wall === undefined) continue;
+
+      minX = Math.min(minX, wall.x);
+      minY = Math.min(minY, wall.y);
+      maxX = Math.max(maxX, wall.x + wall.width);
+      maxY = Math.max(maxY, wall.y + wall.height);
+
+      if (this.wallViews.has(id)) continue;
+      const block = new Graphics();
+      block
+        .rect(wall.x * PX_PER_UNIT, wall.y * PX_PER_UNIT, wall.width * PX_PER_UNIT, wall.height * PX_PER_UNIT)
+        .fill({ color: WALL_COLOR });
+      this.wallViews.set(id, block);
+      layer.addChild(block);
+    }
+
+    this.recycleWallViews(wallIds);
+    this.syncFloor(layer, minX, minY, maxX, maxY, this.wallViews.size);
+  }
+
+  /** Create the static layer on demand and put it BEHIND the render root. */
+  private ensureStaticLayer(): Container {
+    const existing = this.staticLayer;
+    if (existing !== null) return existing;
+
+    const layer = new Container();
+    const floor = new Graphics();
+    layer.addChild(floor);
+    // Index 0 on the stage: below the render root (which is appended by `init`),
+    // so the floor and walls can never cover an entity or an FX. `addChildAt` on an
+    // empty stage is a plain append, so this is also correct if a caller syncs
+    // before `init()`.
+    this.app.stage.addChildAt(layer, 0);
+    this.staticLayer = layer;
+    this.floorGraphic = floor;
+    return layer;
+  }
+
+  /**
+   * Draw the floor block spanning the wall bounding box, but only when the extent
+   * actually changed (see `floorSignature`).
+   *
+   * The bounding box — rather than the union of the FLOOR tiles — is the honest
+   * simplification here: a room's walls form its outline, so their bounding box IS
+   * the room's footprint, and the wall blocks drawn on top of it leave exactly the
+   * interior visible. A non-rectangular room therefore over-fills its corners, which
+   * is invisible in a bordered room and is registered as a known simplification
+   * (spec 19 §4.5).
+   */
+  private syncFloor(
+    layer: Container,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    wallCount: number,
+  ): void {
+    const signature = `${String(minX)},${String(minY)},${String(maxX)},${String(maxY)},${String(wallCount)}`;
+    if (signature === this.floorSignature) return;
+    this.floorSignature = signature;
+
+    const floor = this.floorGraphic;
+    if (floor === null) return;
+    floor.clear();
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+    floor
+      .rect(
+        minX * PX_PER_UNIT,
+        minY * PX_PER_UNIT,
+        (maxX - minX) * PX_PER_UNIT,
+        (maxY - minY) * PX_PER_UNIT,
+      )
+      .fill({ color: FLOOR_COLOR });
+    // Re-assert child order: the floor must stay behind the wall blocks.
+    layer.setChildIndex(floor, 0);
+  }
+
+  /** Drop blocks whose wall is gone (a destroyed wall leaves `query`). */
+  private recycleWallViews(liveIds: readonly EntityId[]): void {
+    const live = new Set<EntityId>(liveIds);
+    for (const [id, block] of this.wallViews) {
+      if (live.has(id)) continue;
+      this.wallViews.delete(id);
+      block.destroy();
+    }
+  }
+
+  /** Destroy the static layer and forget its blocks. A no-op when there is none. */
+  private teardownStaticLayer(): void {
+    const layer = this.staticLayer;
+    if (layer === null) return;
+    this.wallViews.clear();
+    this.floorGraphic = null;
+    this.floorSignature = '';
+    this.staticLayer = null;
+    // Recursively destroys the floor and every wall block parented to the layer.
+    layer.destroy({ children: true });
   }
 
   /**

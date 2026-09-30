@@ -62,6 +62,7 @@ import {
   isFinalRoom,
   isWaveCleared,
 } from '../components/EncounterStateComponent';
+import type { SpawnPoint } from '../components/EncounterStateComponent';
 import { EnemyFactory } from '../prefabs/EnemyFactory';
 import type { EnemySpawnOptions } from '../prefabs/spawn-helpers';
 import { draftRewards } from '../rewards/RewardPool';
@@ -227,14 +228,21 @@ export class EncounterSystem implements System {
    * Depth escalation (M6-T01, spec 11 AC-04) is applied by `buildWaveRoster`, which
    * is a pure expansion of the configured roster — the factory still receives plain
    * `EnemySpawnOptions` and knows nothing about depth.
+   *
+   * M12-T01 inserts one step between those two: when the room HAS a topology, each
+   * roster entry's landing spot is taken from the room's `3`-tile pool instead of
+   * from the centre-line formation (see {@link EncounterSystem.placeRoster}).
    */
   private spawnWave(
     world: World,
     encounter: EncounterStateComponent,
     enemies: readonly EnemySpawnOptions[],
   ): void {
+    const roster = buildWaveRoster(enemies, encounter.depth);
+    const placed = this.placeRoster(world, roster, encounter.enemySpawnPoints);
+
     const spawned: EntityId[] = [];
-    for (const enemy of buildWaveRoster(enemies, encounter.depth)) {
+    for (const enemy of placed) {
       // M10-T01: the roster entry carries the TYPE (`enemyId`) and the placement;
       // the balance numbers are resolved inside the factory from the config table,
       // so the encounter layer still re-implements no assembly (spec 08 AC-05).
@@ -243,5 +251,52 @@ export class EncounterSystem implements System {
     encounter.trackedEntityIds = spawned;
     encounter.nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED;
     encounter.state = EncounterState.IN_PROGRESS;
+  }
+
+  /**
+   * Resolve each roster entry's landing spot against the room's spawn pool
+   * (M12-T01, spec 19 §4.2).
+   *
+   * AN EMPTY POOL IS A STRICT NO-OP, and that is the whole zero-regression story:
+   * every pre-M12 room (and every hand-built test fixture) declares no topology, so
+   * the roster is returned verbatim, the centre-line formation `buildWaveRoster`
+   * produced is untouched, and — critically — NO PRNG IS CONSUMED. Skipping the draw
+   * is not an optimisation: the world owns ONE generator (ADR-004), so a stray draw
+   * here would shift every later draw, including the reward draft, and change the
+   * outcome of a run that has no rooms at all.
+   *
+   * WITH a pool the rule is "random start + deterministic rotation", and all three
+   * properties are deliberate (spec 19 §4.2):
+   *
+   *  - **one draw per wave**, not one per enemy — the stream perturbation is a
+   *    constant rather than a function of the roster size, so "how much randomness a
+   *    wave costs" is a fact you can reason about;
+   *  - **no two enemies share a tile** while `pool.length >= roster.length` —
+   *    overlapping hurtboxes read as ONE enemy to the player and to a collision
+   *    assertion, so a landing pool must not be sampled with replacement when it
+   *    does not have to be;
+   *  - **`depth` copies need no second rule** — `buildWaveRoster`'s appended copies
+   *    walk the same rotation and simply wrap when the pool is smaller than the
+   *    roster (spec 19 R4).
+   *
+   * The whole placement REPLACES `x`/`y` (including the depth copy's
+   * `DEPTH_SPAWN_SPACING_UNITS` nudge): the acceptance criterion is that an enemy's
+   * coordinate lands exactly on a spawn tile's centre, with no offset (spec 19 I6).
+   */
+  private placeRoster(
+    world: World,
+    roster: readonly EnemySpawnOptions[],
+    spawnPoints: readonly SpawnPoint[],
+  ): readonly EnemySpawnOptions[] {
+    if (spawnPoints.length === 0) return roster;
+
+    const start = world.rng.nextInt(0, spawnPoints.length - 1);
+    return roster.map((enemy, index) => {
+      const point = spawnPoints[(start + index) % spawnPoints.length];
+      // Unreachable: the modulo above is always inside `[0, length)` and the array
+      // is non-empty. Kept total rather than `!`-asserted (the repo forbids `!`).
+      if (point === undefined) return enemy;
+      return { ...enemy, x: point.x, y: point.y };
+    });
   }
 }

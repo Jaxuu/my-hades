@@ -57,6 +57,20 @@ export enum EncounterState {
 export const ENCOUNTER_WAVE_UNSCHEDULED = -1;
 
 /**
+ * One candidate enemy spawn position, in world units (M12-T01, spec 19 §3.5).
+ *
+ * Deliberately NOT a `TransformComponent` and not a `Vec2` from `core/math`: it is
+ * the *address* of a tile's centre, produced by `LevelLoader` from the room grid
+ * and consumed by `EncounterSystem` as a placement. Declaring it here — where the
+ * field that holds it lives — keeps the components layer free of any dependency on
+ * the loader, and keeps the shape plainly POD (two numbers, no methods).
+ */
+export interface SpawnPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
  * One wave: how long to wait before it spawns, and what it spawns.
  *
  * `enemies` holds full `EnemySpawnSpec` entries — an enemy TYPE id plus that
@@ -189,6 +203,43 @@ export class EncounterStateComponent extends ComponentBase {
    */
   public pendingRewards: string[] | null;
 
+  /**
+   * The TERRAIN id of every room in the run, index-aligned with `roomWaves`
+   * (M12-T01, spec 19 §3.5).
+   *
+   * `roomIds[k]` is the `rooms.json` key room `k` is played on, or `undefined` when
+   * that room declares no topology. Held on the component (rather than looked up
+   * from `DataManager` at transition time) for the same reason `roomWaves` is: the
+   * run's whole shape — terrain included — is visible in the snapshot, so a replay
+   * needs no external table to know which room came next.
+   *
+   * `(string | undefined)[]` rather than a `Map` or a sentinel string: the truth is
+   * "aligned with the room index", a `Map` would hide that alignment, and an empty
+   * string cannot arrive from the data layer (`optionalNonEmptyString` rejects it),
+   * so a sentinel would be a second, private spelling of "absent".
+   */
+  public roomIds: readonly (string | undefined)[];
+
+  /**
+   * The CURRENT room's enemy spawn pool: the centres of every `3` tile, in
+   * row-major order (M12-T01, spec 19 §3.5).
+   *
+   * Written by `LevelLoader.enterRoom` at a room boundary and read by
+   * `EncounterSystem.spawnWave`, which picks each enemy's landing spot from it
+   * deterministically through `world.rng`.
+   *
+   * An EMPTY array means "this room has no topology", and that is the honest
+   * reading for every pre-M12 room: `EncounterSystem` then falls back to the
+   * centre-line formation `formWaveRoster` derives, consuming no PRNG at all
+   * (spec 19 I10). That fallback is what makes this field purely additive.
+   *
+   * `descendEncounterRoom` CLEARS it, and that is load-bearing rather than tidy: it
+   * describes "the room being fought", and the instant the room index moves it
+   * describes a room that no longer exists. Forgetting to clear it would let a room
+   * without a grid inherit the previous room's landing spots.
+   */
+  public enemySpawnPoints: readonly SpawnPoint[];
+
   constructor(
     waves: readonly EncounterWaveConfig[],
     state = EncounterState.IN_PROGRESS,
@@ -200,6 +251,8 @@ export class EncounterStateComponent extends ComponentBase {
     roomWaves: readonly (readonly EncounterWaveConfig[])[] = [waves],
     currentRoomIndex = 0,
     maxRooms = roomWaves.length,
+    roomIds: readonly (string | undefined)[] = [],
+    enemySpawnPoints: readonly SpawnPoint[] = [],
   ) {
     super();
     this.waves = waves;
@@ -212,6 +265,8 @@ export class EncounterStateComponent extends ComponentBase {
     this.roomWaves = roomWaves;
     this.currentRoomIndex = currentRoomIndex;
     this.maxRooms = maxRooms;
+    this.roomIds = roomIds;
+    this.enemySpawnPoints = enemySpawnPoints;
   }
 }
 
@@ -278,4 +333,25 @@ export function findRewardDraft(world: World): EncounterStateComponent | undefin
     if (encounter !== undefined && encounter.pendingRewards !== null) return encounter;
   }
   return undefined;
+}
+
+/**
+ * The terrain id of the room currently being fought, or `undefined` (M12-T01).
+ *
+ * The single read-side accessor for `roomIds[currentRoomIndex]`, shared by its two
+ * consumers: `RewardSystem` (assembles the next room's scene) and `runSetup`
+ * (assembles the opening room's). One helper rather than two inline index reads
+ * keeps "which room am I in, and does it have a grid" in exactly one place — the
+ * same reasoning `findRewardDraft` and `isFinalRoom` record.
+ *
+ * Returns `undefined` for BOTH ways of saying "no topology" — a short `roomIds`
+ * array (a hand-assembled run) and an explicit `undefined` entry (a data-backed run
+ * whose room declares no `roomId`) — so no caller has to know which shape it is
+ * looking at.
+ *
+ * Deterministic and side-effect free: it only reads the component.
+ */
+export function currentRoomId(encounter: EncounterStateComponent): string | undefined {
+  const id = encounter.roomIds[encounter.currentRoomIndex];
+  return id === undefined || id.length === 0 ? undefined : id;
 }

@@ -30,6 +30,7 @@
 import enemiesJson from '../assets/data/enemies.json';
 import modifiersJson from '../assets/data/modifiers.json';
 import encountersJson from '../assets/data/encounters.json';
+import roomsJson from '../assets/data/rooms.json';
 
 import { DataManager } from '../src/data/DataManager';
 import type { RawConfigTables } from '../src/data/DataManager';
@@ -43,7 +44,12 @@ import type { RawConfigTables } from '../src/data/DataManager';
  * to a non-accepting module (see the file docstring).
  */
 export function clientConfigTables(): RawConfigTables {
-  return { enemies: enemiesJson, modifiers: modifiersJson, encounters: encountersJson };
+  return {
+    enemies: enemiesJson,
+    modifiers: modifiersJson,
+    encounters: encountersJson,
+    rooms: roomsJson,
+  };
 }
 
 /**
@@ -99,11 +105,15 @@ function moduleValue(module: unknown, fallback: unknown): unknown {
  * encounter table.
  */
 function tablesFromHotModules(modules: readonly unknown[] | undefined): RawConfigTables {
-  const [enemies, modifiers, encounters] = modules ?? [];
+  const [enemies, modifiers, encounters, rooms] = modules ?? [];
   return {
     enemies: moduleValue(enemies, enemiesJson) as Readonly<Record<string, unknown>>,
     modifiers: moduleValue(modifiers, modifiersJson) as Readonly<Record<string, unknown>>,
     encounters: moduleValue(encounters, encountersJson) as readonly unknown[],
+    // M12-T01: the terrain library rides the same seam, so editing `rooms.json`
+    // mid-session re-validates the grids AND re-runs the cross-table "every roomId
+    // names a real room" check before the run is rebuilt against them.
+    rooms: moduleValue(rooms, roomsJson) as Readonly<Record<string, unknown>>,
   };
 }
 
@@ -124,6 +134,12 @@ function tablesFromHotModules(modules: readonly unknown[] | undefined): RawConfi
  *     reload that killed the session on a typo would be worse than no hot reload.
  *  3. **The seed is preserved.** The caller restarts with `sim.currentSeed`, so the
  *     reload changes the CONFIG and nothing else; a data edit is not a free re-roll.
+ *
+ * M12-T01 adds `rooms.json` to the accepted set. Editing a grid therefore
+ * re-validates the tilemap (shape, tile domain, player spawn) AND the cross-table
+ * "every encounter `roomId` names a real room" rule, and then re-opens the same run
+ * on the new terrain — which is what makes level authoring a data edit rather than a
+ * code change.
  */
 export function installDataHotReload(options: DataHotReloadOptions): void {
   const hot = import.meta.hot;
@@ -137,6 +153,7 @@ export function installDataHotReload(options: DataHotReloadOptions): void {
       '../assets/data/enemies.json',
       '../assets/data/modifiers.json',
       '../assets/data/encounters.json',
+      '../assets/data/rooms.json',
     ],
     (modules) => {
       try {
