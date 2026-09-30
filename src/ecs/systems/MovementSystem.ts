@@ -4,7 +4,7 @@
  * specs/02_dash_and_state_spec.md §5, specs/04_combat_feedback_spec.md §4.6 and
  * specs/13_arena_and_projectiles_spec.md §4.1 / §4.2 (M7-T01 AC-01 / AC-02).
  *
- * Three phases, executed in this order every tick:
+ * Four phases, executed in this order every tick:
  *
  *  1. `integrate` — the M1/M2 locomotion integrator (UNCHANGED).
  *  2. `integrateKinematic` — the M7-T01 addition: entities that fly under their own
@@ -12,12 +12,42 @@
  *     query rather than folded into phase 1, because a projectile owns no
  *     `IntentComponent` at all: the two sets are disjoint by construction, so phase 1
  *     keeps its exact pre-M7 meaning and phase 2 is pure addition (spec 13 I7).
- *  3. `resolveWalls` — the M7-T01 addition: push every dynamic circle body out of
+ *  3. `separateBodies` — the M12-T02 addition: same-faction dynamic circle bodies
+ *     that OVERLAP each other are pushed apart along their overlap depth. A
+ *     deterministic, entropy-free position correction (spec 20 AC-02).
+ *  4. `resolveWalls` — the M7-T01 addition: push every dynamic circle body out of
  *     every wall, then settle the two consequences (wall-slam damage, projectile
  *     retirement). It runs LAST, which is what makes it "after this tick's
  *     displacement" — and, because `CollisionSystem` is a later pipeline segment, it
  *     also makes wall retirement happen strictly BEFORE this tick's collision test
  *     (spec 13 I6).
+ *
+ * WHY THE SEPARATION PHASE LIVES HERE, AND WHY IT SITS EXACTLY WHERE IT DOES
+ * ------------------------------------------------------------------------
+ * Same reason wall resolution does: the tail of this system is the one place where
+ * "all of this tick's displacement is done, and no collision test has run yet" is
+ * true. Separation is a same-entity physical phase, not a new lifecycle with its own
+ * event source, so it belongs to `MovementSystem`'s tail rather than a new pipeline
+ * segment — the engine's rule is that only "independent lifecycle + independent event
+ * source" earns a new segment (spec 20 §4.4).
+ *
+ * The ORDER `separateBodies -> resolveWalls` is the contract, not a detail (spec 20
+ * I9). Separation knows only about the distance between two bodies; it does not know
+ * about walls. If it ran AFTER wall resolution it could push a pair of bodies INTO a
+ * wall and nothing later in the tick would push them back out — they would clip
+ * through geometry. Running it BEFORE wall resolution makes the wall pass the final
+ * arbiter: the worst case is "separation moved a body, the wall moved it back", and
+ * the body is still outside the wall. Geometry always gets the last word.
+ *
+ * WHY SEPARATION IS SAME-FACTION ONLY (spec 20 I5 / §4.2)
+ * ------------------------------------------------------
+ * The acceptance criterion asks for same-faction separation, and the narrower scope
+ * is also the safer one: the existing `status_effects` and `walls_and_projectiles`
+ * rigs deliberately place the player and an enemy at very close — sometimes
+ * identical — positions (a melee swing, a knockback), and a cross-faction push would
+ * silently shift the expected coordinates those suites pin. Restricting the phase to
+ * same-faction pairs keeps the blast radius of this optimisation inside the one gap
+ * it was written to close: enemies that converge on the same line and stack.
  *
  * WHY WALL RESOLUTION LIVES HERE rather than in a new pipeline segment: the tail of
  * this system is the one and only place where "all of this tick's displacement is
@@ -84,10 +114,51 @@ import { KnockbackComponent } from '../components/KnockbackComponent';
 import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
 import { HitboxComponent } from '../components/HitboxComponent';
+import { HurtboxComponent } from '../components/HurtboxComponent';
+import { FactionComponent } from '../components/FactionComponent';
 import { ProjectileComponent } from '../components/ProjectileComponent';
 import { DEFAULT_WALL_SLAM_DAMAGE, WallComponent, circleBodyRadius } from '../components/WallComponent';
 import { applyDamageWithArmor } from '../components/ArmorComponent';
 import { isDead } from '../components/DeadTagComponent';
+
+/**
+ * How many equally-spaced directions the fully-coincident tie-break can choose from
+ * (M12-T02, spec 20 §3.3).
+ *
+ * 16 is a power of two, so the slot is `mixed % 16` — a mask, not a division — and
+ * the resulting angle is an exact multiple of `PI / 8`. It is large enough that a
+ * crowd of coincident bodies fans out into visibly different directions and small
+ * enough that the angle is cheap and the pattern is human-checkable.
+ */
+const SEPARATION_DIRECTION_SLOTS = 16;
+
+/**
+ * A deterministic direction for two FULLY COINCIDENT entities (M12-T02, spec 20 §3.3).
+ *
+ * When two bodies occupy the exact same point, the "vector from A to B" they would
+ * normally separate along has zero length and no direction. Rather than divide by
+ * zero, this derives a fixed direction from the two `EntityId`s alone.
+ *
+ * WHY IT IS A PURE FUNCTION OF THE IDS, AND WHY `Math.imul`
+ * --------------------------------------------------------
+ * It must be reproducible: the same pair of ids must pick the same direction on
+ * every tick and every machine, or a fully-coincident pair would jitter. `Math.imul`
+ * is the 32-bit integer multiply that keeps the mix exact for any id (a plain `*`
+ * loses precision past 2^53), and `>>> 0` folds the result into `[0, 2^32)` — the
+ * same discipline the seeded PRNG follows (ADR-004). There is NO entropy here: not
+ * `Math.random`, not the wall clock, nothing environment-dependent (spec 20 I6).
+ *
+ * NOTE the pair is deliberately NOT symmetric: `separationAngle(a, b)` need not equal
+ * `separationAngle(b, a)`. Two coincident bodies only need to be pushed in OPPOSITE
+ * directions (A along `-n`, B along `+n`), and which slot `n` lands in is
+ * immaterial — what matters is that a given pair always lands in the same one.
+ *
+ * @returns an angle in `[0, 2*PI)`.
+ */
+export function separationAngle(a: EntityId, b: EntityId): number {
+  const mixed = (Math.imul(a + 1, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
+  return ((mixed % SEPARATION_DIRECTION_SLOTS) / SEPARATION_DIRECTION_SLOTS) * Math.PI * 2;
+}
 
 export class MovementSystem implements System {
   public readonly name = 'MovementSystem';
@@ -95,6 +166,7 @@ export class MovementSystem implements System {
   public update(world: World, ctx: SystemContext): void {
     this.integrate(world, ctx.fixedDeltaSeconds);
     this.integrateKinematic(world, ctx.fixedDeltaSeconds);
+    this.separateBodies(world);
     this.resolveWalls(world);
   }
 
@@ -193,6 +265,109 @@ export class MovementSystem implements System {
 
       transform.x += velocity.directionVector.x * velocity.maxSpeed * fixedDeltaSeconds;
       transform.y += velocity.directionVector.y * velocity.maxSpeed * fixedDeltaSeconds;
+    }
+  }
+
+  /**
+   * Phase 3 (M12-T02) — push SAME-FACTION dynamic circle bodies apart (spec 20 §4.2).
+   *
+   * The target set is "circle bodies that move, and have a side": `Transform` +
+   * `Velocity` + `Hurtbox` + `Faction`. `Velocity` is required because separation is
+   * about BODIES — a static melee/boon hitbox owns no `VelocityComponent` and is not
+   * a body, so it never separates (the same reason it is never wall-resolved). The
+   * `Hurtbox` supplies the radius, and `Faction` supplies the "only same side"
+   * constraint.
+   *
+   * DEAD entities are skipped on BOTH sides of a pair (spec 20 I5): a corpse is not
+   * displaced by anything else in this engine (spec 08 §4.2 / spec 13 I10), and a
+   * live body must not be shoved by a corpse either.
+   *
+   * ORDER IS THE CONTRACT. `World.query` returns ascending ids, and the pair loop is
+   * `i < j`, so every pair is visited exactly once in a fixed order and the writes
+   * land in a fixed order — which is what makes the pass deterministic. The
+   * displacement itself is a POSITION CORRECTION and is therefore NOT scaled by
+   * `fixedDeltaSeconds` (spec 20 I8): scaling by the tick length would mean "fix only
+   * a fraction of the overlap per tick", leaving a coincident pair to jitter for
+   * several ticks instead of settling in one. With no `dt`, a fully-coincident pair
+   * lands exactly tangent in a single pass and stays there (`distSq >= minDist^2` on
+   * every later tick).
+   *
+   * The overlap predicate is the strict `<` that `CollisionSystem` and `PickupSystem`
+   * already use (spec 20 I7): a pair that is merely TOUCHING is not overlapping, so
+   * two bodies resting tangent are left exactly where they are rather than being
+   * nudged every tick.
+   *
+   * The `< 2` early return is a real guard rather than a micro-optimisation: it makes
+   * a one-body world's separation phase a bit-for-bit no-op, which is what keeps the
+   * M1–M11 single-player rigs (and every snapshot comparison taken against them)
+   * untouched (spec 20 I10).
+   */
+  private separateBodies(world: World): void {
+    const ids = world.query(
+      TransformComponent,
+      VelocityComponent,
+      HurtboxComponent,
+      FactionComponent,
+    );
+    if (ids.length < 2) return;
+
+    for (let i = 0; i < ids.length; i += 1) {
+      const idA = ids[i];
+      if (idA === undefined) continue;
+      if (isDead(world, idA)) continue;
+
+      const transformA = world.getComponent(idA, TransformComponent);
+      const hurtboxA = world.getComponent(idA, HurtboxComponent);
+      const factionA = world.getComponent(idA, FactionComponent);
+      if (transformA === undefined || hurtboxA === undefined || factionA === undefined) continue;
+
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const idB = ids[j];
+        if (idB === undefined) continue;
+        if (isDead(world, idB)) continue;
+
+        const transformB = world.getComponent(idB, TransformComponent);
+        const hurtboxB = world.getComponent(idB, HurtboxComponent);
+        const factionB = world.getComponent(idB, FactionComponent);
+        if (transformB === undefined || hurtboxB === undefined || factionB === undefined) continue;
+
+        // Only same-faction pairs separate (spec 20 I5): a player and an enemy may
+        // legitimately overlap (a swing, a shove) and must be left alone.
+        if (factionA.faction !== factionB.faction) continue;
+
+        const minDist = hurtboxA.radius + hurtboxB.radius;
+        const dx = transformB.x - transformA.x;
+        const dy = transformB.y - transformA.y;
+        const distSq = dx * dx + dy * dy;
+        // Touching (==) or separated (>) is not overlapping (spec 20 I7).
+        if (distSq >= minDist * minDist) continue;
+
+        let nx: number;
+        let ny: number;
+        let overlap: number;
+        if (distSq === 0) {
+          // Fully coincident: no direction to derive, so take the deterministic
+          // id-derived one and push them all the way to tangent.
+          const angle = separationAngle(idA, idB);
+          nx = Math.cos(angle);
+          ny = Math.sin(angle);
+          overlap = minDist;
+        } else {
+          const dist = Math.sqrt(distSq);
+          nx = dx / dist;
+          ny = dy / dist;
+          overlap = minDist - dist;
+        }
+
+        // Symmetric correction: each body takes half the overlap, along the unit
+        // direction. Not scaled by dt — this is a position fix, not a velocity
+        // integration (spec 20 I8).
+        const half = overlap * 0.5;
+        transformA.x -= nx * half;
+        transformA.y -= ny * half;
+        transformB.x += nx * half;
+        transformB.y += ny * half;
+      }
     }
   }
 

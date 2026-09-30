@@ -28,9 +28,18 @@
  *
  * The rig drives the REAL `GameSimulator`, the REAL 17-segment pipeline, the REAL
  * `DataManager` and the REAL `LevelLoader`, against a MOCK room + encounter table
- * whose numbers (8 / 11 / 12 / 3 walls, 5 spawn tiles, 3 enemies) appear nowhere else
- * in the codebase — so "the value came from the table" cannot be confused with "the
- * value came from a default". Nothing is mocked, and ticks are advanced one at a time.
+ * whose numbers appear nowhere else in the codebase — so "the value came from the
+ * table" cannot be confused with "the value came from a default". Nothing is mocked,
+ * and ticks are advanced one at a time.
+ *
+ * M12-T02 NOTE (spec 20 AC-01): `LevelLoader` now MERGES consecutive `1` tiles into
+ * as few large AABBs as a greedy rectangle merge can manage, so the world holds one
+ * `WallComponent` per RECTANGLE, not per tile. The tile counts (8 / 11 / 12 / 3) are
+ * still the numbers that appear in the fixtures below, but they are now asserted as
+ * `wallTileCount` — the geometric truth — while `wallCount` is the merged rectangle
+ * count (4 / 4 / 4 / 1). The two together are the "the merge was equivalent"
+ * equation; the physics assertions (a body stops at the face, its coordinate stops
+ * changing) are the "the merge did not change resolution" evidence.
  *
  * TICK NUMBERING (`sim.step(n)` processes ticks `0 .. n-1`, leaving `sim.tick === n`).
  *
@@ -119,10 +128,14 @@ afterEach(async () => {
 /*
  * Four rooms, each chosen for ONE number the suite asserts:
  *
- *  - `box_3x3`    · 8 wall tiles, the `2` tile dead centre — the physics rig.
- *  - `room_a`     · 11 wall tiles, `2` at (1,3), `3` at (2,1) — the run's room 0.
- *  - `room_b`     · 12 wall tiles, `2` at (1,2), `3` at (1,1) — the run's room 1.
- *  - `spawn_five` · 5 `3` tiles, 3 wall tiles — the distribution rig.
+ *  - `box_3x3`    · 8 wall tiles (merged to 4 rects), the `2` tile dead centre — the
+ *                   physics rig.
+ *  - `room_a`     · 11 wall tiles (merged to 4 rects), `2` at (1,3), `3` at (2,1) —
+ *                   the run's room 0.
+ *  - `room_b`     · 12 wall tiles (merged to 4 rects), `2` at (1,2), `3` at (1,1) —
+ *                   the run's room 1.
+ *  - `spawn_five` · 5 `3` tiles, 3 wall tiles (merged to 1 rect) — the distribution
+ *                   rig.
  *
  * They are written as 2D row arrays (the human-editable spelling) precisely so that
  * the 2D path is exercised by every integration test, not only by G0.
@@ -547,35 +560,43 @@ describe('G0 · the room table is registered and cross-checked (AC-01)', () => {
  * G1 · physical topology (AC-02 / AC-05)                                      *
  * ========================================================================== */
 describe('G1 · a 3x3 closed room blocks a body at its face (AC-02)', () => {
-  it('builds exactly one wall per `1` tile, at the documented world boxes', () => {
+  it('merges the `1` tiles into as few rects as possible, at the documented world boxes', () => {
     DataManager.loadAll(bundle());
     const sim = new GameSimulator({ fps: FPS, systems: [] });
 
     const result = LevelLoader.enterRoom(sim.world, { roomId: 'box_3x3' });
 
-    // 3 x 3 = 9 tiles, 8 of them walls — the count is a LITERAL, not the constant
-    // that built it (the tautology trap).
-    expect(result.wallCount).toBe(8);
+    // 3 x 3 = 9 tiles, 8 of them walls — the TILE count is a LITERAL, not the
+    // constant that built it (the tautology trap). M12-T02: the world holds one wall
+    // per MERGED RECT (4), while the tile count (8) is the geometric truth.
+    expect(result.wallTileCount).toBe(8);
+    expect(result.wallCount).toBe(4);
     expect(result.clearedEntityCount).toBe(0); // a fresh world has nothing to clear
-    expect(wallIds(sim)).toHaveLength(8);
-    expect(sim.world.entityCount).toBe(8);
+    expect(wallIds(sim)).toHaveLength(4);
+    expect(sim.world.entityCount).toBe(4);
 
-    // Field for field, in ROW-MAJOR order, so "the geometry came from the grid" is
-    // checkable against the JSON without knowing anything about the loader.
-    const boxes = wallIds(sim).map((id) => {
+    // Field for field, in TOP-LEFT ROW-MAJOR order, so "the geometry came from the
+    // grid" is checkable against the JSON without knowing anything about the merge.
+    // The four rectangles: top edge (3 wide), left + right columns (2 tall), and the
+    // single bottom-middle tile. Their area (3 + 2 + 2 + 1 = 8) equals the tile count.
+    const boxes: (readonly [number, number, number, number] | null)[] = wallIds(sim).map((id) => {
       const wall = sim.world.getComponent(id, WallComponent);
       return wall === undefined ? null : [wall.x, wall.y, wall.width, wall.height];
     });
     expect(boxes).toEqual([
-      [0, 0, 1, 1],
-      [1, 0, 1, 1],
-      [2, 0, 1, 1],
-      [0, 1, 1, 1],
-      [2, 1, 1, 1],
-      [0, 2, 1, 1],
+      [0, 0, 3, 1],
+      [0, 1, 1, 2],
+      [2, 1, 1, 2],
       [1, 2, 1, 1],
-      [2, 2, 1, 1],
     ]);
+    // AREA CONSERVATION (spec 20 I1): the merged rectangles cover exactly the `1`
+    // tiles — no overlap (or the sum would exceed 8) and no gap (or it would fall
+    // short). This is the equation that makes "the merge was equivalent" checkable.
+    const mergedArea = boxes.reduce(
+      (sum, box) => (box === null ? sum : sum + box[2] * box[3]),
+      0,
+    );
+    expect(mergedArea).toBe(result.wallTileCount);
   });
 
   it('gives a wall NO Transform, NO Velocity and NO other component (AC-05)', () => {
@@ -659,7 +680,8 @@ describe('G1 · a 3x3 closed room blocks a body at its face (AC-02)', () => {
     // Both optional arguments omitted: the geometry is still built, and nothing
     // throws — `enterRoom` runs inside `step()`, where a throw is unrecoverable.
     const result = LevelLoader.enterRoom(sim.world, { roomId: 'room_b' });
-    expect(result.wallCount).toBe(12);
+    expect(result.wallCount).toBe(4); // 12 `1` tiles, merged to 4 rects
+    expect(result.wallTileCount).toBe(12);
     expect(result.enemySpawnPoints).toEqual([{ x: 1.5, y: 1.5 }]);
     expect(sim.world.query(TransformComponent)).toHaveLength(0);
   });
@@ -677,12 +699,12 @@ describe('G2 · descending a room tears the old scene down and builds the new on
     const room = roomOf(sim);
     const player = playerOf(sim);
 
-    // ---- room 0: `room_a` (11 wall tiles), player on its `2` tile ------------
+    // ---- room 0: `room_a` (11 wall tiles -> 4 merged rects), player on its `2` ---
     expect(currentRoomId(room)).toBe('room_a');
     expect(room.currentRoomIndex).toBe(0);
     expect(room.maxRooms).toBe(2);
     const oldWalls = wallIds(sim);
-    expect(oldWalls).toHaveLength(11);
+    expect(oldWalls).toHaveLength(4);
     expect(poseOf(sim, player)).toEqual({ x: 1.5, y: 3.5 });
     expect(room.enemySpawnPoints).toEqual([{ x: 2.5, y: 1.5 }]);
 
@@ -719,11 +741,11 @@ describe('G2 · descending a room tears the old scene down and builds the new on
     sim.step(1); // tick 2
 
     // AC-04: every old wall is GONE (checked by id, so a recycled id could not hide
-    // it), and the new count is exactly the new room's `1` count.
+    // it), and the new count is exactly the new room's merged-rect count.
     for (const id of oldWalls) {
       expect(sim.world.isAlive(id)).toBe(false);
     }
-    expect(wallIds(sim)).toHaveLength(12);
+    expect(wallIds(sim)).toHaveLength(4);
     expect(sim.world.query(ProjectileComponent)).toHaveLength(0);
     expect(sim.world.query(HazardComponent)).toHaveLength(0);
     expect(sim.world.query(PickupComponent)).toHaveLength(0);
@@ -766,10 +788,11 @@ describe('G2 · descending a room tears the old scene down and builds the new on
 
     sim.restartRun(SEED);
 
-    // Room 0 again: 11 walls, the player on its `2` tile, and the pool republished.
-    // This is AC-02 on the RESTART path — `restartRun` reaches `runSetup`, which is
-    // where the opening room's topology is assembled (spec 19 §4.3).
-    expect(wallIds(sim)).toHaveLength(11);
+    // Room 0 again: 11 `1` tiles merged to 4 rects, the player on its `2` tile, and
+    // the pool republished. This is AC-02 on the RESTART path — `restartRun` reaches
+    // `runSetup`, which is where the opening room's topology is assembled
+    // (spec 19 §4.3).
+    expect(wallIds(sim)).toHaveLength(4);
     expect(poseOf(sim, playerOf(sim))).toEqual({ x: 1.5, y: 3.5 });
     const room = roomOf(sim);
     expect(currentRoomId(room)).toBe('room_a');
@@ -991,7 +1014,7 @@ describe('G5 · the renderer draws the room — and only while there is one (AC-
     return { app: { stage: new Container(), ticker } as unknown as Application };
   }
 
-  it('draws one block per wall, keeps them BELOW every entity, and drops them with the room', () => {
+  it('draws one block per merged wall, keeps them BELOW every entity, and drops them with the room', () => {
     DataManager.loadAll(bundle());
 
     const { app } = makeApp();
@@ -1001,37 +1024,43 @@ describe('G5 · the renderer draws the room — and only while there is one (AC-
     const renderer = new GameRenderer(app);
     renderer.init();
 
-    // 1. NO WALLS: the stage holds exactly the render root and no static layer, so a
-    //    pre-M12 world sees the M5 scene graph byte for byte — including
-    //    `stage.children[0] === root`, which the frozen render suites assert.
+    // 1. NO WALLS: the stage holds exactly the CAMERA and no static layer, so a
+    //    pre-M12 world sees the M5 scene graph byte for byte. M12-T02 introduced the
+    //    camera as the single stage child, so the frozen "stage.children[0] is the
+    //    render root" contract is now read as "…is the camera, whose LAST child is
+    //    the render root".
     renderer.syncWorld(sim.world);
     expect(renderer.wallViewCount).toBe(0);
     expect(app.stage.children).toHaveLength(1);
-    const root = app.stage.children[0];
+    const camera = renderer.camera;
+    expect(app.stage.children[0]).toBe(camera);
+    expect(camera.children).toHaveLength(1);
+    const root = camera.children[camera.children.length - 1];
     if (root === undefined) throw new Error('QA: renderer.init() attached no root');
     expect(renderer.viewCount).toBe(1); // the player
     expect(root.children).toHaveLength(2); // the player view + the FX layer
 
-    // 2. THE ROOM ARRIVES: one block per `1` tile, and the layer is inserted at stage
-    //    index 0 — i.e. behind the root, and therefore behind every entity and FX.
+    // 2. THE ROOM ARRIVES: one block per MERGED RECT (M12-T02), and the layer is
+    //    inserted at CAMERA index 0 — i.e. behind the root, and therefore behind
+    //    every entity and FX.
     const result = LevelLoader.enterRoom(sim.world, { roomId: 'box_3x3' });
-    expect(result.wallCount).toBe(8);
+    expect(result.wallCount).toBe(4);
     renderer.syncWorld(sim.world);
 
-    expect(renderer.wallViewCount).toBe(8);
-    expect(app.stage.children).toHaveLength(2);
-    expect(app.stage.children[1]).toBe(root);
-    expect(app.stage.children[0]).not.toBe(root);
+    expect(renderer.wallViewCount).toBe(4);
+    expect(camera.children).toHaveLength(2);
+    expect(camera.children[1]).toBe(root);
+    expect(camera.children[0]).not.toBe(root);
     // The blocks are drawn in the ONE render unit the logic layer never knows about.
     expect(PX_PER_UNIT).toBe(10);
 
     // 3. THE ROOM IS TORN DOWN: the layer goes with it, and the scene graph returns
-    //    to exactly the pre-M12 shape rather than leaving stale blocks behind.
+    //    to the no-geometry shape rather than leaving stale blocks behind.
     LevelLoader.clearRoomEntities(sim.world);
     renderer.syncWorld(sim.world);
 
     expect(renderer.wallViewCount).toBe(0);
-    expect(app.stage.children).toHaveLength(1);
-    expect(app.stage.children[0]).toBe(root);
+    expect(camera.children).toHaveLength(1);
+    expect(camera.children[0]).toBe(root);
   });
 });

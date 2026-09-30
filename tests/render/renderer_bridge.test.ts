@@ -42,11 +42,22 @@ function makeApp(deltaMs: number): { app: Application; ticker: FakeTicker } {
   return { app, ticker };
 }
 
-/** The render root the renderer attached to the stage (its only stage child). */
+/**
+ * The render root the renderer attached to the stage.
+ *
+ * M12-T02: the stage's only child is now the CAMERA, and the root is the camera's
+ * LAST child (the static-geometry layer, when present, sits at camera index 0). So
+ * the root is reached by descending through the camera rather than by reading
+ * `stage.children[0]` directly.
+ */
 function renderRoot(app: Application): Container {
-  const root = app.stage.children[0];
+  const camera = app.stage.children[0];
+  if (camera === undefined) {
+    throw new Error('renderer.init() did not attach a camera to app.stage');
+  }
+  const root = camera.children[camera.children.length - 1];
   if (root === undefined) {
-    throw new Error('renderer.init() did not attach a root to app.stage');
+    throw new Error('renderer.init() did not attach a root to the camera');
   }
   return root;
 }

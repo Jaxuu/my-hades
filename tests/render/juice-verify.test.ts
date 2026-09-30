@@ -64,8 +64,10 @@ function makeApp(deltaMs: number): Application {
 }
 
 function rootOf(app: Application): Container {
-  const root = app.stage.children[0];
-  if (root === undefined) throw new Error('QA: renderer.init() attached no root to app.stage');
+  const camera = app.stage.children[0];
+  if (camera === undefined) throw new Error('QA: renderer.init() attached no camera to app.stage');
+  const root = camera.children[camera.children.length - 1];
+  if (root === undefined) throw new Error('QA: renderer.init() attached no root to the camera');
   return root;
 }
 

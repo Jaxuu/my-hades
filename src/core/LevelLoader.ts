@@ -12,9 +12,33 @@
  * from entering it the first time.
  *
  * This module is the missing half. It reads a `RoomConfig` (a 2D integer grid) and
- * turns it into the world: one `WallComponent` entity per `1` tile, a player pose
- * reset onto the `2` tile's centre, and the `3` tiles collected into a spawn pool
- * the encounter scheduler draws landing spots from.
+ * turns it into the world: the `1` tiles MERGED into as few large `WallComponent`
+ * AABBs as a greedy rectangle merge can manage, a player pose reset onto the `2`
+ * tile's centre, and the `3` tiles collected into a spawn pool the encounter
+ * scheduler draws landing spots from.
+ *
+ * M12-T02 — WHY THE WALLS ARE MERGED RATHER THAN ONE PER TILE
+ * ----------------------------------------------------------
+ * M12-T01 shipped "one wall entity per `1` tile" on purpose (spec 19 I2): it made
+ * the wall entity ids correspond one-to-one with the grid read in row-major order,
+ * which is a beautiful property for a test to assert against the JSON. Its cost,
+ * registered as spec 19 R3, is that `resolveWalls` is `O(dynamic bodies x walls)` —
+ * so a room's physical cost grew with its AREA even though a room's walls form a
+ * handful of long straight runs.
+ *
+ * This milestone keeps the beautiful property's EVIDENCE and drops its cost. The
+ * grid is still the one and only source of geometry (spec 19 I1), but consecutive
+ * tiles are merged at LOAD time into large axis-aligned rectangles, so the wall
+ * count becomes `O(runs)` instead of `O(tiles)`. The merge is a pure function of
+ * the grid, so it can never drift from it, and it is applied in exactly one place
+ * (the same load path every room already takes), so there is no second geometry
+ * path to keep in step.
+ *
+ * The merge is EQUIVALENT, not approximate: the union of the merged rectangles is
+ * exactly the union of the per-tile boxes, and — because a merged rectangle's edges
+ * always fall on original tile lines — `resolveCircleAABB` pushes a body out along
+ * the same face it would have chosen per-tile. A body cannot tell whether the wall
+ * it hit was one long rectangle or three unit boxes (spec 20 AC-01 / I1 / I2).
  *
  * WHY IT LIVES IN `core/` AND WHY IT IS STATELESS
  * -----------------------------------------------
@@ -83,8 +107,29 @@ export interface RoomLoadResult {
   readonly playerSpawn: SpawnPoint;
   /** Every `3` tile's centre, row-major order — the enemy landing pool. */
   readonly enemySpawnPoints: readonly SpawnPoint[];
-  /** How many `WallComponent` entities this load created (== the grid's `1` count). */
+  /**
+   * How many `WallComponent` entities this load created.
+   *
+   * M12-T02 SEMANTIC CHANGE: this used to equal the grid's `1` count (one wall per
+   * tile). It is now the MERGED rectangle count — the number of AABBs the greedy
+   * merge produced, which is also the number of entities in the world and therefore
+   * the number `resolveWalls` iterates. `wallTileCount` below is the pre-merge
+   * count, and the two together are what make "the merge was correct" (areas sum to
+   * the tile count) and "the merge did not over-merge" (every `1` tile is covered)
+   * separately assertable.
+   */
   readonly wallCount: number;
+  /**
+   * How many `1` tiles the grid holds — the pre-merge wall count.
+   *
+   * Kept alongside {@link wallCount} rather than folded into it because the two
+   * answer different questions: `wallCount` is world state ("how many wall entities
+   * exist"), `wallTileCount` is geometric truth ("how much terrain is there"). The
+   * merge is exactly the gap between them, and a test asserting
+   * `wallCount <= wallTileCount` plus "the merged rectangles' area sums to
+   * `wallTileCount`" pins both correctness and the absence of over-merge.
+   */
+  readonly wallTileCount: number;
   /** How many transient entities the teardown step destroyed. */
   readonly clearedEntityCount: number;
 }
@@ -230,22 +275,126 @@ export class LevelLoader {
   }
 
   /**
-   * Build one room's geometry: exactly one wall entity per `1` tile (spec 19 I2).
+   * The greedy rectangle merge (M12-T02, spec 20 §3.1 / AC-01).
    *
-   * Returns the count, which is the assertion the milestone cares about: "the wall
-   * count equals the number of `1` tiles in the grid" is a fact a test can check
-   * against the JSON without knowing anything about the loader.
+   * Scans the grid in ROW-MAJOR order and, at the first unvisited `1` tile it
+   * finds, grows a rectangle: first RIGHT along the row (eating consecutive
+   * unvisited `1` tiles), then DOWN (eating rows whose entire span is unvisited
+   * `1` tiles), marks the whole rectangle visited, and emits it. Every `1` tile is
+   * therefore either a rectangle's top-left corner or inside exactly one rectangle,
+   * which is what makes the union exact and the rectangles non-overlapping.
    *
-   * Walls are created through `createWall`, the one assembly seam for static
+   * WHY `visited` IS LOAD-BEARING rather than an optimisation: without it, the
+   * downward growth would re-cover tiles a later row-major scan will also start a
+   * rectangle on, producing OVERLAPPING rectangles. Overlap would (a) break "area
+   * sums to the tile count" — the one equation that proves the merge conserved the
+   * geometry — and (b) make `resolveWalls` push a body out of the same wall twice.
+   *
+   * WHY ROW-MAJOR OUTPUT ORDER: a rectangle is emitted at the moment its TOP-LEFT
+   * tile is reached, and the scan is row-major, so the output is sorted by
+   * top-left tile in reading order. That makes a failing assertion able to name a
+   * rectangle and the grid cell it came from without a lookup table — the same
+   * reason `collectWallTiles` is row-major.
+   *
+   * WHY RIGHT-THEN-DOWN RATHER THAN DOWN-THEN-RIGHT: both are legal greedy merges
+   * and produce the SAME union (and the same resolution behaviour), but they can
+   * differ in rectangle count. Right-first collapses a room's top and bottom edges
+   * — the most common shape in practice — into single rectangles, which keeps the
+   * output small and, just as usefully, human-checkable in a test.
+   *
+   * Pure, stateless, and TOTAL: it allocates its own `visited` array, reads only
+   * `config`, and never throws. It is called from inside `step()` (via
+   * `spawnWalls`), so a throw here would be unrecoverable (spec 19 I12 / spec 20
+   * I4).
+   */
+  public static mergeWallRects(config: RoomConfig): readonly WallSpawnOptions[] {
+    const { width, height, grid } = config;
+    const visited = new Array<boolean>(width * height).fill(false);
+    const rects: WallSpawnOptions[] = [];
+
+    for (let row = 0; row < height; row += 1) {
+      for (let col = 0; col < width; col += 1) {
+        if (grid[row * width + col] !== TILE_WALL) continue;
+        if (visited[row * width + col] === true) continue;
+
+        // 1. Grow RIGHT while the next tile is an unvisited wall on this row.
+        let rectWidth = 1;
+        while (
+          col + rectWidth < width &&
+          grid[row * width + (col + rectWidth)] === TILE_WALL &&
+          visited[row * width + (col + rectWidth)] !== true
+        ) {
+          rectWidth += 1;
+        }
+
+        // 2. Grow DOWN while EVERY tile of the span is an unvisited wall. The whole
+        //    span must qualify: a rectangle is axis-aligned, so a single gap forbids
+        //    the row entirely rather than shrinking the span.
+        let rectHeight = 1;
+        while (
+          row + rectHeight < height &&
+          LevelLoader.spanIsUnvisitedWall(grid, visited, width, col, rectWidth, row + rectHeight)
+        ) {
+          rectHeight += 1;
+        }
+
+        // 3. Mark the whole rectangle visited, then emit it.
+        for (let r = row; r < row + rectHeight; r += 1) {
+          for (let c = col; c < col + rectWidth; c += 1) {
+            visited[r * width + c] = true;
+          }
+        }
+        rects.push({ x: col, y: row, width: rectWidth, height: rectHeight });
+      }
+    }
+    return rects;
+  }
+
+  /**
+   * Whether `[col, col + span)` on `row` is entirely unvisited `1` tiles.
+   *
+   * Split out of {@link mergeWallRects} so the "a single gap forbids the row"
+   * predicate reads as one sentence instead of a nested `while` condition. Private
+   * and static — it is an implementation detail of the merge, not part of the
+   * loader's contract.
+   */
+  private static spanIsUnvisitedWall(
+    grid: readonly number[],
+    visited: readonly boolean[],
+    width: number,
+    col: number,
+    span: number,
+    row: number,
+  ): boolean {
+    for (let c = col; c < col + span; c += 1) {
+      const index = row * width + c;
+      if (grid[index] !== TILE_WALL || visited[index] === true) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Build one room's geometry: one wall entity per MERGED rectangle (M12-T02,
+   * spec 20 AC-01).
+   *
+   * Returns the rectangle count — the number of AABBs `resolveWalls` will iterate,
+   * and the number of `WallComponent` entities in the world. The pre-merge tile
+   * count is `collectWallTiles(config).length` and is surfaced to callers as
+   * `RoomLoadResult.wallTileCount`; the two together are the "the merge was
+   * equivalent" assertion.
+   *
+   * Walls are still created through `createWall`, the one assembly seam for static
    * geometry (spec 13 §3.2), so its validation and its "no `TransformComponent`"
-   * contract apply here for free rather than being restated.
+   * contract apply here for free rather than being restated — and a merged
+   * rectangle is the same `WallSpawnOptions` shape a unit box was, so the seam
+   * needs no change to accept it.
    */
   public static spawnWalls(world: World, config: RoomConfig): number {
-    const tiles = LevelLoader.collectWallTiles(config);
-    for (const tile of tiles) {
-      createWall(world, LevelLoader.wallBoxForTile(tile.col, tile.row));
+    const rects = LevelLoader.mergeWallRects(config);
+    for (const rect of rects) {
+      createWall(world, rect);
     }
-    return tiles.length;
+    return rects.length;
   }
 
   /**
@@ -335,6 +484,11 @@ export class LevelLoader {
 
     const clearedEntityCount = LevelLoader.clearRoomEntities(world);
     const wallCount = LevelLoader.spawnWalls(world, config);
+    // The pre-merge count is derived here, next to the post-merge one, so the two
+    // numbers a caller compares come from the same call and the same config — the
+    // merge's "area is conserved" claim is then a property of one room, not of two
+    // reads that might have raced a reload.
+    const wallTileCount = LevelLoader.collectWallTiles(config).length;
 
     const playerSpawn = LevelLoader.findPlayerSpawn(config) ?? LevelLoader.roomCentre(config);
     const enemySpawnPoints = LevelLoader.collectEnemySpawnPoints(config);
@@ -351,6 +505,7 @@ export class LevelLoader {
       playerSpawn,
       enemySpawnPoints,
       wallCount,
+      wallTileCount,
       clearedEntityCount,
     };
   }

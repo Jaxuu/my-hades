@@ -25,12 +25,31 @@
  * layer exists only while the world contains a wall, which is what keeps the
  * pre-M12 scene graph — and the frozen M5 render assertions about it — untouched.
  *
+ * M12-T02 adds item 4 — THE CAMERA. Until now the room was drawn at the world
+ * origin in the canvas's top-left corner, so a player who walked far enough simply
+ * walked off screen (spec 19 R5). The fix is a single `Container` (`camera`) that
+ * becomes the public parent of everything WORLD-SPACE — the static layer, the entity
+ * views and the FX layer — and is translated every frame so the player sits at the
+ * centre of the screen. That changes the top of the scene graph: `app.stage`'s only
+ * child is now the CAMERA, and the render root is the camera's LAST child. The two
+ * frozen contracts that matter — `fxLayer` is the render root's last child, and
+ * entity views keep ascending-id order under it — are untouched, because the camera
+ * simply wraps the old root without reordering its children.
+ *
+ * The camera is PURE PRESENTATION (spec 20 I11/I14): entity and wall views still
+ * carry WORLD-pixel coordinates and the camera is the only node whose `x/y` is a
+ * view transform. It never writes to `World`, and `src/` has no notion of a camera.
+ * Floating damage text hangs under the FX layer, i.e. inside the camera, so its
+ * world-space coordinates ride along for free. The HUD is DOM (`#hud` / `#gold`) and
+ * is therefore ALREADY fixed to the screen — which is exactly why the Pixi side
+ * needs no screen-space container of its own.
+ *
  * One-way dependency: this module imports `src/` (types + components) but `src/`
  * must never import it back (enforced by ESLint, spec 09 AC-01).
  */
 
 import { Container, Graphics, Text } from 'pixi.js';
-import type { Application, Ticker } from 'pixi.js';
+import type { Application, Rectangle, Ticker } from 'pixi.js';
 
 import type { EntityId } from '../src/ecs/Entity';
 import type { World } from '../src/ecs/World';
@@ -52,6 +71,19 @@ import { WallComponent } from '../src/ecs/components/WallComponent';
  * The logic layer has no concept of pixels; this number lives only here.
  */
 export const PX_PER_UNIT = 10;
+
+/**
+ * How much of the remaining distance the camera closes each frame (M12-T02, spec 20
+ * §3.4).
+ *
+ * The camera does not snap to the player; it eases towards the target with a first
+ * order lerp. `0.2` closes ~50% of the gap in ~3 frames and ~99% in ~20 frames at
+ * 60fps — fast enough to read as "following", slow enough that the world has a
+ * sense of weight rather than being welded to the player's exact position. Exported
+ * so the behaviour is a named contract a test can pin rather than a magic number
+ * buried in `syncCamera`.
+ */
+export const CAMERA_LERP_FACTOR = 0.2;
 
 /** Radius (world units) of the player placeholder circle. */
 const PLAYER_RADIUS = 0.5;
@@ -205,6 +237,25 @@ interface FloatingText {
 
 export class GameRenderer {
   private readonly app: Application;
+
+  /**
+   * The camera (M12-T02). The public parent of everything WORLD-SPACE — the static
+   * layer, the render root (and therefore every entity view and the FX layer) — and
+   * the ONE node whose `x/y` is a view transform. It is translated every frame by
+   * `syncCamera` so the player sits at the centre of the screen.
+   *
+   * It is a plain `Container` rather than a PixiJS `Camera`/`Viewport` because all
+   * this milestone needs is a translation: no zoom, no rotation, no bounds. Making it
+   * a container keeps the change to the scene graph minimal — the camera simply wraps
+   * the existing root instead of re-parenting its children — which is what keeps the
+   * frozen M5 child-index contracts intact (see the class docstring).
+   *
+   * Held under `cameraContainer` rather than `camera` because `camera` is the name of
+   * the public getter below; TypeScript forbids a field and an accessor sharing a
+   * name, and the getter is the shape the tests and diagnostics want.
+   */
+  private readonly cameraContainer = new Container();
+
   private readonly root = new Container();
   private readonly views = new Map<EntityId, EntityView>();
 
@@ -298,14 +349,30 @@ export class GameRenderer {
     return this.views.size;
   }
 
+  /**
+   * The camera container (M12-T02). Exposed so a test (or a diagnostic overlay) can
+   * read where the world is being drawn relative to the screen without reaching into
+   * a private field. The render root is always its LAST child; the static-geometry
+   * layer, when it exists, is always its child at index 0.
+   */
+  public get camera(): Container {
+    return this.cameraContainer;
+  }
+
   /** Live static-geometry block count (diagnostics / HUD). Zero when there are no walls. */
   public get wallViewCount(): number {
     return this.wallViews.size;
   }
 
-  /** Attach the render root (and its FX layer) to the stage. Call once, after `app.init`. */
+  /** Attach the camera (and, under it, the render root and its FX layer) to the
+   * stage. Call once, after `app.init`. */
   public init(): void {
-    this.app.stage.addChild(this.root);
+    // M12-T02: the camera becomes the stage's single child and the render root
+    // becomes the camera's child. Wrapping the root — rather than re-parenting its
+    // children under a new node — leaves the root's own child order, and therefore
+    // every frozen M5 index contract, exactly as it was.
+    this.app.stage.addChild(this.cameraContainer);
+    this.cameraContainer.addChild(this.root);
     // fxLayer is added FIRST and stays the last child of the root: entity views are
     // always inserted just below it (see `createMissingViews`), so FX render on top
     // while the frozen M5-T01 child-index contract (root.children[0] = first entity
@@ -316,8 +383,8 @@ export class GameRenderer {
   /**
    * Sync one frame of the logic world into the scene graph. Steps, in order:
    * draw the room's static geometry, create missing views, sync transforms
-   * (interpolated by `alpha` + hit flash), age existing damage floaters, spawn new
-   * ones, advance death FX, recycle destroyed views.
+   * (interpolated by `alpha` + hit flash), move the camera, age existing damage
+   * floaters, spawn new ones, advance death FX, recycle destroyed views.
    *
    * `alpha` is the interpolation factor in [0, 1]: 0 draws the previous tick, 1
    * draws the current tick. It is clamped here so a caller cannot extrapolate.
@@ -339,6 +406,10 @@ export class GameRenderer {
     this.syncStaticGeometry(world);
     this.createMissingViews(world);
     this.syncTransforms(world, clampedAlpha);
+    // M12-T02: the camera is moved AFTER the transforms are projected, so it tracks
+    // the INTERPOLATED player position (what the player actually sees) rather than
+    // the raw logic coordinate (which would be half a frame ahead).
+    this.syncCamera(world);
     // M8-T01: hazard warnings are animated from their own countdown, so they are
     // synced here rather than inside `syncTransforms` (which is about position).
     this.syncHazards(world);
@@ -350,7 +421,7 @@ export class GameRenderer {
     this.recycleDestroyed(world);
   }
 
-  /** Tear down every view, every floater and the render root. */
+  /** Tear down every view, every floater and the camera (with the render root). */
   public destroy(): void {
     for (const view of this.views.values()) {
       view.container.destroy({ children: true });
@@ -358,12 +429,14 @@ export class GameRenderer {
     this.views.clear();
     this.retired.clear();
     this.floatingTexts.length = 0;
-    // M12-T01: the static layer lives on the STAGE (not under `root`), so destroying
+    // M12-T01: the static layer lives on the CAMERA (not under `root`), so destroying
     // `root` does not reach it — it has to be torn down explicitly or its blocks
     // would outlive the renderer.
     this.teardownStaticLayer();
-    // Recursively destroys fxLayer and every floater still parented to it.
-    this.root.destroy({ children: true });
+    // M12-T02: the camera is now the thing attached to the stage, so IT is what has
+    // to be destroyed. `{ children: true }` reaches the render root, its entity
+    // views, and the FX layer (with any floater still parented to it) in one pass.
+    this.cameraContainer.destroy({ children: true });
   }
 
   /**
@@ -420,6 +493,13 @@ export class GameRenderer {
     // Safe at a run boundary: ids are never reused (`World.nextId` is never
     // reset), so every id in the set belongs to the run that just ended.
     this.retired.clear();
+
+    // M12-T02: the camera belongs to the run being thrown away. Zeroing it here —
+    // rather than letting the next sync ease towards the new player from wherever the
+    // old one left the camera — keeps `reset()` a complete "forget the previous run"
+    // operation, and avoids a visible pan across the new room on the first frame.
+    this.cameraContainer.x = 0;
+    this.cameraContainer.y = 0;
 
     // M12-T01: the room's geometry belongs to the run being thrown away. Dropping
     // the blocks here (rather than waiting for the next sync to notice the walls are
@@ -491,11 +571,13 @@ export class GameRenderer {
     const layer = new Container();
     const floor = new Graphics();
     layer.addChild(floor);
-    // Index 0 on the stage: below the render root (which is appended by `init`),
-    // so the floor and walls can never cover an entity or an FX. `addChildAt` on an
-    // empty stage is a plain append, so this is also correct if a caller syncs
-    // before `init()`.
-    this.app.stage.addChildAt(layer, 0);
+    // Index 0 on the CAMERA: below the render root (which is appended by `init`), so
+    // the floor and walls can never cover an entity or an FX. `addChildAt` on an
+    // empty camera is a plain append, so this is also correct if a caller syncs
+    // before `init()`. M12-T02 moved the layer from the stage to the camera so the
+    // room's geometry travels with the world instead of staying pinned to the
+    // canvas origin.
+    this.cameraContainer.addChildAt(layer, 0);
     this.staticLayer = layer;
     this.floorGraphic = floor;
     return layer;
@@ -623,6 +705,66 @@ export class GameRenderer {
         view.deathElapsedMs = 0;
       }
     }
+  }
+
+  /**
+   * Step ②b (M12-T02) — move the camera so the player sits at the centre of the
+   * screen (spec 20 §4.3 / AC-03).
+   *
+   * The target is "the screen centre minus the player's RENDER position", and the
+   * camera eases towards it with a first-order lerp (`CAMERA_LERP_FACTOR`) rather
+   * than snapping. Both halves are deliberate:
+   *
+   *  - Reading the VIEW's `container.x/y` (not `TransformComponent`) means the camera
+   *    tracks the INTERPOLATED position — the one the player actually sees — so the
+   *    camera and the player view never disagree by half a frame (ADR-002).
+   *  - Lerping rather than snapping gives the world a sense of weight; a hard lock
+   *    would make the whole scene jitter with every one-pixel change in the player's
+   *    position. The trade-off (a constant lag while the player moves fast) is
+   *    registered in spec 20 T3.
+   *
+   * A dying player view is skipped (`!isDying`): once the death FX owns the view, its
+   * position is no longer the player's, so following it would drag the camera across
+   * the map as the corpse shrinks. With no live player view at all — a rig with no
+   * player, or one mid-respawn — the camera is left exactly where it is and nothing
+   * throws (spec 20 §4.3).
+   */
+  private syncCamera(_world: World): void {
+    for (const view of this.views.values()) {
+      if (view.kind !== 'player') continue;
+      if (view.isDying) continue;
+
+      const targetX = this.screenWidth() / 2 - view.container.x;
+      const targetY = this.screenHeight() / 2 - view.container.y;
+      this.cameraContainer.x += (targetX - this.cameraContainer.x) * CAMERA_LERP_FACTOR;
+      this.cameraContainer.y += (targetY - this.cameraContainer.y) * CAMERA_LERP_FACTOR;
+      return;
+    }
+  }
+
+  /**
+   * The app's screen width in pixels, or `0` when it cannot be read.
+   *
+   * WHY THIS IS A GUARDED READ RATHER THAN `app.screen.width`: the render test rigs
+   * use a DUCK-TYPED `Application` (`{ stage, ticker }`) — PixiJS v8 cannot be driven
+   * from plain Node — so `app.screen` is `undefined` at runtime even though the type
+   * says it is always present. Reading `app.renderer.*` (the other place a size might
+   * live) would throw in those rigs, which is the one thing this must not do.
+   * Returning `0` is the honest degradation: the camera then centres the player on
+   * the screen ORIGIN (target = `-playerPx`), which is still a deterministic,
+   * assertable value (spec 20 I12 / T4).
+   */
+  private screenWidth(): number {
+    const screen: Rectangle | undefined = this.app.screen;
+    if (screen === undefined) return 0;
+    return Number.isFinite(screen.width) ? screen.width : 0;
+  }
+
+  /** The app's screen height in pixels, or `0`. See {@link screenWidth}. */
+  private screenHeight(): number {
+    const screen: Rectangle | undefined = this.app.screen;
+    if (screen === undefined) return 0;
+    return Number.isFinite(screen.height) ? screen.height : 0;
   }
 
   /**
