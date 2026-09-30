@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-hades · roguelike run (M9-T01)</title>
+    <title>my-hades · roguelike run (M13-T01)</title>
     <style>
       html,
       body {
@@ -155,6 +155,92 @@
         letter-spacing: 0.22em;
         text-shadow: 0 0 18px rgba(255, 210, 77, 0.45);
       }
+
+      /* M13-T01 · camp / talent screen. Same root element as the three overlays
+         above (only one is ever on screen), restyled as a MENU rather than a
+         verdict: a cool violet wash (the darkness colour), a normal-weight
+         heading, and a scrollable list of talents. */
+      #ui-layer.is-hub {
+        background: rgba(14, 10, 26, 0.92);
+      }
+
+      #ui-layer.is-hub h2 {
+        font-size: 26px;
+        font-weight: 600;
+        color: #d8c8ff;
+        letter-spacing: 0.16em;
+      }
+
+      #ui-layer .hub-currency {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        color: #b07dff;
+      }
+
+      #ui-layer .hub-talents {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 50vh;
+        overflow-y: auto;
+        padding: 4px;
+      }
+
+      /* A talent row: unaffordable and already-owned are both disabled, but they
+         read differently — one is a goal, the other is a trophy. */
+      .talent-button {
+        min-width: 320px;
+        padding: 10px 18px;
+        border: 1px solid #b07dff;
+        border-radius: 8px;
+        background: rgba(176, 125, 255, 0.16);
+        color: #e6e6e6;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+
+      .talent-button:hover:not(:disabled) {
+        background: rgba(176, 125, 255, 0.34);
+        transform: translateY(-1px);
+      }
+
+      .talent-button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+
+      .talent-button.is-owned {
+        border-color: #4dff88;
+        background: rgba(77, 255, 136, 0.12);
+        opacity: 0.75;
+      }
+
+      /* The camp's ONE exit. Warmer and larger than a talent row, so "spend" and
+         "go" are never mistaken for each other. */
+      .start-button {
+        margin-top: 10px;
+        min-width: 220px;
+        padding: 12px 22px;
+        border: 1px solid #ffd24d;
+        border-radius: 8px;
+        background: rgba(255, 210, 77, 0.16);
+        color: #ffd24d;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+
+      .start-button:hover {
+        background: rgba(255, 210, 77, 0.32);
+        transform: translateY(-1px);
+      }
     </style>
   </head>
   <body>
@@ -163,7 +249,7 @@
     <div id="hud"></div>
     <div id="gold"></div>
     <div id="keys">
-      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 重开（终局后）
+      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 回营地（终局后）
     </div>
     <script type="module" src="/client/main.ts"></script>
   </body>

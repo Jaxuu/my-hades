@@ -11,7 +11,11 @@
  *   GameSimulator                       ->  UIManager    (read-only)  ->  #gold
  *   KeyboardInput  ->  per-tick injection  ->  GameSimulator.step(1)
  *   UIManager click ->  selectReward injection  ->  GameSimulator.step(1)
- *   UIManager  R key ->  onRestart callback     ->  GameSimulator.restartRun()
+ *   UIManager  R key ->  onEnterHub callback    ->  GameSimulator.enterHub()
+ *   UIManager talent ->  onPurchase callback    ->  GameSimulator.purchaseMetaUpgrade()
+ *   UIManager  start ->  onStartRun callback    ->  GameSimulator.restartRun()
+ *   localStorage     ->  SaveStore  ->  initialSaveState  ->  GameSimulator
+ *   GameSimulator.saveState  ->  SaveStore  ->  localStorage   (on every mutation)
  *
  * M6-T01 replaced the hand-placed enemies with a REAL `EncounterFactory` room, so
  * the roguelike loop is observable end to end: clear both waves -> the room rolls
@@ -52,15 +56,31 @@
  *   - `GameRenderer` draws the floor and the walls as flat colour blocks, so the
  *     room's SHAPE is visible in the browser (spec 19 AC-08).
  *
+ * M13-T01 closes the loop between runs:
+ *   - the SAVE is read once, from `localStorage` via `client/SaveStore.ts`, and
+ *     INJECTED into the simulator (`initialSaveState`) — `src/` never learns what a
+ *     storage medium is (spec 21 AC-01);
+ *   - `buildRun` receives it and spawns the player with `PlayerFactory.spawnWithMeta`,
+ *     so a purchased talent is a stronger body from the first tick of the next run
+ *     (AC-04);
+ *   - a terminal overlay's `R` now SETTLES the run (`sim.enterHub`) instead of
+ *     restarting it: darkness is banked, the camp screen appears, and the only way
+ *     onward is its start button (AC-02 / AC-03);
+ *   - every write to the save is followed by a `persistSaveState`, so progression
+ *     survives a page reload — and every write is a run-boundary event, never a
+ *     per-tick one.
+ *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
- * seed is chosen, which is what keeps the wall clock and any entropy out of `src/`
- * (ADR-004 §Decision 3).
+ * seed is chosen and the only place the save is stored, which is what keeps the
+ * wall clock, any entropy, and every storage medium out of `src/` (ADR-004 §3,
+ * spec 21 I1).
  */
 
 import { Application } from 'pixi.js';
 
 import { GameSimulator } from '../src/core/GameSimulator';
+import type { SaveState } from '../src/core/SaveState';
 import type { World } from '../src/ecs/World';
 import type { EntityId } from '../src/ecs/Entity';
 import { createDefaultSystems } from '../src/ecs/systems/pipeline';
@@ -68,6 +88,7 @@ import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
 import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
+import { readDarkness } from '../src/ecs/components/InventoryComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import {
   EncounterStateComponent,
@@ -82,6 +103,7 @@ import { GameLoop } from './GameLoop';
 import { KeyboardInput } from './KeyboardInput';
 import { UIManager } from './UIManager';
 import { bootstrapClientData, installDataHotReload } from './bundled';
+import { loadSaveState, persistSaveState } from './SaveStore';
 
 /**
  * The run's seed. Fixed here so a reload reproduces the same drafts; `restartRun`
@@ -90,7 +112,22 @@ import { bootstrapClientData, installDataHotReload } from './bundled';
  */
 const SEED = 0x12345678;
 
-const PLAYER_MAX_HP = 100;
+/**
+ * `window.localStorage`, or `null` when the browser refuses it (private mode, a
+ * blocked-cookies frame).
+ *
+ * The access itself can throw, which is why it is wrapped HERE rather than inside
+ * `SaveStore`: the store's contract is "given a medium, read/write it best-effort",
+ * and "is there a medium at all" is the composition root's question (spec 21 §4.1).
+ */
+function resolveStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    // No persistence this session; the save still works in memory.
+    return null;
+  }
+}
 
 function mountCanvas(app: Application): void {
   const mount = document.getElementById('app');
@@ -154,19 +191,27 @@ void main();
  * This function is also the reason a data hot reload works end to end: `restartRun`
  * calls it again, so a JSON edit re-reads the (already re-installed) config table and
  * rebuilds the run from the new numbers.
+ *
+ * M13-T01 gives it the SAVE, and that second parameter is what makes a purchase
+ * felt: `PlayerFactory.spawnWithMeta` resolves the unlocked ids into additive deltas
+ * and folds them into the assembly (spec 21 AC-04). A caller with no meta
+ * progression passes a `SaveState.empty()` and gets exactly the pre-M13 player, so
+ * the two cases share one code path rather than branching on "is meta enabled".
  */
-function buildRun(world: World): void {
+function buildRun(world: World, saveState: SaveState): void {
   // The player is spawned BEFORE the room so the loader has something to place.
   // Its initial pose is immediately overwritten by `LevelLoader.enterRoom` — the
   // room's `2` tile is the authority on where a run begins (M12-T01 AC-03), and
   // passing a placeholder here is what keeps "the first run and every restart go
   // through the same code" true.
-  const player = PlayerFactory.spawn(world, {
+  //
+  // No explicit `hp` / `maxHp`: the defaults are the baseline, and the meta bonuses
+  // raise them. Passing the numbers here would override the very thing AC-04 is
+  // about — and would leave the player at a partial bar on a run with `thick_skin`.
+  const player = PlayerFactory.spawnWithMeta(world, saveState, {
     x: 0,
     y: 0,
     facingRadians: 0,
-    hp: PLAYER_MAX_HP,
-    maxHp: PLAYER_MAX_HP,
   });
 
   // The run's rooms, read by depth from `assets/data/encounters.json`.
@@ -199,14 +244,21 @@ function findPlayerId(world: World): EntityId | undefined {
 function start(app: Application): void {
   mountCanvas(app);
 
+  // M13-T01: the save is read ONCE, before the simulator exists, and INJECTED.
+  // `src/` never learns whether a storage medium exists at all (spec 21 AC-01 / I1);
+  // `SaveStore` owns the medium and `resolveStorage` owns "is there one".
+  const storage = resolveStorage();
+  const saveState = loadSaveState(storage);
+
   const sim = new GameSimulator({
     systems: createDefaultSystems(),
     seed: SEED,
     runSetup: buildRun,
+    initialSaveState: saveState,
   });
 
   // The FIRST run goes through the same builder every restart will use.
-  buildRun(sim.world);
+  buildRun(sim.world, sim.saveState);
 
   const renderer = new GameRenderer(app);
   renderer.init();
@@ -220,8 +272,8 @@ function start(app: Application): void {
       ? null
       : new UIManager({
           root: uiRoot,
-          // The gold read-out (M9-T01). `null` when the markup is absent, which the
-          // UIManager treats as "no HUD" rather than an error.
+          // The gold / darkness read-out (M9-T01 / M13-T01). `null` when the markup
+          // is absent, which the UIManager treats as "no HUD" rather than an error.
           hud: document.getElementById('gold'),
           onSelect: (rewardId: string) => {
             // A click is an EXTERNAL, tick-aligned command. `sim.tick` is stable
@@ -230,14 +282,35 @@ function start(app: Application): void {
             // past tick (spec 11 AC-03).
             sim.inject({ kind: 'selectReward', tick: sim.tick, rewardId });
           },
-          onRestart: () => {
-            // `R` is also an external command, but unlike a click it is not
-            // tick-aligned: a restart is a RUN-BOUNDARY operation, not a
-            // simulation input, so it does not ride the input queue. It rewinds
-            // the clock and rebuilds the world immediately (spec 14 §4.5). The same
-            // callback serves BOTH terminal overlays, because a won run and a lost
-            // one are restarted by exactly the same operation.
+          onEnterHub: () => {
+            // `R` on a terminal overlay is an external command, but unlike a click
+            // it is not tick-aligned: it is a RUN-BOUNDARY operation, not a
+            // simulation input, so it does not ride the input queue (spec 14 §4.5).
+            //
+            // M13-T01 changes what the boundary IS: it settles the run (banking its
+            // darkness) and opens the camp, rather than immediately starting the
+            // next run (spec 21 AC-02 / AC-03). The same callback serves BOTH
+            // terminal overlays, because a won run and a lost one are settled by
+            // exactly the same operation.
+            sim.enterHub();
+            persistSaveState(storage, sim.saveState);
+          },
+          onPurchase: (upgradeId: string) => {
+            // A purchase is a META-boundary command, exactly like the settlement
+            // above — never a `step()` input. The simulator re-validates it, so a
+            // forged id or an unaffordable price is simply refused (spec 21 §4.6).
+            if (sim.purchaseMetaUpgrade(upgradeId)) {
+              persistSaveState(storage, sim.saveState);
+            }
+          },
+          onStartRun: () => {
+            // The camp's ONE exit. `restartRun` rebuilds the world and hands the
+            // save to `buildRun`, which is where a purchase becomes a stronger
+            // player (spec 21 AC-04). Nothing changed, so nothing is persisted —
+            // but the call keeps the invariant "every save mutation is followed by
+            // a write" obvious rather than conditional.
             sim.restartRun();
+            persistSaveState(storage, sim.saveState);
           },
         });
 
@@ -249,7 +322,10 @@ function start(app: Application): void {
   if (ui !== null) {
     const manager = ui;
     app.ticker.add(() => {
-      manager.sync(sim.world);
+      // The camp needs the save (M13-T01); every other surface ignores it. The
+      // simulator's instance is passed by reference, so the menu is always looking
+      // at live data rather than a copy taken at boot.
+      manager.sync(sim.world, sim.saveState);
     });
   }
   installHud(app, sim, renderer);
@@ -312,7 +388,10 @@ function installHud(app: Application, sim: GameSimulator, renderer: GameRenderer
       `entities ${sim.world.entityCount} · views ${renderer.viewCount}\n` +
       roomLine +
       '\n' +
-      rewardLine;
+      rewardLine +
+      // M13-T01: run tally first, then the SAVED total — two different numbers that
+      // are easy to confuse, so both are shown with their own label.
+      `\ndarkness run ${readDarkness(sim.world)} · saved ${sim.saveState.darkness}`;
   });
 }
 

@@ -4,6 +4,18 @@
  *
  * Rendering-agnostic: this module never touches DOM/Canvas/WebGL. Time is
  * advanced ONLY via `step()`; the wall clock is never read.
+ *
+ * M13-T01 widens the class by exactly two META-BOUNDARY operations — `enterHub`
+ * and `purchaseMetaUpgrade` — plus the `saveState` it owns. They are here for the
+ * same reason `restartRun` is: a run boundary is not a simulation input, it is a
+ * command the CALLER issues against the simulator (the hub's talent screen is a
+ * DOM menu, not a tick-aligned event). The cost is that `src/core` now names two
+ * game concepts it did not before; the alternative — a save the caller owns and
+ * mutates behind the simulator's back — would make "who banks the darkness, and
+ * when" a question with several answers.
+ *
+ * The save itself stays OUTSIDE the simulation: it is injected, never read from
+ * any storage medium here, and never appears in `snapshot()` (spec 21 §3.1).
  */
 
 import { FixedClock } from './clock';
@@ -11,9 +23,12 @@ import type { InputEvent } from './input';
 import { InputQueue } from './input';
 import { Scheduler } from './scheduler';
 import { cloneValue, deepFreeze } from './snapshot-utils';
+import { bankRunDarkness, tryPurchaseMetaUpgrade } from './MetaProgression';
+import { SaveState } from './SaveState';
 import type { System, SystemContext } from '../ecs/System';
 import { World } from '../ecs/World';
 import type { EntityId } from '../ecs/Entity';
+import { markRunHub, findGameState } from '../ecs/components/GameStateComponent';
 
 export interface GameSimulatorOptions {
   /** Logical ticks per second. Defaults to 60. */
@@ -54,8 +69,35 @@ export interface GameSimulatorOptions {
    * room 0, and because `restartRun` calls `runSetup` on EVERY restart, a restarted
    * run necessarily gets room 0's walls and an exactly-placed player
    * (spec 19 §4.3, pinned by `tests/world/tilemap_and_topology.test.ts` G2).
+   *
+   * M13-T01 — THE SECOND PARAMETER, and why the SAVE travels through it rather
+   * than being read from the world. A run must be assembled differently depending
+   * on the meta upgrades the player owns (AC-04: `thick_skin` means the player is
+   * built with +50 max HP), and the save is precisely NOT world state — it outlives
+   * every restart and is invisible to `snapshot()`. Handing it to the assembler is
+   * the constructor-injection seam of AC-01 taken one step further: the simulator
+   * still does not know what a player is, it only knows that the caller's assembler
+   * may want to see the save it is rebuilding the run for.
+   *
+   * The parameter is ADDITIVE — a one-argument `runSetup` keeps type-checking and
+   * behaving exactly as before — so every pre-M13 caller is untouched.
    */
-  readonly runSetup?: (world: World) => void;
+  readonly runSetup?: (world: World, saveState: SaveState) => void;
+  /**
+   * The out-of-run progression record to run against (M13-T01, AC-01).
+   *
+   * INJECTED, never loaded here: `src/` must stay ignorant of the storage medium,
+   * so the caller (in practice `client/main.ts`, via `client/SaveStore.ts`) reads
+   * whatever it wants — `localStorage`, a file, nothing at all — and hands the
+   * simulator an already-constructed `SaveState`. Omit it and the simulator starts
+   * with a fresh, empty save (`SaveState.empty()`), which is what every pre-M13
+   * test and every caller that does not care about meta progression gets.
+   *
+   * The instance is held by reference for the simulator's whole life: it is NOT
+   * rebuilt by `restartRun`, and it is NOT part of `snapshot()`. That is the whole
+   * of AC-01's "独立于 World 存在，且重启不被清空".
+   */
+  readonly initialSaveState?: SaveState;
 }
 
 export interface ComponentSnapshot {
@@ -77,10 +119,20 @@ export interface Snapshot {
 export class GameSimulator {
   public readonly world: World;
 
+  /**
+   * The out-of-run progression record (M13-T01).
+   *
+   * A REFERENCE to the instance the caller injected, so a caller that kept its own
+   * handle sees every change (`enterHub` banking, a purchase) without asking the
+   * simulator for it again. Never replaced, never rebuilt by `restartRun`, never
+   * part of `snapshot()`.
+   */
+  public readonly saveState: SaveState;
+
   private readonly clock: FixedClock;
   private readonly input: InputQueue;
   private readonly scheduler: Scheduler;
-  private readonly runSetup: ((world: World) => void) | undefined;
+  private readonly runSetup: ((world: World, saveState: SaveState) => void) | undefined;
 
   constructor(options: GameSimulatorOptions = {}) {
     this.clock = new FixedClock(options.fps !== undefined ? { fps: options.fps } : {});
@@ -91,6 +143,11 @@ export class GameSimulator {
     this.world = options.seed !== undefined ? new World({ seed: options.seed }) : new World();
     this.input = new InputQueue();
     this.scheduler = new Scheduler();
+    // An omitted save is a FRESH one, not `undefined`: every read path below
+    // (`saveState.darkness`, `enterHub`'s banking) then has a total answer, and no
+    // caller has to guard. The default is a plain `SaveState`, so a caller that
+    // never persists anything behaves exactly like one that does.
+    this.saveState = options.initialSaveState ?? SaveState.empty();
     this.runSetup = options.runSetup;
     for (const system of options.systems ?? []) {
       this.scheduler.register(system);
@@ -219,12 +276,15 @@ export class GameSimulator {
    *    contents (the death bus deliberately keeps the tick's deaths, spec 08
    *    §3.3, and those events reference entities step 1 just destroyed).
    *  5. `clock.reset()` — back to tick `0`.
-   *  6. `runSetup(world)` — rebuild the run's entities. For a run with a room
-   *    topology this is also where room 0's TILEMAP is loaded: `runSetup` calls
+   *  6. `runSetup(world, saveState)` — rebuild the run's entities. For a run with a
+   *    room topology this is also where room 0's TILEMAP is loaded: `runSetup` calls
    *    `LevelLoader.enterRoom`, so every restart rebuilds the opening room's walls
    *    and pins the player to its spawn tile (spec 19 §4.3). Note `clearEntities`
    *    in step 1 has already removed the previous run's geometry, so "build the
-   *    new room" needs no teardown of its own.
+   *    new room" needs no teardown of its own. M13-T01: the save is handed in too,
+   *    so a run assembled after a purchase is built with the purchased bonuses
+   *    (AC-04) — and because `saveState` is NOT touched by steps 1–5, meta
+   *    progression survives the restart by construction.
    *
    * Steps 1–2 happen BEFORE 6 so that `runSetup` sees an empty world with the new
    * generator, i.e. the same conditions a fresh construction has. Anything
@@ -238,7 +298,61 @@ export class GameSimulator {
     this.input.clear();
     this.scheduler.reset();
     this.clock.reset();
-    this.runSetup?.(this.world);
+    this.runSetup?.(this.world, this.saveState);
+  }
+
+  /**
+   * Settle the finished run and move to the HUB (M13-T01, spec 21 AC-03).
+   *
+   * The run boundary between "a run has ended" and "the next run has not started".
+   * It does exactly two things, in this order:
+   *
+   *  1. **BANK the run's darkness** into `saveState.darkness` and zero the player's
+   *     tally (`bankRunDarkness`). This is AC-02's 结算 point: a run's earnings
+   *     become permanent here and nowhere else, so a run that is abandoned without
+   *     a settlement cannot half-bank itself, and a hub entered twice cannot pay
+   *     the same run out twice.
+   *  2. **Flip the run's status to `HUB`** (`markRunHub`). Like every other
+   *     run-state write, this is a strict no-op for a world that never assembled a
+   *     game-state singleton.
+   *
+   * It deliberately does NOT rebuild the world — that is `restartRun`, and keeping
+   * the two apart is what lets the hub screen show the run that just ended while
+   * the player spends. It also deliberately does NOT pause anything: a `HUB` run is
+   * inert because `isRunOver` reports it as over, not because a system is gated on
+   * a new flag (spec 21 I4).
+   *
+   * A world with NO game-state singleton is a strict no-op — checked BEFORE the
+   * banking, not after, so that "the hub transition happened" and "the save was
+   * paid out" can never be two answers that disagree (the same opt-in reading
+   * spec 14 AC-11 records for a world that never assembled a run).
+   *
+   * Idempotent: a second call banks `0` and re-writes the same status.
+   */
+  public enterHub(): void {
+    if (findGameState(this.world) === undefined) return;
+    bankRunDarkness(this.world, this.saveState);
+    markRunHub(this.world);
+  }
+
+  /**
+   * Spend darkness to unlock a meta upgrade (M13-T01, spec 21 AC-03).
+   *
+   * @returns `true` only when the purchase happened; `false` for an unknown id, an
+   *   already-unlocked upgrade, or one the save cannot afford — never a throw,
+   *   because the production caller is a DOM button.
+   *
+   * Deliberately NOT gated on the run being in `HUB`: the hub is the only screen
+   * that offers a purchase, so the gate already exists where it belongs (the UI),
+   * and teaching `src/core` to inspect the run status would be a second, redundant
+   * copy of it. What the player does with their currency outside the hub is not
+   * this method's business.
+   *
+   * The effect of an unlock is felt at the NEXT `restartRun`, when `runSetup` sees
+   * the new `unlockedUpgrades` and assembles a stronger player (AC-04).
+   */
+  public purchaseMetaUpgrade(upgradeId: string): boolean {
+    return tryPurchaseMetaUpgrade(this.saveState, upgradeId);
   }
 
   /**

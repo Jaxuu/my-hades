@@ -58,14 +58,23 @@ export type { EnemyPlacement, EnemySpawnOptions, EnemySpawnSpec } from './spawn-
 /**
  * Map one JSON loot entry onto the assembly vocabulary.
  *
- * The ONLY place the data layer's lowercase `'gold' | 'heal'` meets the
- * `PickupKind` enum. Doing it here — at the single assembly seam — means the
+ * The ONLY place the data layer's lowercase `'gold' | 'heal' | 'darkness'` meets
+ * the `PickupKind` enum. Doing it here — at the single assembly seam — means the
  * engine keeps using the enum everywhere else and the JSON keeps using plain
  * strings, with exactly one translation rather than one per consumer.
+ *
+ * M13-T01 adds the `'darkness'` arm; the fallback stays `GOLD` so the mapping
+ * remains total for any value the schema has already accepted.
  */
+function toPickupKind(kind: LootDropConfig['kind']): PickupKind {
+  if (kind === 'heal') return PickupKind.HEAL;
+  if (kind === 'darkness') return PickupKind.DARKNESS;
+  return PickupKind.GOLD;
+}
+
 function toLootOptions(drop: LootDropConfig): LootDropOptions {
   return {
-    kind: drop.kind === 'heal' ? PickupKind.HEAL : PickupKind.GOLD,
+    kind: toPickupKind(drop.kind),
     ...(drop.amount === undefined ? {} : { amount: drop.amount }),
     ...(drop.radius === undefined ? {} : { radius: drop.radius }),
     ...(drop.lifespanTicks === undefined ? {} : { lifespanTicks: drop.lifespanTicks }),

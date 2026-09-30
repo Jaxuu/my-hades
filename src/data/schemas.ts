@@ -108,7 +108,7 @@ export interface HazardConfig {
  * that maps the string onto the enum, so the two spellings meet exactly once.
  */
 export interface LootDropConfig {
-  readonly kind: 'gold' | 'heal';
+  readonly kind: 'gold' | 'heal' | 'darkness';
   /** Magnitude of the grant; omitted means "the kind's default" (`5` / `20`). */
   readonly amount?: number;
   /** Pickup radius; omitted means `DEFAULT_PICKUP_RADIUS`. */
@@ -261,6 +261,60 @@ export interface EncounterWaveTemplate {
   readonly enemies: readonly string[];
 }
 
+/**
+ * One META upgrade (M13-T01, spec 21 §3.2).
+ *
+ * A permanent, out-of-run bonus bought in the hub with `darkness`. Deliberately
+ * the smallest possible description — "spend `cost`, get `value` of `type`" —
+ * because the two halves have different owners and neither should have to know
+ * the other:
+ *
+ *  - the DATA layer states the price and the magnitude (`cost` / `type` /
+ *    `value`), exactly like every other balance number in this file;
+ *  - the ASSEMBLY layer (`resolveMetaBonuses`) is the ONE place that knows what a
+ *    `type` DOES to a body, so adding a fourth kind of bonus is an enum value
+ *    plus one line there — never a change to this schema.
+ *
+ * `type` is an UPPER_SNAKE string rather than a TypeScript enum, for the same
+ * reason `LootDropConfig.kind` is a lowercase string: a JSON file cannot name an
+ * enum, and a second spelling of the same thing is a silent drift hazard.
+ */
+export interface MetaUpgradeConfig {
+  /** Table key this config was loaded under. */
+  readonly id: string;
+  /** Price in `darkness`. A positive integer — a fractional price is a config smell. */
+  readonly cost: number;
+  /** What the upgrade raises. See {@link META_UPGRADE_TYPES}. */
+  readonly type: MetaUpgradeType;
+  /** Magnitude of the raise, in the `type`'s own unit. Must be positive finite. */
+  readonly value: number;
+  /** Optional display name for the hub UI; omitted means "show the id". */
+  readonly label?: string;
+}
+
+/**
+ * The kinds of permanent bonus a meta upgrade may grant (M13-T01).
+ *
+ * Every one of them is ADDITIVE on top of whatever the assembly already decided,
+ * and every one of them lands on a component the player already owns — which is
+ * the whole reason the list is short. A bonus that needed a new component (say,
+ * "an extra dash charge") would need a new mechanic first, not a new enum value
+ * here; that is deliberately out of scope (spec 21 §1.3).
+ *
+ *  - `MAX_HP` — raises `HealthComponent.maxHp` (and the starting `hp`).
+ *  - `MOVE_SPEED` — raises `VelocityComponent.maxSpeed`.
+ *  - `DASH_COOLDOWN_REDUCTION` — SHORTENS `DashStatsComponent.cooldownTicks` by
+ *    `value` ticks, floored at `1` so a dash never becomes free.
+ */
+export const META_UPGRADE_TYPES: readonly string[] = [
+  'MAX_HP',
+  'MOVE_SPEED',
+  'DASH_COOLDOWN_REDUCTION',
+];
+
+/** The three kinds of permanent bonus a meta upgrade may grant. */
+export type MetaUpgradeType = 'MAX_HP' | 'MOVE_SPEED' | 'DASH_COOLDOWN_REDUCTION';
+
 /* ========================================================================== *
  * Room topology / tilemap (M12-T01, spec 19 §3)                              *
  * ========================================================================== */
@@ -389,10 +443,10 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-/** @throws SchemaError unless the field is exactly `"gold"` or `"heal"`. */
-function requireLootKind(value: unknown, label: string): 'gold' | 'heal' {
-  if (value === 'gold' || value === 'heal') return value;
-  fail(`${label}.kind`, 'either "gold" or "heal"', value);
+/** @throws SchemaError unless the field is exactly `"gold"`, `"heal"` or `"darkness"`. */
+function requireLootKind(value: unknown, label: string): 'gold' | 'heal' | 'darkness' {
+  if (value === 'gold' || value === 'heal' || value === 'darkness') return value;
+  fail(`${label}.kind`, 'one of "gold", "heal" or "darkness"', value);
 }
 
 /** @throws SchemaError if the field is not a positive finite number. */
@@ -1026,6 +1080,80 @@ export function isModifierConfig(data: unknown): boolean {
 export function isProjectileConfig(data: unknown): boolean {
   try {
     parseProjectileConfig('__probe__', data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @throws SchemaError unless the field is one of {@link META_UPGRADE_TYPES}.
+ *
+ * Written as three explicit comparisons rather than an `includes` over the
+ * exported list so TypeScript narrows the result — no cast, and the day a fourth
+ * type is added the compiler points at this line instead of silently widening.
+ */
+function requireMetaUpgradeType(value: unknown, label: string): MetaUpgradeType {
+  if (value === 'MAX_HP' || value === 'MOVE_SPEED' || value === 'DASH_COOLDOWN_REDUCTION') {
+    return value;
+  }
+  fail(label, `one of ${META_UPGRADE_TYPES.join(' / ')}`, value);
+}
+
+/**
+ * Parse (and validate) one meta upgrade (M13-T01, spec 21 §3.2).
+ *
+ * @param id Table key, echoed into the error label and stamped onto the result.
+ * @throws SchemaError for a non-object entry, a non-positive-integer `cost`, an
+ *   unknown `type`, a non-positive `value`, or an empty-string `label`.
+ */
+export function parseMetaUpgradeConfig(id: string, data: unknown): MetaUpgradeConfig {
+  const label = `meta_upgrades.${id}`;
+  const source = asRecord(data, label);
+  const cost = requirePositiveInteger(source, 'cost', label);
+  const type = requireMetaUpgradeType(source.type, `${label}.type`);
+  const value = requirePositiveFinite(source, 'value', label);
+  const displayName = optionalNonEmptyString(source, 'label', label);
+  return {
+    id,
+    cost,
+    type,
+    value,
+    ...(displayName === undefined ? {} : { label: displayName }),
+  };
+}
+
+/**
+ * Parse (and validate) the whole meta-upgrade table (M13-T01).
+ *
+ * An id-keyed object, exactly like `enemies` / `modifiers` / `rooms`: an upgrade
+ * has no natural order (the hub UI sorts by id for a stable listing). An EMPTY
+ * table is legal here for the same reason `enemies: {}` is — it is a registry,
+ * not a declared sequence — and it is the honest shape for a bundle that ships no
+ * meta progression at all (spec 21 I9).
+ *
+ * @throws SchemaError under the conditions listed on
+ *   {@link parseMetaUpgradeConfig}, or when the table is not an id-keyed object.
+ */
+export function parseMetaUpgradeTable(
+  data: unknown,
+  label: string,
+): ReadonlyMap<string, MetaUpgradeConfig> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new SchemaError(`${label} must be an object keyed by meta upgrade id.`);
+  }
+  const source = data as Record<string, unknown>;
+  const parsed = new Map<string, MetaUpgradeConfig>();
+  for (const id of Object.keys(source).sort(compareCodeUnits)) {
+    parsed.set(id, parseMetaUpgradeConfig(id, source[id]));
+  }
+  return parsed;
+}
+
+/** The non-throwing twin of {@link parseMetaUpgradeConfig} (M13-T01). */
+export function isMetaUpgradeConfig(data: unknown): boolean {
+  try {
+    parseMetaUpgradeConfig('__probe__', data);
     return true;
   } catch {
     return false;

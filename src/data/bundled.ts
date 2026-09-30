@@ -34,6 +34,7 @@ import encountersJson from '../../assets/data/encounters.json';
 import projectilesJson from '../../assets/data/projectiles.json';
 import hazardsJson from '../../assets/data/hazards.json';
 import roomsJson from '../../assets/data/rooms.json';
+import metaUpgradesJson from '../../assets/data/meta_upgrades.json';
 import { DataManager } from './DataManager';
 import type { RawConfigTables } from './DataManager';
 
@@ -59,6 +60,11 @@ import type { RawConfigTables } from './DataManager';
  * through the same seam so the grid shape, the tile domain and the "at least one
  * player spawn" rule are validated — and so the cross-table "every `roomId` names a
  * real room" rule runs — during Bootstrap, before a single tick has been simulated.
+ *
+ * M13-T01 adds `metaUpgrades` (`assets/data/meta_upgrades.json`, the out-of-run
+ * talent table). It travels through the same seam so a malformed price or an
+ * unknown bonus `type` aborts the boot rather than surfacing as a purchase that
+ * silently does nothing.
  */
 export function bundledConfigTables(): RawConfigTables {
   return {
@@ -68,6 +74,7 @@ export function bundledConfigTables(): RawConfigTables {
     projectiles: projectilesJson,
     hazards: hazardsJson,
     rooms: roomsJson,
+    metaUpgrades: metaUpgradesJson,
   };
 }
 

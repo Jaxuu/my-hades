@@ -1,0 +1,20 @@
+{
+  "thick_skin": {
+    "cost": 30,
+    "type": "MAX_HP",
+    "value": 50,
+    "label": "厚皮 · 生命上限 +50"
+  },
+  "swift_boots": {
+    "cost": 40,
+    "type": "MOVE_SPEED",
+    "value": 1,
+    "label": "疾行靴 · 移速 +1"
+  },
+  "adrenal_gland": {
+    "cost": 60,
+    "type": "DASH_COOLDOWN_REDUCTION",
+    "value": 10,
+    "label": "肾上腺 · 冲刺冷却 -10 tick"
+  }
+}

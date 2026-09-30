@@ -141,6 +141,13 @@ export class PickupSystem implements System {
    * `HealthComponent` is a silent no-op for the heal branch, exactly like every
    * other opt-in component read.
    *
+   * `DARKNESS` (M13-T01) pays into the wallet's SECOND ledger — the run's
+   * out-of-run tally — and deliberately stops there: banking it into the save is a
+   * run-boundary event (`GameSimulator.enterHub`), not a per-pickup write, so a run
+   * that is abandoned cannot half-bank itself (spec 21 AC-02 / I3). Like `GOLD`, it
+   * needs only the wallet, so a collector without one is skipped by the target
+   * query rather than handled here.
+   *
    * Deliberately writes NOTHING else: no freeze, no action state, no knockback, no
    * event. Picking up loot is not a hit, and the milestone requires that it cannot
    * be mistaken for one.
@@ -153,6 +160,11 @@ export class PickupSystem implements System {
   ): void {
     if (pickup.kind === PickupKind.GOLD) {
       inventory.gold += pickup.amount;
+      return;
+    }
+
+    if (pickup.kind === PickupKind.DARKNESS) {
+      inventory.darkness += pickup.amount;
       return;
     }
 

@@ -47,6 +47,8 @@ import { DEFAULT_HURTBOX_RADIUS, HurtboxComponent } from '../components/HurtboxC
 import { InventoryComponent } from '../components/InventoryComponent';
 import { LootComponent, resolveLootDrops } from '../components/LootComponent';
 import type { LootDropOptions, ResolvedLootDrop } from '../components/LootComponent';
+import { NO_META_BONUSES } from './meta-bonuses';
+import type { MetaBonuses } from './meta-bonuses';
 
 /** Default locomotion speed in world units per second for any combatant. */
 export const DEFAULT_COMBATANT_MAX_SPEED = 5;
@@ -78,6 +80,13 @@ export function assertPositiveFinite(value: number, label: string): void {
 export function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive integer, received: ${String(value)}`);
+  }
+}
+
+/** @throws RangeError if `value` is not a non-negative finite number. */
+export function assertNonNegativeFinite(value: number, label: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative finite number, received: ${String(value)}`);
   }
 }
 
@@ -180,6 +189,24 @@ export interface CombatantSpawnOptions {
    * config bug: omit the field to drop nothing.
    */
   readonly loot?: readonly LootDropOptions[];
+  /**
+   * Permanent out-of-run bonuses (M13-T01, spec 21 AC-04). ADDITIVE deltas applied
+   * on top of whatever this assembly already decided, so `{ maxHp: 50 }` means "50
+   * more hit points than the numbers above say", not "50 hit points".
+   *
+   * Omit it and the entity is assembled exactly as before — which is what every
+   * pre-M13 call site and every AI enemy gets, because a `MetaBonuses` is
+   * currently only ever produced for the player (`PlayerFactory.spawnWithMeta`).
+   * Like `armor` / `ai` / `hazard` / `loot`, this is a CAPABILITY SWITCH carried by
+   * the one shared assembly seam, so a future "buffed elite" needs no second
+   * assembly path.
+   *
+   * The deltas are already resolved (ids -> numbers) by `resolveMetaBonuses`, so
+   * this seam performs no config lookup and therefore cannot throw inside a tick —
+   * the rule every other option here follows. A negative or non-finite delta is
+   * rejected HERE rather than producing a body with `NaN` health.
+   */
+  readonly metaBonuses?: MetaBonuses;
 }
 
 /**
@@ -350,13 +377,20 @@ export function resolveHazardCasting(options: HazardCastingOptions = {}): Resolv
  * enemy gets the FSM, a plain script-driven enemy gets neither); armor, hazard
  * casting and loot are orthogonal to both — any combatant may carry any of them.
  *
+ * M13-T01 adds ONE thing that is not a component: `metaBonuses`, a set of additive
+ * deltas folded over the numbers above (see the field's own docstring). It is a
+ * seam-level concern rather than a component because a permanent bonus is not a
+ * thing the entity HAS — it is a reason the entity's numbers are what they are, and
+ * putting it on a component would leave two answers to "how much HP does this body
+ * have" (the component's field and its own delta).
+ *
  * @throws RangeError if `maxSpeed` / `maxHp` / `hurtboxRadius` / `armor` is not a
  *   positive finite number, if `hp` falls outside `[0, maxHp]`, if any dash override
  *   is invalid (see {@link resolveDashTuning}), if any AI override is invalid (see
  *   {@link resolveAITuning}), if any hazard override is invalid (see
  *   {@link resolveHazardCasting}), if the loot table is empty or any drop in it is
- *   invalid (see `resolveLootDrops`), or if AI tuning is combined with
- *   `hardwareInput`.
+ *   invalid (see `resolveLootDrops`), if any meta-bonus delta is negative or
+ *   non-finite, or if AI tuning is combined with `hardwareInput`.
  */
 export function spawnCombatant(
   world: World,
@@ -364,10 +398,21 @@ export function spawnCombatant(
   options: CombatantSpawnOptions = {},
   hardwareInput = false,
 ): EntityId {
-  const maxSpeed = options.maxSpeed ?? DEFAULT_COMBATANT_MAX_SPEED;
+  // Meta bonuses (M13-T01) are resolved to plain deltas before they get here, and
+  // they are validated FIRST so a malformed one is reported as itself rather than
+  // as a mysterious "maxSpeed must be positive" three lines later.
+  const meta = options.metaBonuses ?? NO_META_BONUSES;
+  assertNonNegativeFinite(meta.maxHp, 'metaBonuses.maxHp');
+  assertNonNegativeFinite(meta.moveSpeed, 'metaBonuses.moveSpeed');
+  assertNonNegativeFinite(meta.dashCooldownReductionTicks, 'metaBonuses.dashCooldownReductionTicks');
+
+  const maxSpeed = (options.maxSpeed ?? DEFAULT_COMBATANT_MAX_SPEED) + meta.moveSpeed;
   assertPositiveFinite(maxSpeed, 'maxSpeed');
 
-  const maxHp = options.maxHp ?? DEFAULT_MAX_HP;
+  // The bonus is ADDITIVE on top of whatever the caller asked for, and `hp`
+  // still defaults to the FINAL ceiling — so a run assembled with `thick_skin`
+  // starts at full (raised) health rather than at the un-bonused number.
+  const maxHp = (options.maxHp ?? DEFAULT_MAX_HP) + meta.maxHp;
   assertPositiveFinite(maxHp, 'maxHp');
   const hp = options.hp ?? maxHp;
   if (!Number.isFinite(hp) || hp < 0 || hp > maxHp) {
@@ -384,6 +429,10 @@ export function spawnCombatant(
   if (armor !== undefined) assertPositiveFinite(armor, 'armor');
 
   const dash = resolveDashTuning(options.dash);
+  // A cooldown reduction SHORTENS the resolved cooldown, floored at 1 tick: a
+  // dash with a zero-tick cooldown would be a dash with no cooldown at all, which
+  // is a different mechanic, not a bigger number (spec 21 §1.3).
+  const dashCooldownTicks = Math.max(1, dash.cooldownTicks - meta.dashCooldownReductionTicks);
 
   // AI is an OPT-IN capability, and it is mutually exclusive with hardware input:
   // a player derives its intent from the device, an AI-driven entity has its intent
@@ -431,7 +480,7 @@ export function spawnCombatant(
       dash.speedMultiplier,
       dash.durationTicks,
       dash.invulnerableTicks,
-      dash.cooldownTicks,
+      dashCooldownTicks,
       0,
     ),
   );

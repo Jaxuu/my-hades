@@ -154,14 +154,21 @@ function idFor(prefix: string, config: Record<string, unknown>): string {
   return id;
 }
 
-/** The data-layer spelling of a drop: lowercase kind, no enum. */
+/** The data-layer spelling of a drop: lowercase kind, no enum (M13-T01 adds darkness). */
 function toJsonLoot(drop: LootDropOptions): LootDropConfig {
   return {
-    kind: drop.kind === PickupKind.HEAL ? 'heal' : 'gold',
+    kind: toJsonLootKind(drop.kind),
     ...(drop.amount === undefined ? {} : { amount: drop.amount }),
     ...(drop.radius === undefined ? {} : { radius: drop.radius }),
     ...(drop.lifespanTicks === undefined ? {} : { lifespanTicks: drop.lifespanTicks }),
   };
+}
+
+/** The enum -> JSON spelling, total over the enum. */
+function toJsonLootKind(kind: PickupKind): LootDropConfig['kind'] {
+  if (kind === PickupKind.HEAL) return 'heal';
+  if (kind === PickupKind.DARKNESS) return 'darkness';
+  return 'gold';
 }
 
 /** The per-instance half: position, facing and (for an AI enemy) its target. */

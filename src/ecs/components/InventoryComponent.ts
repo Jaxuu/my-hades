@@ -38,9 +38,30 @@ export class InventoryComponent extends ComponentBase {
    */
   public gold: number;
 
-  constructor(gold = 0) {
+  /**
+   * Darkness held BY THIS RUN (M13-T01).
+   *
+   * The run-local tally of the out-of-run currency. It is a component field, and
+   * not a write straight into `SaveState`, for three reasons that all follow from
+   * the engine's own rules:
+   *
+   *  1. **It is simulation state.** "How much did this run collect" must be
+   *     snapshot-visible and replay-exact (spec 00 §6.1); a value written into a
+   *     structure that `snapshot()` does not contain would be hidden state.
+   *  2. **It is destroyed with the run.** A restart rebuilds the player, so the
+   *     tally resets for free — no explicit clearing, and no way to forget it.
+   *  3. **Banking stays a run-boundary event.** `GameSimulator.enterHub` moves
+   *     this number into the save and zeroes it (`bankRunDarkness`), which is the
+   *     ONE place a run can affect meta progression (AC-02's 结算 point).
+   *
+   * Non-negative; every write goes through {@link addDarkness}, which clamps at `0`.
+   */
+  public darkness: number;
+
+  constructor(gold = 0, darkness = 0) {
     super();
     this.gold = gold;
+    this.darkness = darkness;
   }
 }
 
@@ -80,6 +101,24 @@ export function findPlayerInventory(world: World): InventoryComponent | undefine
 }
 
 /**
+ * Add `amount` darkness to `entityId` (M13-T01). No-op when the entity has no
+ * `InventoryComponent` (the opt-in shape every component consumer follows).
+ *
+ * The exact twin of {@link addGold}, including the clamp at `0` and the legality
+ * of negative amounts — but note that a NEGATIVE write here is not a purchase: it
+ * would only ever be a refund, because spending darkness happens against
+ * `SaveState` in the hub, not against a run's tally.
+ *
+ * @returns `true` when a wallet was found and written, `false` otherwise.
+ */
+export function addDarkness(world: World, entityId: EntityId, amount: number): boolean {
+  const inventory = world.getComponent(entityId, InventoryComponent);
+  if (inventory === undefined) return false;
+  inventory.darkness = Math.max(0, inventory.darkness + amount);
+  return true;
+}
+
+/**
  * The player's gold, or `0` when the world has no wallet.
  *
  * A read-side convenience for the HUD, so the render layer never has to encode
@@ -88,4 +127,15 @@ export function findPlayerInventory(world: World): InventoryComponent | undefine
  */
 export function readGold(world: World): number {
   return findPlayerInventory(world)?.gold ?? 0;
+}
+
+/**
+ * The run's collected darkness, or `0` when the world has no wallet (M13-T01).
+ *
+ * The `readGold` twin, and the number the in-run HUD shows. NOTE it is NOT
+ * `SaveState.darkness`: this is what the CURRENT run has picked up and not yet
+ * banked. The two are equal only immediately after `enterHub`.
+ */
+export function readDarkness(world: World): number {
+  return findPlayerInventory(world)?.darkness ?? 0;
 }

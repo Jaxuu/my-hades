@@ -122,12 +122,18 @@ const HURTBOX_STROKE_ALPHA = 0.35;
 const HAZARD_COLOR = 0xff2d2d;
 
 /**
- * Pickup colours (M9-T01). Deliberately NOT in the hazard red family: loot is the
- * one thing on the ground the player is supposed to run TOWARDS, so it must never
- * be confusable with the one thing they are supposed to run away from.
+ * Pickup colours (M9-T01, extended by M13-T01). Deliberately NOT in the hazard red
+ * family: loot is the one thing on the ground the player is supposed to run
+ * TOWARDS, so it must never be confusable with the one thing they are supposed to
+ * run away from.
+ *
+ * Three kinds, three colours, because they are three different promises: gold is
+ * spendable now, a flask is survival now, and a darkness gem (M13-T01) is the only
+ * one that outlives the run — so it gets its own hue rather than borrowing gold's.
  */
 const GOLD_PICKUP_COLOR = 0xffd24d;
 const HEAL_PICKUP_COLOR = 0x4dff88;
+const DARKNESS_PICKUP_COLOR = 0xb07dff;
 
 /** Pickup fill alpha. Solid enough to read at a glance, light enough to look like an item. */
 const PICKUP_FILL_ALPHA = 0.95;
@@ -992,15 +998,16 @@ export class GameRenderer {
    * no renderer change — and the drawn size is the same number the logic layer
    * measures its overlap test against, so "what you see is what you can touch".
    *
-   * Colour is the only thing that differs between kinds, because gold and health are
-   * different promises and the player has to be able to tell them apart at a glance.
+   * Colour is the only thing that differs between kinds, because gold, health and
+   * darkness are different promises and the player has to be able to tell them apart
+   * at a glance.
    *
    * No animation and no per-frame state: a pickup is a static object, and giving it
    * a pulse would make it compete visually with the hazard telegraph, which is the
    * one thing on the ground that must own the player's attention.
    */
   private createPickupView(pickup: PickupComponent): EntityView {
-    const color = pickup.kind === PickupKind.HEAL ? HEAL_PICKUP_COLOR : GOLD_PICKUP_COLOR;
+    const color = pickupColor(pickup.kind);
     const radiusPx = pickup.radius * PX_PER_UNIT;
 
     const container = new Container();
@@ -1078,4 +1085,18 @@ export class GameRenderer {
       .stroke({ width: 1, color: 0xffffff, alpha: HURTBOX_STROKE_ALPHA });
     container.addChild(outline);
   }
+}
+
+/**
+ * The colour a pickup of `kind` is drawn in (M9-T01, extended by M13-T01).
+ *
+ * A total mapping over the enum, kept OUT of the view builder so "what colour is
+ * this kind" is one lookup rather than a nested ternary that grows with every new
+ * kind. The fallback is gold, so a kind added without a colour reads as the
+ * baseline loot rather than as nothing.
+ */
+function pickupColor(kind: PickupKind): number {
+  if (kind === PickupKind.HEAL) return HEAL_PICKUP_COLOR;
+  if (kind === PickupKind.DARKNESS) return DARKNESS_PICKUP_COLOR;
+  return GOLD_PICKUP_COLOR;
 }

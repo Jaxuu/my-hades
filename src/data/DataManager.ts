@@ -41,6 +41,7 @@ import {
   parseEncounterTable,
   parseEnemyConfig,
   parseHazardConfig,
+  parseMetaUpgradeTable,
   parseModifierConfig,
   parseProjectileConfig,
   parseRoomTable,
@@ -50,6 +51,7 @@ import type {
   EncounterWaveTemplate,
   EnemyConfig,
   HazardConfig,
+  MetaUpgradeConfig,
   ModifierConfig,
   ProjectileConfig,
   RoomConfig,
@@ -88,6 +90,18 @@ export interface RawConfigTables {
   readonly projectiles?: Readonly<Record<string, unknown>>;
   readonly hazards?: Readonly<Record<string, unknown>>;
   readonly rooms?: Readonly<Record<string, unknown>>;
+  /**
+   * Meta-progression upgrades (M13-T01, spec 21 §3.2), from
+   * `assets/data/meta_upgrades.json`. Same optional-id-keyed shape and the same
+   * absent-vs-empty reading as `projectiles` / `hazards` / `rooms`: an omitted
+   * table means "this bundle ships no meta progression", which is legitimate.
+   *
+   * There is deliberately NO cross-table rule for this table: an upgrade names no
+   * other config, and the only reference INTO it — a save file's unlocked id —
+   * lives outside the data layer entirely (a stale id in a save is skipped, not
+   * rejected; see `resolveMetaBonuses`).
+   */
+  readonly metaUpgrades?: Readonly<Record<string, unknown>>;
 }
 
 /** Deterministic (locale-free) string ordering — UTF-16 code units, not collation. */
@@ -122,6 +136,14 @@ export class DataManager {
    * rejected edit leaves the terrain the running run was built against in place.
    */
   private static readonly rooms = new Map<string, RoomConfig>();
+  /**
+   * Meta-progression upgrades (M13-T01), keyed by id.
+   *
+   * Read by `resolveMetaBonuses` (once per run, from `runSetup`) and by the hub
+   * UI (for its price list). Refilled only after a fully successful parse, like
+   * every other table.
+   */
+  private static readonly metaUpgrades = new Map<string, MetaUpgradeConfig>();
   /**
    * The room sequence a run is built from (M10-T02), indexed by depth.
    *
@@ -196,6 +218,13 @@ export class DataManager {
     // to nothing is reported by the cross-table check below rather than here.
     const rooms =
       tables.rooms === undefined ? new Map<string, RoomConfig>() : parseRoomTable(tables.rooms, 'rooms');
+    // M13-T01: the meta-upgrade table. Same absent-vs-present rule — a bundle that
+    // ships no meta progression is legitimate, and an empty registry is what makes
+    // `resolveMetaBonuses` a no-op rather than a failure.
+    const metaUpgrades =
+      tables.metaUpgrades === undefined
+        ? new Map<string, MetaUpgradeConfig>()
+        : parseMetaUpgradeTable(tables.metaUpgrades, 'meta_upgrades');
 
     DataManager.assertEncounterEnemiesExist(encounters, enemies);
     DataManager.assertEncounterRoomsExist(encounters, rooms);
@@ -212,6 +241,8 @@ export class DataManager {
     for (const [id, config] of hazards) DataManager.hazards.set(id, config);
     DataManager.rooms.clear();
     for (const [id, config] of rooms) DataManager.rooms.set(id, config);
+    DataManager.metaUpgrades.clear();
+    for (const [id, config] of metaUpgrades) DataManager.metaUpgrades.set(id, config);
     DataManager.encounters = encounters;
   }
 
@@ -391,6 +422,54 @@ export class DataManager {
   }
 
   /* ---------------------------------------------------------------------- *
+   * Meta-progression upgrades (M13-T01)                                     *
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * The parsed config of the meta upgrade with this id.
+   *
+   * Two engine-side callers, and both matter:
+   *
+   *  - `resolveMetaBonuses` walks the ids a SAVE claims are unlocked, so an id
+   *    that is no longer in the table must be skippable — which is why the caller
+   *    asks `hasMetaUpgrade` first rather than catching;
+   *  - the hub UI lists the table to render its price list.
+   *
+   * @throws SchemaError when the registry is EMPTY (Bootstrap never ran) or when
+   *   `id` is not in the table (listing the known ids), exactly like
+   *   {@link getEnemyConfig}.
+   */
+  public static getMetaUpgradeConfig(id: string): MetaUpgradeConfig {
+    const config = DataManager.metaUpgrades.get(id);
+    if (config === undefined) {
+      throw new SchemaError(
+        DataManager.unknownIdMessage('meta upgrade', id, DataManager.metaUpgrades.size),
+      );
+    }
+    return config;
+  }
+
+  /** Whether a meta upgrade with this id is loaded. */
+  public static hasMetaUpgrade(id: string): boolean {
+    return DataManager.metaUpgrades.has(id);
+  }
+
+  /**
+   * Every loaded meta-upgrade id, ascending — the hub UI's listing order.
+   *
+   * Sorted by UTF-16 code units (never `localeCompare`), so the price list is
+   * byte-for-byte stable across machines (ADR-001 R6).
+   */
+  public static get metaUpgradeIds(): readonly string[] {
+    return [...DataManager.metaUpgrades.keys()].sort(compareIds);
+  }
+
+  /** How many meta upgrades are loaded. */
+  public static get metaUpgradeCount(): number {
+    return DataManager.metaUpgrades.size;
+  }
+
+  /* ---------------------------------------------------------------------- *
    * Encounter table (M10-T02)                                              *
    * ---------------------------------------------------------------------- */
 
@@ -508,6 +587,7 @@ export class DataManager {
     DataManager.projectiles.clear();
     DataManager.hazards.clear();
     DataManager.rooms.clear();
+    DataManager.metaUpgrades.clear();
     DataManager.encounters = [];
   }
 
@@ -715,6 +795,8 @@ export class DataManager {
         return DataManager.hazardIds;
       case 'room':
         return DataManager.roomIds;
+      case 'meta upgrade':
+        return DataManager.metaUpgradeIds;
       default:
         return [];
     }

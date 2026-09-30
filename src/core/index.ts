@@ -4,5 +4,7 @@ export * from './Random';
 export * from './input';
 export * from './scheduler';
 export * from './snapshot-utils';
+export * from './SaveState';
+export * from './MetaProgression';
 export * from './GameSimulator';
 export * from './LevelLoader';

@@ -31,6 +31,7 @@ import enemiesJson from '../assets/data/enemies.json';
 import modifiersJson from '../assets/data/modifiers.json';
 import encountersJson from '../assets/data/encounters.json';
 import roomsJson from '../assets/data/rooms.json';
+import metaUpgradesJson from '../assets/data/meta_upgrades.json';
 
 import { DataManager } from '../src/data/DataManager';
 import type { RawConfigTables } from '../src/data/DataManager';
@@ -49,6 +50,9 @@ export function clientConfigTables(): RawConfigTables {
     modifiers: modifiersJson,
     encounters: encountersJson,
     rooms: roomsJson,
+    // M13-T01: the hub's talent price list. Without it the hub UI would have
+    // nothing to render and `resolveMetaBonuses` would grant nothing.
+    metaUpgrades: metaUpgradesJson,
   };
 }
 
@@ -105,7 +109,7 @@ function moduleValue(module: unknown, fallback: unknown): unknown {
  * encounter table.
  */
 function tablesFromHotModules(modules: readonly unknown[] | undefined): RawConfigTables {
-  const [enemies, modifiers, encounters, rooms] = modules ?? [];
+  const [enemies, modifiers, encounters, rooms, metaUpgrades] = modules ?? [];
   return {
     enemies: moduleValue(enemies, enemiesJson) as Readonly<Record<string, unknown>>,
     modifiers: moduleValue(modifiers, modifiersJson) as Readonly<Record<string, unknown>>,
@@ -114,6 +118,9 @@ function tablesFromHotModules(modules: readonly unknown[] | undefined): RawConfi
     // mid-session re-validates the grids AND re-runs the cross-table "every roomId
     // names a real room" check before the run is rebuilt against them.
     rooms: moduleValue(rooms, roomsJson) as Readonly<Record<string, unknown>>,
+    // M13-T01: the meta-upgrade table rides it too, so re-pricing a talent is a
+    // JSON edit that takes effect without a page reload.
+    metaUpgrades: moduleValue(metaUpgrades, metaUpgradesJson) as Readonly<Record<string, unknown>>,
   };
 }
 
@@ -154,6 +161,7 @@ export function installDataHotReload(options: DataHotReloadOptions): void {
       '../assets/data/modifiers.json',
       '../assets/data/encounters.json',
       '../assets/data/rooms.json',
+      '../assets/data/meta_upgrades.json',
     ],
     (modules) => {
       try {

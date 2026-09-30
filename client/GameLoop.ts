@@ -22,6 +22,7 @@
 import type { Ticker } from 'pixi.js';
 
 import type { GameSimulator } from '../src/core/GameSimulator';
+import { isInHub } from '../src/ecs/components/GameStateComponent';
 import type { GameRenderer } from './GameRenderer';
 import type { KeyboardInput } from './KeyboardInput';
 
@@ -66,8 +67,27 @@ export class GameLoop {
   /**
    * One rendered frame: accumulate real time, advance whole fixed ticks (input
    * flushed immediately BEFORE each `step`), then sync the renderer once.
+   *
+   * M13-T01 adds one early exit, and it is the only place this loop reads game
+   * state: while the run is in the HUB, ZERO logic ticks are advanced. The camp is a
+   * MENU — the world behind the talent screen is a still frame — so letting time
+   * creep would make `sim.tick` drift upward for no reason, and it would keep
+   * draining queued input into a run that has already been settled. The renderer is
+   * still synced (with `alpha = 0`, i.e. no interpolation, which is the truth about
+   * a world that is not moving), so the scene stays on screen behind the menu.
+   *
+   * The exit is `return`, not `continue`: the accumulator is dropped rather than
+   * carried, so leaving the camp cannot burst-advance the ticks that "should" have
+   * happened while the menu was open. A menu is not a pause screen; it is time that
+   * never was.
    */
   private frame(deltaMs: number): void {
+    if (isInHub(this.sim.world)) {
+      this.accumulatorMs = 0;
+      this.renderer.syncWorld(this.sim.world, 0);
+      return;
+    }
+
     const tickDurationMs = this.sim.tickDurationMs;
     this.accumulatorMs += deltaMs;
 

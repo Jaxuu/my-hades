@@ -50,6 +50,20 @@ export enum PickupKind {
   GOLD = 'GOLD',
   /** Restores `amount` hit points, clamped at `maxHp`. */
   HEAL = 'HEAL',
+  /**
+   * Adds `amount` to the collector's `InventoryComponent.darkness` (M13-T01) —
+   * the run's tally of the OUT-OF-RUN currency.
+   *
+   * Deliberately a separate KIND rather than a second gold field, because the two
+   * currencies have different lifetimes and that difference is the point: gold is
+   * spent (or lost) inside the run, darkness is BANKED into the save when the run
+   * ends (`GameSimulator.enterHub`) and is therefore the only thing a run leaves
+   * behind. Collapsing them would make "what did this run earn" unanswerable.
+   *
+   * Its effect lands on the wallet exactly like gold — no hitstop, no HITSTUN, no
+   * knockback, no event (spec 15 I1 is unchanged by this kind).
+   */
+  DARKNESS = 'DARKNESS',
 }
 
 /**
@@ -76,6 +90,29 @@ export const DEFAULT_GOLD_AMOUNT = 5;
 
 /** Default hit points restored by a `HEAL` pickup. */
 export const DEFAULT_HEAL_AMOUNT = 20;
+
+/**
+ * Default darkness granted by a `DARKNESS` pickup (M13-T01).
+ *
+ * Larger than the gold default on purpose: darkness is the SLOW currency — it is
+ * banked only when a run ends, and a meta upgrade costs tens of it (see
+ * `assets/data/meta_upgrades.json`), so a per-gem grant of `5` would make the hub
+ * unreachable in a normal session.
+ */
+export const DEFAULT_DARKNESS_AMOUNT = 10;
+
+/**
+ * The default grant of a kind, used when a spawn declares no `amount`.
+ *
+ * Lives HERE rather than next to the loot table because `LootComponent` already
+ * imports this file — the reverse would be a cycle — and because "what a kind is
+ * worth by default" is a fact about the kind.
+ */
+export function defaultPickupAmount(kind: PickupKind): number {
+  if (kind === PickupKind.HEAL) return DEFAULT_HEAL_AMOUNT;
+  if (kind === PickupKind.DARKNESS) return DEFAULT_DARKNESS_AMOUNT;
+  return DEFAULT_GOLD_AMOUNT;
+}
 
 /**
  * Gap (world units) inserted between the drops of ONE enemy, along +x.
@@ -165,7 +202,7 @@ function assertPositiveInteger(value: number, label: string): void {
  */
 export function spawnPickup(world: World, options: PickupSpawnOptions): EntityId {
   const kind = options.kind ?? PickupKind.GOLD;
-  const amount = options.amount ?? (kind === PickupKind.HEAL ? DEFAULT_HEAL_AMOUNT : DEFAULT_GOLD_AMOUNT);
+  const amount = options.amount ?? defaultPickupAmount(kind);
   const radius = options.radius ?? DEFAULT_PICKUP_RADIUS;
   const lifespanTicks = options.lifespanTicks ?? DEFAULT_PICKUP_LIFESPAN_TICKS;
 

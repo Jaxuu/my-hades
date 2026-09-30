@@ -34,7 +34,7 @@ import { ComponentBase } from '../Component';
 import type { World } from '../World';
 
 /**
- * The three states a run can be in (spec 14 AC-02, spec 15 AC-04).
+ * The four states a run can be in (spec 14 AC-02, spec 15 AC-04, spec 21 AC-03).
  *
  * Deliberately minimal. The interesting thing is not the number of states but the
  * direction of the transitions: `PLAYING -> RUN_FAILED` happens exactly once, from
@@ -42,19 +42,42 @@ import type { World } from '../World';
  * from exactly one place (`EncounterSystem`), and the only way back from either is
  * `GameSimulator.restartRun`, which rebuilds the world wholesale (spec 14 I7).
  *
- * The two terminal states are SIBLINGS, not a chain: a run cannot be both won and
- * lost, and neither may be entered from the other. `isRunOver` is the predicate
- * that expresses "no run-level decision is left to make", and it is what every
- * consumer that used to ask `isRunFailed` now asks — so a won run is exactly as
- * inert as a lost one without a second gate anywhere.
+ * The two VERDICTS are SIBLINGS, not a chain: a run cannot be both won and lost,
+ * and neither may be entered from the other. `isRunOver` is the predicate that
+ * expresses "no run-level decision is left to make", and it is what every consumer
+ * that used to ask `isRunFailed` now asks — so a won run is exactly as inert as a
+ * lost one without a second gate anywhere.
+ *
+ * M13-T01 appends the state a verdict leads TO: `HUB`, the camp. It is not a third
+ * verdict (it is entered from either, and it is the only status a settlement can
+ * produce), but it IS over — see {@link isRunOver}.
  */
 export enum GameStatus {
   /** The run is live: the player acts and the encounter scheduler advances. */
   PLAYING = 'PLAYING',
-  /** The player is dead. The run is over; only a restart continues. */
+  /** The player is dead. The run is over; only a settlement continues. */
   RUN_FAILED = 'RUN_FAILED',
-  /** Every room is cleared. The run is over; only a restart continues. */
+  /** Every room is cleared. The run is over; only a settlement continues. */
   RUN_WON = 'RUN_WON',
+  /**
+   * The run is settled and the player is in the CAMP (M13-T01, spec 21 AC-03).
+   *
+   * The third terminal state, and the only one that is not a verdict on the run:
+   * it says "this attempt is finished AND has been paid out", which is exactly the
+   * window in which the hub's talent screen exists.
+   *
+   * WHY IT IS NOT `RUN_FAILED`/`RUN_WON` WITH A FLAG: a flag would leave "the run
+   * is over" and "the run has been banked" as two answers that can disagree, and
+   * the disagreement is a double-payout (`enterHub` banks; calling it twice must
+   * not pay twice). As a status, the transition is one monotone write with one
+   * owner, and `isRunOver` is widened to include it — so a HUB run is exactly as
+   * inert as a lost one, with no second gate anywhere (spec 21 I4).
+   *
+   * Reached ONLY from `RUN_FAILED`/`RUN_WON` in practice (the UI only offers the
+   * transition on a terminal overlay) and left ONLY by `restartRun`, which rebuilds
+   * the world and re-mounts this component as `PLAYING`.
+   */
+  HUB = 'HUB',
 }
 
 export class GameStateComponent extends ComponentBase {
@@ -143,13 +166,46 @@ export function markRunWon(world: World): void {
 }
 
 /**
- * Whether the run is OVER — failed or won (M9-T01).
+ * Whether the run has been SETTLED and the player is in the camp (M13-T01,
+ * spec 21 AC-03). A world with NO game state is never in the hub.
+ */
+export function isInHub(world: World): boolean {
+  return findGameState(world)?.status === GameStatus.HUB;
+}
+
+/**
+ * Move the run into the camp. Idempotent, and a strict no-op when the world has no
+ * game-state singleton (a world that never assembled a run cannot settle one).
+ *
+ * Free function rather than a component method, and the ONE write point for the
+ * transition: `GameSimulator.enterHub` is the only caller. It is deliberately NOT
+ * gated on the current status — like `restartRun`, this is a run-boundary command
+ * the caller issues, and the caller (the hub's UI) is what knows when offering it
+ * makes sense. What the status write guarantees is the other direction: once it
+ * has run, no further run-level decision is made.
+ */
+export function markRunHub(world: World): void {
+  const state = findGameState(world);
+  if (state === undefined) return;
+  state.status = GameStatus.HUB;
+}
+
+/**
+ * Whether the run is OVER — failed, won, or settled into the hub (M9-T01, widened
+ * by M13-T01).
  *
  * The predicate every "the run has stopped making decisions" gate asks, so a won
  * run is inert in exactly the same places a lost one is, with no second boolean
  * to keep in sync. A world with no game state is never over (spec 14 AC-11).
+ *
+ * `HUB` is included because it is the state a run reaches AFTER the verdict, not
+ * a return to play: without it, entering the camp would re-open every gate a
+ * `RUN_FAILED` world closes — the encounter scheduler would start spawning waves
+ * over the player's corpse and the pickup pass would resume paying out, which is
+ * precisely the "the game carries on" behaviour AC-06 forbids (spec 21 I4).
+ * `PLAYING` is the ONLY status that is not over.
  */
 export function isRunOver(world: World): boolean {
   const status = findGameState(world)?.status;
-  return status === GameStatus.RUN_FAILED || status === GameStatus.RUN_WON;
+  return status === GameStatus.RUN_FAILED || status === GameStatus.RUN_WON || status === GameStatus.HUB;
 }

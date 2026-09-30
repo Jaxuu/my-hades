@@ -25,11 +25,10 @@
 
 import { ComponentBase } from '../Component';
 import {
-  DEFAULT_GOLD_AMOUNT,
-  DEFAULT_HEAL_AMOUNT,
   DEFAULT_PICKUP_LIFESPAN_TICKS,
   DEFAULT_PICKUP_RADIUS,
   PickupKind,
+  defaultPickupAmount,
 } from './PickupComponent';
 
 /** One declared drop, as handed to a prefab. Every field is optional but `kind`. */
@@ -70,9 +69,16 @@ function assertPositiveInteger(value: number, label: string): void {
   }
 }
 
-/** The default grant of a kind, used when a drop declares no `amount`. */
+/**
+ * The default grant of a kind, used when a drop declares no `amount`.
+ *
+ * Delegates to `defaultPickupAmount` (in `PickupComponent`) rather than repeating
+ * the table, so "what a `DARKNESS` gem is worth" has exactly one answer — the one
+ * `spawnPickup` also applies when a caller omits `amount`. Kept as a named export
+ * because the pre-M13 loot path reads it here.
+ */
 export function defaultLootAmount(kind: PickupKind): number {
-  return kind === PickupKind.HEAL ? DEFAULT_HEAL_AMOUNT : DEFAULT_GOLD_AMOUNT;
+  return defaultPickupAmount(kind);
 }
 
 /**

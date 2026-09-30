@@ -24,7 +24,10 @@
       "windupTicks": 36,
       "cooldownTicks": 60
     },
-    "loot": [{ "kind": "gold", "amount": 5 }]
+    "loot": [
+      { "kind": "gold", "amount": 5 },
+      { "kind": "darkness", "amount": 10 }
+    ]
   },
   "bomber": {
     "maxHp": 40,
@@ -43,7 +46,8 @@
     },
     "loot": [
       { "kind": "gold", "amount": 10 },
-      { "kind": "heal", "amount": 15 }
+      { "kind": "heal", "amount": 15 },
+      { "kind": "darkness", "amount": 15 }
     ]
   }
 }
