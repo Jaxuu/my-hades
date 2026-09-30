@@ -30,6 +30,7 @@
 
 import enemiesJson from '../../assets/data/enemies.json';
 import modifiersJson from '../../assets/data/modifiers.json';
+import encountersJson from '../../assets/data/encounters.json';
 import { DataManager } from './DataManager';
 import type { RawConfigTables } from './DataManager';
 
@@ -39,15 +40,20 @@ import type { RawConfigTables } from './DataManager';
  * Exported mainly so tooling and tests can see the raw source the Bootstrap
  * consumes; nothing in the engine reads it directly — the engine reads
  * `DataManager`, which holds the PARSED objects.
+ *
+ * M10-T02 adds `encounters`: the room sequence (`assets/data/encounters.json`).
+ * It travels through the same seam as the other two so the room layout is
+ * validated — including the cross-table "every wave names a real enemy" check —
+ * during Bootstrap, before a single tick has been simulated.
  */
 export function bundledConfigTables(): RawConfigTables {
-  return { enemies: enemiesJson, modifiers: modifiersJson };
+  return { enemies: enemiesJson, modifiers: modifiersJson, encounters: encountersJson };
 }
 
 /** How a Bootstrap obtains its raw tables. Async by contract — see the file docstring. */
 export type ConfigTableReader = () => Promise<RawConfigTables>;
 
-/** The default reader: the two JSON files that ship with the repository. */
+/** The default reader: the three JSON files that ship with the repository. */
 export async function readBundledConfigTables(): Promise<RawConfigTables> {
   return bundledConfigTables();
 }

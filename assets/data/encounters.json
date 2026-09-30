@@ -1,0 +1,16 @@
+[
+  {
+    "depth": 0,
+    "waves": [
+      { "delayTicks": 0, "enemies": ["raider"] },
+      { "delayTicks": 120, "enemies": ["raider", "bomber"] }
+    ]
+  },
+  {
+    "depth": 1,
+    "waves": [
+      { "delayTicks": 0, "enemies": ["raider", "raider"] },
+      { "delayTicks": 120, "enemies": ["raider", "bomber"] }
+    ]
+  }
+]

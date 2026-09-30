@@ -56,12 +56,8 @@ import type { World } from '../World';
 import type { EntityId } from '../Entity';
 import type { InputEvent } from '../../core/input';
 import { PlayerInputComponent } from '../components/PlayerInputComponent';
-import {
-  ENCOUNTER_WAVE_UNSCHEDULED,
-  EncounterState,
-  findRewardDraft,
-  isFinalRoom,
-} from '../components/EncounterStateComponent';
+import { findRewardDraft, isFinalRoom } from '../components/EncounterStateComponent';
+import { descendEncounterRoom } from '../prefabs/EncounterFactory';
 import { markRunWon } from '../components/GameStateComponent';
 import { grantReward } from '../rewards/grantReward';
 
@@ -113,18 +109,18 @@ export class RewardSystem implements System {
       return;
     }
 
-    // Descend to the next room (M9-T01, spec 15 AC-03): the index moves on, the
-    // difficulty dial rises, and the room's wave configuration is swapped for the
-    // next entry of the run's table. `?? room.waves` is unreachable for a
-    // factory-assembled room (the index is always inside `roomWaves`), but it keeps
-    // the swap total rather than able to produce `undefined` waves.
-    room.currentRoomIndex += 1;
-    room.depth += 1;
-    room.waves = room.roomWaves[room.currentRoomIndex] ?? room.waves;
-    room.state = EncounterState.IN_PROGRESS;
-    room.currentWaveIndex = 0;
-    room.trackedEntityIds = [];
-    room.nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED;
+    // Descend to the next room (M9-T01, spec 15 AC-03; extracted in M10-T02).
+    // The transition itself — index up, depth up, waves swapped for the next
+    // depth's configuration, scheduler re-armed — lives in `descendEncounterRoom`,
+    // next to the assembly that created the room, so this system reads as
+    // "grant, then descend" and the transition has exactly one implementation.
+    //
+    // M10-T02 makes the wave source data-driven: for every room of a normal run the
+    // swap indexes the depth-keyed table the factory read out of
+    // `assets/data/encounters.json`; past the end of that table the helper falls
+    // back to `DataManager` BY DEPTH (AC-02's 循环复用 / 兜底生成). Either way this
+    // system re-implements no wave assembly of its own.
+    descendEncounterRoom(room);
   }
 
   /**

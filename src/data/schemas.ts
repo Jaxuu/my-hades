@@ -191,6 +191,52 @@ export interface ModifierConfig {
   readonly knockbackForce: number;
 }
 
+/**
+ * One wave of a room TEMPLATE, as written in `assets/data/encounters.json`
+ * (M10-T02).
+ *
+ * `enemies` is a list of enemy TYPE ids — plain strings, not specs — because a
+ * wave template is a fact about the ROOM, not about any one entity: it says
+ * "this wave is two raiders", not "this raider stands at x = -1". Where each
+ * enemy ends up is a per-INSTANCE fact and is derived deterministically by the
+ * encounter layer's formation rule (`EncounterFactory.formWaveRoster`), which is
+ * the same split `EnemyConfig` / `EnemyPlacement` already follows.
+ *
+ * Keeping placement OUT of the file is also what makes a wave template readable
+ * and diff-able: re-tuning a fight is "change 2 to 3", not "recompute twenty
+ * coordinate pairs".
+ */
+export interface EncounterWaveTemplate {
+  /**
+   * Ticks to wait before this wave spawns, counted from the moment the wave
+   * becomes PENDING. Must be a non-negative integer; `0` means "as soon as it is
+   * pending" (spec 08 §3.4).
+   */
+  readonly delayTicks: number;
+  /** Non-empty list of enemy TYPE ids; each must exist in `enemies.json`. */
+  readonly enemies: readonly string[];
+}
+
+/**
+ * One room template, keyed by the depth it belongs to (M10-T02).
+ *
+ * The table is a SEQUENCE: entry `k` must declare `depth: k`. That single rule
+ * buys three things at once —
+ *
+ *  1. **No drift.** The `depth` field cannot disagree with the entry's position,
+ *     because a disagreement is a load error rather than a silent shadowing.
+ *  2. **Order is explicit.** Room `0` is the opening room and room `k + 1`
+ *     follows it, so the run's shape reads top-to-bottom in the file.
+ *  3. **AC-02 is a one-liner.** "Read the config by depth" is `table[depth]`, and
+ *     "past the end" is a modulo — see `DataManager.getEncounterWaves`.
+ */
+export interface EncounterRoomTemplate {
+  /** Must equal this entry's index in the table (`0`, `1`, `2`, …). */
+  readonly depth: number;
+  /** Ordered, non-empty list of waves. Index `0` is the room's opening wave. */
+  readonly waves: readonly EncounterWaveTemplate[];
+}
+
 /* ========================================================================== *
  * Validation primitives                                                      *
  * ========================================================================== */
@@ -297,6 +343,34 @@ function optionalPositiveInteger(
   label: string,
 ): number | undefined {
   return source[key] === undefined ? undefined : requirePositiveInteger(source, key, label);
+}
+
+/**
+ * @throws SchemaError unless the field is a NON-EMPTY array of non-empty strings.
+ *
+ * Both halves matter, and neither is cosmetic:
+ *  - the empty array would make a wave spawn nothing, which the scheduler reads
+ *    as "this wave has not spawned yet" and wedges the room forever (the same
+ *    reason `EncounterWaveConfig.enemies` must be non-empty, spec 08 §3.4);
+ *  - an empty string is an enemy id that cannot resolve, and it would fail
+ *    later as an "unknown enemy id ''" that names no real typo.
+ */
+function requireNonEmptyStringArray(
+  source: Record<string, unknown>,
+  key: string,
+  label: string,
+): readonly string[] {
+  const value = source[key];
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(`${label}.${key}`, 'a non-empty array of enemy type ids', value);
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    const entry: unknown = value[index];
+    if (typeof entry !== 'string' || entry.length === 0) {
+      fail(`${label}.${key}[${String(index)}]`, 'a non-empty enemy type id', entry);
+    }
+  }
+  return value as readonly string[];
 }
 
 /* ========================================================================== *
@@ -458,6 +532,96 @@ export function parseModifierConfig(id: string, data: unknown): ModifierConfig {
   }
 
   return { radius, damage, lifespanTicks, hitstopTicks, knockbackForce };
+}
+
+/**
+ * Parse (and validate) one wave of a room template (M10-T02).
+ *
+ * @throws SchemaError for a non-object entry, a missing / mistyped `delayTicks`,
+ *   or an `enemies` list that is empty, non-array, or holds a non-string / empty
+ *   entry.
+ */
+export function parseEncounterWaveTemplate(data: unknown, label: string): EncounterWaveTemplate {
+  const source = asRecord(data, label);
+  return {
+    delayTicks: requireNonNegativeInteger(source, 'delayTicks', label),
+    enemies: requireNonEmptyStringArray(source, 'enemies', label),
+  };
+}
+
+/**
+ * Parse (and validate) one room template (M10-T02).
+ *
+ * @param index The entry's position in the table. Enforced to EQUAL the declared
+ *   `depth` — see {@link EncounterRoomTemplate} for why the redundancy is
+ *   deliberate rather than a drift hazard.
+ * @throws SchemaError for a non-object entry, a `depth` that is not a
+ *   non-negative integer, a `depth` that disagrees with `index`, or a `waves`
+ *   list that is empty or holds an invalid wave.
+ */
+export function parseEncounterRoomTemplate(
+  data: unknown,
+  index: number,
+  label: string,
+): EncounterRoomTemplate {
+  const source = asRecord(data, label);
+  const depth = requireNonNegativeInteger(source, 'depth', label);
+  if (depth !== index) {
+    throw new SchemaError(
+      `${label}.depth (${String(depth)}) must equal its position in the table (${String(index)}): the encounter table is an ordered sequence of rooms, so entry ${String(index)} is depth ${String(index)}.`,
+    );
+  }
+
+  const waves = source.waves;
+  if (!Array.isArray(waves) || waves.length === 0) {
+    fail(`${label}.waves`, 'a non-empty array of waves', waves);
+  }
+  const parsedWaves = waves.map((wave, waveIndex) =>
+    parseEncounterWaveTemplate(wave, `${label}.waves[${String(waveIndex)}]`),
+  );
+
+  return { depth, waves: parsedWaves };
+}
+
+/**
+ * Parse (and validate) the whole encounter table — the room sequence a run is
+ * built from (M10-T02, AC-01 / AC-02).
+ *
+ * The table must be a NON-EMPTY array whose entry `k` declares `depth: k`; see
+ * {@link EncounterRoomTemplate}. An empty table is rejected rather than treated
+ * as "a run with no rooms": a run needs at least one room to clear, and the
+ * failure belongs at load time, not at the moment the player's first room fails
+ * to appear.
+ *
+ * Cross-table validation — "does every referenced enemy id exist?" — deliberately
+ * does NOT live here. This parser sees one table; only `DataManager.loadAll` sees
+ * all three, and that is where the check belongs (the same reason `resolveLootDrops`
+ * runs at assembly rather than inside a leaf parser).
+ *
+ * @throws SchemaError under the conditions listed on
+ *   {@link parseEncounterRoomTemplate}, or when the table is not a non-empty
+ *   array.
+ */
+export function parseEncounterTable(data: unknown, label: string): readonly EncounterRoomTemplate[] {
+  if (!Array.isArray(data) || data.length === 0) {
+    fail(label, 'a non-empty array of room templates', data);
+  }
+  return data.map((room, index) =>
+    parseEncounterRoomTemplate(room, index, `${label}[${String(index)}]`),
+  );
+}
+
+/**
+ * Whether `data` would parse as an encounter table — the non-throwing twin of
+ * {@link parseEncounterTable}, implemented in terms of it so the two cannot drift.
+ */
+export function isEncounterTable(data: unknown): boolean {
+  try {
+    parseEncounterTable(data, '__probe__');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

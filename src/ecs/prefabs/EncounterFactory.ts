@@ -20,8 +20,12 @@
 
 import type { EntityId } from '../Entity';
 import { World } from '../World';
+import { DataManager } from '../../data/DataManager';
+import { SchemaError } from '../../data/schemas';
+import type { EncounterWaveTemplate } from '../../data/schemas';
 import { EncounterState, EncounterStateComponent, ENCOUNTER_WAVE_UNSCHEDULED } from '../components/EncounterStateComponent';
 import type { EncounterWaveConfig } from '../components/EncounterStateComponent';
+import type { EnemySpawnOptions } from './spawn-helpers';
 import { EnemyFactory } from './EnemyFactory';
 import { assertNonNegativeInteger } from './spawn-helpers';
 
@@ -41,8 +45,80 @@ export interface EncounterRoomConfig {
    * `[waves, ...rooms]` so there is no invariant to police: a table would make
    * `waves` a duplicate of `roomWaves[0]`, and a duplicate is a drift bug waiting
    * for its first editor.
+   *
+   * As of M10-T02 this is the HAND-BUILT path. A data-backed run does not list
+   * its rooms here at all — `spawnFromData` fills the table from
+   * `assets/data/encounters.json` (see {@link EncounterFactory.spawnFromData}).
    */
   readonly rooms?: readonly (readonly EncounterWaveConfig[])[];
+}
+
+/**
+ * Extra world units between two enemies of the SAME wave when their placement is
+ * derived from a data template (M10-T02).
+ *
+ * A CONSTANT, not a random offset, for the same reason `DEPTH_SPAWN_SPACING_UNITS`
+ * is one: a data-backed run must be reproducible, and two enemies must not spawn
+ * inside each other (overlapping hurtboxes would read as "one enemy" to the
+ * player and to a collision assertion).
+ */
+export const ENCOUNTER_FORMATION_SPACING_UNITS = 2;
+
+/**
+ * Turn a wave template's enemy TYPE ids into a placeable roster (M10-T02).
+ *
+ * The formation is the deliberate answer to "the JSON says three raiders — where
+ * do they stand?". Placement is a per-INSTANCE fact and cannot be written down
+ * once for a TYPE, so the file does not try: it names the types, and this pure
+ * function lays them out on a horizontal line CENTRED on the room origin, spaced
+ * by {@link ENCOUNTER_FORMATION_SPACING_UNITS}. So a one-enemy wave stands at
+ * `x = 0`, a two-enemy wave at `x = ±1`, a three-enemy wave at `x = -2, 0, +2`.
+ *
+ * Pure and exported so the layout rule is testable without standing up a room,
+ * and so the whole conversion is a function of the template alone — same
+ * template, same roster, every time (spec 00 §6.2).
+ */
+export function formWaveRoster(enemyIds: readonly string[]): EnemySpawnOptions[] {
+  const count = enemyIds.length;
+  return enemyIds.map((enemyId, index) => ({
+    enemyId,
+    x: (index - (count - 1) / 2) * ENCOUNTER_FORMATION_SPACING_UNITS,
+    y: 0,
+  }));
+}
+
+/**
+ * Convert parsed wave TEMPLATES (plain data from `encounters.json`) into the
+ * `EncounterWaveConfig`s the scheduler reads (M10-T02).
+ *
+ * The only translation between the two vocabularies, kept in one place so the
+ * data layer never has to know about placement and the scheduler never has to
+ * know about JSON.
+ */
+export function toEncounterWaveConfigs(
+  templates: readonly EncounterWaveTemplate[],
+): readonly EncounterWaveConfig[] {
+  return templates.map((template) => ({
+    delayTicks: template.delayTicks,
+    enemies: formWaveRoster(template.enemies),
+  }));
+}
+
+/**
+ * The waves of the room at `depth`, read from the encounter table (M10-T02,
+ * AC-02).
+ *
+ * This is the single seam through which a run's room layout enters the engine:
+ * `spawnFromData` calls it once per configured depth at assembly time, and
+ * `descendEncounterRoom` calls it as the past-the-end fallback. Both callers ask
+ * the same question, so they cannot disagree about what "the room at depth `d`"
+ * means.
+ *
+ * @throws SchemaError when no encounter table is loaded, or when `depth` is not a
+ *   non-negative integer (see `DataManager.getEncounterWaves`).
+ */
+export function resolveEncounterWaves(depth: number): readonly EncounterWaveConfig[] {
+  return toEncounterWaveConfigs(DataManager.getEncounterWaves(depth));
 }
 
 /**
@@ -134,6 +210,41 @@ export function resolveEncounterConfig(config: EncounterRoomConfig): readonly En
   return opening;
 }
 
+/**
+ * Advance a cleared room to the next depth (M10-T02, refactoring the M9-T01
+ * descent out of `RewardSystem`).
+ *
+ * The transition is the whole of "settle a draft and go deeper", and it lives here
+ * — beside the assembly that CREATED the room — so there is exactly one
+ * implementation of it and `RewardSystem` reads as "grant, then descend" instead of
+ * carrying a seven-line block of state writes that no other file can reuse.
+ *
+ * The next room's waves are resolved in two steps, and the ORDER is the contract:
+ *
+ *  1. `roomWaves[currentRoomIndex]` — the depth-indexed table the room was
+ *     assembled with. This is the fast path for every room of a normal run, and it
+ *     is what keeps the room's configuration SNAPSHOT-VISIBLE (spec 15 §3.5): the
+ *     table travelled with the component, so a replay needs no external lookup.
+ *  2. `resolveEncounterWaves(room.depth)` — the past-the-end fallback (AC-02's
+ *     "循环复用 / 兜底生成"), read from `DataManager` by the room's CURRENT depth.
+ *     Only reachable for a hand-assembled room whose `maxRooms` exceeds its
+ *     `roomWaves` length; a data-backed run always wins the run on its final room
+ *     before the index can run off the end.
+ *
+ * `depth` and `currentRoomIndex` both rise because they answer different questions
+ * (descents vs. rooms, spec 15 §3.5); keeping them in one write is what stops them
+ * drifting apart here.
+ */
+export function descendEncounterRoom(room: EncounterStateComponent): void {
+  room.currentRoomIndex += 1;
+  room.depth += 1;
+  room.waves = room.roomWaves[room.currentRoomIndex] ?? resolveEncounterWaves(room.depth);
+  room.state = EncounterState.IN_PROGRESS;
+  room.currentWaveIndex = 0;
+  room.trackedEntityIds = [];
+  room.nextSpawnTick = ENCOUNTER_WAVE_UNSCHEDULED;
+}
+
 export class EncounterFactory {
   /**
    * Create the room's singleton entity, carrying the validated configuration in its
@@ -176,5 +287,44 @@ export class EncounterFactory {
       ),
     );
     return entity.id;
+  }
+
+  /**
+   * Create the room singleton for a DATA-BACKED run (M10-T02, AC-01 / AC-02).
+   *
+   * The run's whole room table is read from `assets/data/encounters.json`, one
+   * entry per configured depth, and handed to {@link spawn} — which means the
+   * layout of a run is a JSON edit and the caller (`buildRun` in `client/main.ts`,
+   * or a test) declares nothing at all. That is the point: before M10-T02 the demo
+   * run's rooms were a literal in client source, so "how many rooms, and what is
+   * in each" had a second answer outside the data layer.
+   *
+   * Depth is the ONLY index. Room `d` is the table's entry `d` (`DataManager`
+   * enforces `depth === index`), so there is no second list to keep in step and no
+   * "room table" concept in the engine beyond "the config, by depth".
+   *
+   * The assembled table is still validated by {@link resolveEncounterRooms} (the
+   * dry-run assembly), so a data-backed run enjoys exactly the same load-time
+   * guarantees as a hand-built one — including the cross-table check that every
+   * referenced enemy type exists, which `DataManager.loadAll` already performed.
+   *
+   * @throws SchemaError when no encounter table is loaded (Bootstrap never ran, or
+   *   it ran against a bundle that ships no rooms).
+   * @throws RangeError under the conditions listed on `resolveRoomWaves`.
+   */
+  public static spawnFromData(world: World): EntityId {
+    const roomWaves: (readonly EncounterWaveConfig[])[] = [];
+    for (const depth of DataManager.encounterDepths) {
+      roomWaves.push(resolveEncounterWaves(depth));
+    }
+
+    const opening = roomWaves[0];
+    if (opening === undefined) {
+      throw new SchemaError(
+        'no encounter config is loaded, so a run cannot be assembled: run the Bootstrap phase (bootstrapData()) before building a run (spec 17 AC-01).',
+      );
+    }
+
+    return EncounterFactory.spawn(world, { waves: opening, rooms: roomWaves.slice(1) });
   }
 }

@@ -33,6 +33,15 @@
  *     the LAST room ends the run with the victory overlay instead of a draft
  *     (spec 15 AC-01 / AC-02 / AC-04). `R` restarts from either terminal overlay.
  *
+ * M10-T02 moves the run's SHAPE out of this file and adds the dev loop that makes
+ * data edits visible without a page reload:
+ *   - the rooms come from `assets/data/encounters.json` via
+ *     `EncounterFactory.spawnFromData` (read BY DEPTH), so this file no longer
+ *     declares a wave roster at all (spec 17 AC-01 / AC-02);
+ *   - `client/bundled.ts` owns the raw JSON imports and installs a Vite HMR hook:
+ *     editing a table re-validates it through `DataManager.loadAll` and re-opens the
+ *     same run against it, with the render layer reset so no FX survive (AC-03).
+ *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
  * seed is chosen, which is what keeps the wall clock and any entropy out of `src/`
@@ -48,7 +57,6 @@ import { createDefaultSystems } from '../src/ecs/systems/pipeline';
 import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
 import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
-import { bootstrapData } from '../src/data/index';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import {
@@ -61,6 +69,7 @@ import { GameRenderer } from './GameRenderer';
 import { GameLoop } from './GameLoop';
 import { KeyboardInput } from './KeyboardInput';
 import { UIManager } from './UIManager';
+import { bootstrapClientData, installDataHotReload } from './bundled';
 
 /**
  * The run's seed. Fixed here so a reload reproduces the same drafts; `restartRun`
@@ -70,17 +79,6 @@ import { UIManager } from './UIManager';
 const SEED = 0x12345678;
 
 const PLAYER_MAX_HP = 100;
-
-/**
- * The two demo enemy TYPES (M10-T01).
- *
- * Their health, speed, body size, AI tuning, hazard tuning and loot all live in
- * `assets/data/enemies.json`. This file only says WHICH type to place and WHERE, so
- * re-tuning the demo fight is a data edit rather than a code change — and there is
- * no second copy of "40 HP" to drift out of step with the config.
- */
-const RAIDER = 'raider';
-const BOMBER = 'bomber';
 
 function mountCanvas(app: Application): void {
   const mount = document.getElementById('app');
@@ -92,16 +90,22 @@ function mountCanvas(app: Application): void {
 /**
  * Boot the data layer, then the presentation layer (M10-T01, spec 16 AC-03).
  *
- * `await bootstrapData()` is the FIRST thing that happens, and it is deliberately
- * awaited BEFORE `new Application()` and before any `GameSimulator` exists: the
- * engine's config table must be filled and validated while the process is still
- * allowed to fail, because `step()` is a synchronous loop that can neither await
- * nor recover. A malformed `assets/data/*.json` therefore aborts the boot with a
- * `SchemaError` naming the exact field, instead of producing a run whose enemies
+ * `await bootstrapClientData()` is the FIRST thing that happens, and it is
+ * deliberately awaited BEFORE `new Application()` and before any `GameSimulator`
+ * exists: the engine's config table must be filled and validated while the process
+ * is still allowed to fail, because `step()` is a synchronous loop that can neither
+ * await nor recover. A malformed `assets/data/*.json` therefore aborts the boot with
+ * a `SchemaError` naming the exact field, instead of producing a run whose enemies
  * have `NaN` health.
+ *
+ * M10-T02: the config now comes from `./bundled`, not from `src/data/index`. That is
+ * a deliberate build-concern decision, not a layering change — the tables still go
+ * through the same `DataManager.loadAll` validation, but the Vite entry must be the
+ * module that OWNS the raw JSON imports for the dev-mode hot reload to have a
+ * boundary to stop at (spec 17 §4.3).
  */
 async function main(): Promise<void> {
-  await bootstrapData();
+  await bootstrapClientData();
 
   const app = new Application();
 
@@ -129,10 +133,15 @@ void main();
  * nearest hostile, so this function never needs to know the player's id — which
  * matters because after a restart the player has a new one.
  *
- * M9-T01: the run is TWO rooms. Room 1 is the opening fight and rolls a draft on
- * clear; room 2 is the boss room, and clearing it ends the run with `RUN_WON`
- * instead of a draft (spec 15 AC-04). Every enemy drops loot, so the wallet in the
- * HUD has something to fill it.
+ * M10-T02: the ROOMS are no longer declared here. `EncounterFactory.spawnFromData`
+ * reads the run's whole room sequence from `assets/data/encounters.json` by depth
+ * (spec 17 AC-01 / AC-02), so "how many rooms, which enemy types, how many of each,
+ * and how long each wave waits" is a data edit. What remains in this file is the one
+ * thing data cannot express: the player's spawn, and the run's state singleton.
+ *
+ * This function is also the reason a data hot reload works end to end: `restartRun`
+ * calls it again, so a JSON edit re-reads the (already re-installed) config table and
+ * rebuilds the run from the new numbers.
  */
 function buildRun(world: World): void {
   PlayerFactory.spawn(world, {
@@ -143,33 +152,8 @@ function buildRun(world: World): void {
     maxHp: PLAYER_MAX_HP,
   });
 
-  const enemy = (x: number, y: number) => ({ enemyId: RAIDER, x, y });
-
-  /**
-   * The bomb planter (M8-T01): the same enemy, plus `hazard`. On every windup it
-   * plants a 30-tick telegraph at the player's feet AND swings — the telegraphed
-   * AoE is what makes standing still a decision rather than a default. It pays out
-   * more, and leaves a flask (M9-T01).
-   */
-  const bomber = (x: number, y: number) => ({ enemyId: BOMBER, x, y });
-
-  /**
-   * A two-wave opening room, then a two-wave boss room. AI enemies (`ai` and
-   * hardware input are mutually exclusive — the player is the device-driven one) so
-   * the fight plays itself out.
-   */
-  EncounterFactory.spawn(world, {
-    waves: [
-      { delayTicks: 0, enemies: [enemy(5, 0)] },
-      { delayTicks: 120, enemies: [enemy(-5, 2), bomber(5, -2)] },
-    ],
-    rooms: [
-      [
-        { delayTicks: 0, enemies: [enemy(-6, 0), enemy(6, 0)] },
-        { delayTicks: 120, enemies: [enemy(-6, 3), bomber(6, -3)] },
-      ],
-    ],
-  });
+  // The run's rooms, read by depth from `assets/data/encounters.json`.
+  EncounterFactory.spawnFromData(world);
 
   // The run's state singleton (M8-T01). Without it a player death would be an
   // ordinary death and the death overlay could never appear (spec 14 AC-11) — and
@@ -240,6 +224,26 @@ function start(app: Application): void {
     });
   }
   installHud(app, sim, renderer);
+
+  // Dev-mode data hot reload (M10-T02, spec 17 AC-03). Editing any
+  // `assets/data/*.json` re-runs `DataManager.loadAll` with the new contents and
+  // then re-opens the SAME run against them:
+  //
+  //  - `sim.currentSeed` (not `undefined`) keeps the reload a pure CONFIG change —
+  //    a data edit must not quietly become a free re-roll (ADR-004);
+  //  - `renderer.reset()` drops every cached view, every damage floater and the
+  //    retired-id set, so nothing from the previous run can ghost over the new one.
+  //    Entity views would clean themselves up, but floaters live on REAL time and
+  //    would otherwise keep rising for up to a second.
+  //
+  // `installDataHotReload` is a no-op in a production build (`import.meta.hot` is
+  // undefined there), so this block costs a built game nothing.
+  installDataHotReload({
+    onReload: () => {
+      sim.restartRun(sim.currentSeed);
+      renderer.reset();
+    },
+  });
 }
 
 /** Minimal diagnostics HUD: tick / run status / player hp / counts / live draft. */

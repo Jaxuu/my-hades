@@ -31,7 +31,8 @@
 
 ## 4 工程风险
 - ESLint AST 门（仅 `src/**`）：禁 window/document、`Math.random`/`Date.now`、`new Date()`/`localeCompare`/`toLocale*`/`new Intl`、`pixi.js`、`**/client/**`。`no-unused-vars` 三个 ignore 均 `^_`；`no-explicit-any` 全仓生效。
-- ESLint 钉 9.x；`vite` 留 5.x（`vitest@2.1.8` peer）；vitest 必须 `pool:'threads'`。根 tsconfig 不 include `client/` ⇒ `tsconfig.client.json`+`typecheck:client`。
+- ESLint 钉 9.x；`vite` 留 5.x（`vitest@2.1.8` peer）；vitest 必须 `pool:'threads'`。根 tsconfig 不 include `client/` ⇒ `tsconfig.client.json`（`types:["node","vite/client"]`，`import.meta.hot` 需要）+`typecheck:client`。
+- 测试夹具陷阱：`createDefaultSystems()` **构造期**读 `zeus_strike`/`poseidon_dash` ⇒ mock bundle **不得清空词缀表**（否则流水线构造不出来）。尸体永不销毁 ⇒ 断言存活数必须过滤 `isDead`。
 - npm 锁文件平台相关。远端 github.com/Jaxuu/my-hades（PUBLIC, `main`）——切勿提交密钥。
 
 ## 5 里程碑铁律
@@ -53,9 +54,11 @@
 
 **M10 数据驱动**：`assets/data/{enemies,modifiers}.json` 是唯一数值来源；`src/data/` 三层 `schemas.ts`（类型+`SchemaError`+运行时校验）／`DataManager`（静态注册表 `loadAll`/`getEnemyConfig`/`getModifierConfig`）／`bundled.ts`（异步 Bootstrap，早于 `GameSimulator` 构造）；`EnemyFactory.spawn(world, enemyId, placement?)` 只收 **id+位姿/目标**，`spawnElite` 走配置的 `elite` 变体；词缀 handler 构造期读配置。**加载期大声抛，运行时零校验**。
 
+**M10-T02 遭遇/HMR**：`assets/data/encounters.json` = **有序数组**，条目 `k` 必须 `depth===k`；波次只写敌人**类型 id 字符串**，站位由 `formWaveRoster` 确定性推导（水平等距线居中，间距 2）。`RawConfigTables.encounters` **可选且「缺席 ≠ 空数组」**（缺席=不提供房间；`[]`=非法）。**跨表校验只能在 `loadAll`**（需两张表）。`DataManager.getEncounterWaves(depth)` **超界循环 `depth%n`（非钳制）**，非整数/负数抛。`EncounterFactory.spawnFromData` 按 `encounterDepths` 装配整局；`spawn(world,config)` 手写路径签名不变；下降收敛到 `descendEncounterRoom`（`roomWaves[index] ?? resolveEncounterWaves(room.depth)`）——`RewardSystem` 每拍循环仍零配置读取。**`buildWaveRoster` 深度盘保留**（与按深度选房间正交叠加 ⇒ 数量=表内+depth）。**`src/` 零 `import.meta`**；HMR 只在 `client/bundled.ts`（Vite 入口必须**自己** import JSON 并 accept，否则传播到 `client/main.ts` ⇒ 整页刷新；故 main 不再 import `src/data/index`）。重载=`DataManager.loadAll` + `restartRun(sim.currentSeed)`（**同种子**，非重掷）+ `GameRenderer.reset()`（清 views/`floatingTexts`/`fxLayer`/`retired`；**≠ `destroy()`**，是运行边界操作）。失败**软着陆**（try/catch + 原子性保旧表）。
+
 ## 6 编排
 先冻结、再评审、后修复。派单带 Task ID/角色/优先级/上下文/Deliverables/Output Path/Handoff。高影响动作（commit/发布/删除）须人工审批；默认不 commit。
 
 ## 7 进度
-M0–M4 ✅209 · M5-T01 ✅212 · M5-T02 ✅234 · M6-T01 ✅264 · M6-T02 ✅285 · M7-T01 ✅336 · M8-T01 ✅359 · M9-T01 ✅394 · **M10-T01 ✅414**（数据驱动管线；管道仍 **17 段**；`test`/`lint`/`typecheck`/`typecheck:client`/`build` 全绿；**未 commit**）。
+M0–M4 ✅209 · M5-T01 ✅212 · M5-T02 ✅234 · M6-T01 ✅264 · M6-T02 ✅285 · M7-T01 ✅336 · M8-T01 ✅359 · M9-T01 ✅394 · M10-T01 ✅414 · **M10-T02 ✅436**（遭遇序列数据化 + JSON HMR；管道仍 **17 段**；`test`/`lint`/`typecheck`/`typecheck:client`/`build` 全绿；**未 commit**）。
 权威规格 `specs/00`…`specs/16`。ADR-001(headless ECS) · ADR-002(渲染插值) · ADR-004(确定性 PRNG)。

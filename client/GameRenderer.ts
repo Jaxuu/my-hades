@@ -293,6 +293,62 @@ export class GameRenderer {
   }
 
   /**
+   * Drop every cached view, every live floater and the retired-id set, WITHOUT
+   * tearing down the render root or the PixiJS application (M10-T02).
+   *
+   * WHY THIS EXISTS, AND WHY IT IS NOT `destroy()`
+   * ---------------------------------------------
+   * `destroy()` is a teardown: it destroys the root, so the renderer is finished
+   * and `init()` would have to run again. A dev-mode data hot reload needs the
+   * opposite — the loop keeps running, the `Application` keeps its canvas, and the
+   * ONLY thing that must go is the presentation state that belonged to the run
+   * being thrown away. Rebuilding the app would also mean re-mounting the canvas,
+   * which is a visible flash rather than a reload.
+   *
+   * WHY A RESET IS NEEDED AT ALL, GIVEN `restartRun` DESTROYS EVERY ENTITY
+   * ---------------------------------------------------------------------
+   * Entity views clean themselves up (a destroyed entity leaves `query`, so
+   * `recycleDestroyed` recycles its view on the next sync), but two kinds of state
+   * do NOT:
+   *
+   *  - **Damage floaters.** They live for `FLOATING_TEXT_LIFETIME_MS` of REAL time
+   *    and are driven by the ticker, not by the world. A `-40` left over from the
+   *    previous run would keep rising over the new one for up to a second — the
+   *    "重影" a hot reload must not show.
+   *  - **The retired-id set.** It is deliberately never pruned (see `retired`), so
+   *    it would accumulate across every reload. Ids are never reused, so clearing
+   *    it cannot resurrect a corpse — and NOT clearing it would be a slow leak.
+   *
+   * Call it at a RUN BOUNDARY, immediately after `GameSimulator.restartRun`:
+   * clearing `retired` while corpses of the CURRENT run are still in the world
+   * would let their views be rebuilt, which is the one thing the set prevents.
+   * The next `syncWorld` then rebuilds the scene from the fresh run.
+   */
+  public reset(): void {
+    for (const view of this.views.values()) {
+      view.container.destroy({ children: true });
+    }
+    this.views.clear();
+
+    for (const entry of this.floatingTexts) {
+      entry.node.destroy();
+    }
+    this.floatingTexts.length = 0;
+
+    // Defensive sweep: anything still parented to the FX layer that is not a
+    // tracked floater would otherwise survive the reset and ghost over the new run.
+    // There is nothing like that today — `spawnFloatingText` is the only writer —
+    // but a future FX that forgets to register itself would fail silently.
+    this.fxLayer.removeChildren().forEach((child) => {
+      child.destroy();
+    });
+
+    // Safe at a run boundary: ids are never reused (`World.nextId` is never
+    // reset), so every id in the set belongs to the run that just ended.
+    this.retired.clear();
+  }
+
+  /**
    * Step ① — build a view for every entity that has a `TransformComponent`, EXCEPT
    * ids whose death FX already finished (see `retired`).
    */

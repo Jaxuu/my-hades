@@ -110,6 +110,23 @@ export class GameSimulator {
     return this.scheduler.size;
   }
 
+  /**
+   * The seed of the world's CURRENT PRNG stream (M10-T02).
+   *
+   * A read-only projection of `world.rng.seed`, added so a caller that wants to
+   * restart a run "as it is" — `restartRun(sim.currentSeed)` — can say so without
+   * reaching into the world for the generator. That is exactly what the dev-mode
+   * data hot reload needs: a config edit must re-open the SAME run against the NEW
+   * numbers, so the reload is a pure config change rather than a config change
+   * plus a surprise re-roll.
+   *
+   * Note it is NOT "the seed the run started with": `restartRun` advances it, so
+   * this always reports the stream the current run is drawing from.
+   */
+  public get currentSeed(): number {
+    return this.world.rng.seed;
+  }
+
   public registerSystem(system: System): void {
     this.scheduler.register(system);
   }

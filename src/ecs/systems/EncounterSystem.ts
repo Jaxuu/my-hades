@@ -41,6 +41,15 @@
  * `EncounterStateComponent` (spec 00 §6.1). The only thing this class owns is its
  * name — and, as of M6-T01, the PRNG draw it performs through `world.rng` (the
  * generator itself is owned by the World, so no state is hidden here either).
+ *
+ * M10-T02 changes where the waves COME FROM, not what this system does with them.
+ * The room's waves are no longer a literal assembled in client source: a
+ * data-backed run is built by `EncounterFactory.spawnFromData`, which reads
+ * `assets/data/encounters.json` BY DEPTH (`DataManager.getEncounterWaves`) and
+ * converts each wave template into the roster this scheduler consumes. So the
+ * composition, the enemy types, the counts and every `delayTicks` are data, while
+ * the per-tick decision below stays exactly what spec 08 AC-03 defines it as —
+ * which is why this system reads no config at all and remains a pure scheduler.
  */
 
 import type { System, SystemContext } from '../System';
