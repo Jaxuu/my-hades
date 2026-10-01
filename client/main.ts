@@ -70,6 +70,18 @@
  *     survives a page reload — and every write is a run-boundary event, never a
  *     per-tick one.
  *
+ * M14-T01 gives the run a VOICE and an IMPACT, still with `src/` untouched:
+ *   - a `ClientEventBridge` is injected as the pipeline's three event buses
+ *     (`createDefaultSystems(bridge.hitQueue, bridge.deathQueue, bridge.dashQueue)`),
+ *     so the hit / death / dash facts the engine already publishes are retained for
+ *     the render layer (spec 22 AC-01);
+ *   - the `GameLoop` drains that bridge once per frame and fans it out to the
+ *     renderer (screen shake + hit sparks) and to the `AudioManager` (hit / dash
+ *     chimes). The bridge is dropped at every run boundary (`onStartRun`, the data
+ *     hot reload), because `restartRun` destroys the entities its events reference;
+ *   - the coin chime is driven by a per-frame GOLD read (there is no pickup event),
+ *     purely observational.
+ *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
  * seed is chosen and the only place the save is stored, which is what keeps the
@@ -88,7 +100,7 @@ import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
 import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
-import { readDarkness } from '../src/ecs/components/InventoryComponent';
+import { readDarkness, readGold } from '../src/ecs/components/InventoryComponent';
 import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import {
   EncounterStateComponent,
@@ -102,6 +114,8 @@ import { GameRenderer } from './GameRenderer';
 import { GameLoop } from './GameLoop';
 import { KeyboardInput } from './KeyboardInput';
 import { UIManager } from './UIManager';
+import { ClientEventBridge } from './ClientEventBridge';
+import { AudioManager } from './AudioManager';
 import { bootstrapClientData, installDataHotReload } from './bundled';
 import { loadSaveState, persistSaveState } from './SaveStore';
 
@@ -250,8 +264,14 @@ function start(app: Application): void {
   const storage = resolveStorage();
   const saveState = loadSaveState(storage);
 
+  // M14-T01: the client event bridge OBSERVES the logic buses WITHOUT touching
+  // `src/`. Its three tee queues are injected AS the pipeline's buses, so every hit
+  // / death / dash the engine already publishes is retained for this frame's
+  // presentation (spec 22 §4.1). The pipeline still sees plain `EventQueue`s.
+  const bridge = new ClientEventBridge();
+
   const sim = new GameSimulator({
-    systems: createDefaultSystems(),
+    systems: createDefaultSystems(bridge.hitQueue, bridge.deathQueue, bridge.dashQueue),
     seed: SEED,
     runSetup: buildRun,
     initialSaveState: saveState,
@@ -264,7 +284,11 @@ function start(app: Application): void {
   renderer.init();
 
   const input = new KeyboardInput(window);
-  const loop = new GameLoop(sim, renderer, input);
+  // M14-T01: the audio channel is created once, after the app exists. It is
+  // best-effort — every method is a silent no-op when there is no audio backend,
+  // so this never throws and never blocks the boot (spec 22 §4.4).
+  const audio = new AudioManager();
+  const loop = new GameLoop(sim, renderer, input, bridge, audio);
 
   const uiRoot = document.getElementById('ui-layer');
   const ui =
@@ -310,6 +334,10 @@ function start(app: Application): void {
             // but the call keeps the invariant "every save mutation is followed by
             // a write" obvious rather than conditional.
             sim.restartRun();
+            // M14-T01: a restart destroys the entities the bridge may still hold
+            // events for, so the buffer is dropped at the SAME boundary
+            // (`scheduler.reset` cannot reach a client-side buffer). spec 22 §4.1.
+            bridge.clear();
             persistSaveState(storage, sim.saveState);
           },
         });
@@ -347,7 +375,31 @@ function start(app: Application): void {
     onReload: () => {
       sim.restartRun(sim.currentSeed);
       renderer.reset();
+      // M14-T01: same run boundary as `renderer.reset()` — drop any event still
+      // buffered for the run being thrown away (spec 22 §4.1).
+      bridge.clear();
     },
+  });
+
+  installCoinChime(app, sim, audio);
+}
+
+/**
+ * M14-T01: play the coin chime whenever the player's gold INCREASES.
+ *
+ * WHY A GOLD OBSERVER RATHER THAN A BRIDGE EVENT: the logic layer publishes no
+ * "pickup collected" event (there is no pickup bus), so the only honest signal is
+ * the wallet itself. This rides the same per-frame read the HUD already does —
+ * purely observational, and it never touches `World` (spec 22 §7 T4).
+ */
+function installCoinChime(app: Application, sim: GameSimulator, audio: AudioManager): void {
+  let lastGold = readGold(sim.world);
+  app.ticker.add(() => {
+    const gold = readGold(sim.world);
+    if (gold > lastGold) {
+      audio.playCoin();
+    }
+    lastGold = gold;
   });
 }
 

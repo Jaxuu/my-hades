@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@types/howler": "^2.2.13",
     "@types/node": "^22.10.2",
     "eslint": "^9.39.5",
     "typescript": "^5.7.2",
@@ -27,6 +28,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "howler": "^2.2.4",
     "pixi.js": "^8.21.0"
   }
 }

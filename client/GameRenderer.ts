@@ -44,6 +44,15 @@
  * is therefore ALREADY fixed to the screen — which is exactly why the Pixi side
  * needs no screen-space container of its own.
  *
+ * M14-T01 adds item 5 — SCREEN SHAKE and HIT SPARKS — driven by this frame's
+ * logic events (`FrameEvents`, drained from `ClientEventBridge` and passed as the
+ * new optional third argument of `syncWorld`). Both are pure observations: the
+ * shake is a decaying random offset layered on top of the camera follow (EXACTLY
+ * zero at rest), and the sparks live in a lazily-mounted `VFXManager` layer that
+ * exists only while a spark is alive. Neither the shake nor the particles can
+ * alter the pre-M14 scene graph in the idle case, which is what keeps the frozen
+ * M5/M12 render contracts intact.
+ *
  * One-way dependency: this module imports `src/` (types + components) but `src/`
  * must never import it back (enforced by ESLint, spec 09 AC-01).
  */
@@ -65,6 +74,9 @@ import { isDead } from '../src/ecs/components/DeadTagComponent';
 import { HazardComponent } from '../src/ecs/components/HazardComponent';
 import { PickupComponent, PickupKind } from '../src/ecs/components/PickupComponent';
 import { WallComponent } from '../src/ecs/components/WallComponent';
+
+import type { FrameEvents } from './ClientEventBridge';
+import { VFXManager } from './VFXManager';
 
 /**
  * The render layer's ONE constant contract: world units -> pixels (spec 09 C8).
@@ -105,6 +117,19 @@ const FLOATING_TEXT_OFFSET_PX = 22;
 
 /** Total upward travel (px) of a floater over its whole lifetime. */
 const FLOATING_TEXT_RISE_PX = 28;
+
+/**
+ * Screen-shake duration (real ms) after a landed hit (M14-T01, spec 22 §3.4).
+ *
+ * A short, punchy window: long enough to read as impact, short enough that it
+ * decays fully back to zero before the camera-convergence assertions can ever
+ * observe it (spec 20 AC-03). While no hit is active the shake offset is EXACTLY
+ * `0`, so the follow lerp is bit-for-bit the pre-M14 behaviour.
+ */
+const SHAKE_DURATION_MS = 180;
+
+/** Peak screen-shake offset (px) at the instant of impact; decays linearly to 0. */
+const SHAKE_INTENSITY = 6;
 
 const PLAYER_COLOR = 0x4da3ff;
 const ENEMY_COLOR = 0xff4d4d;
@@ -338,6 +363,26 @@ export class GameRenderer {
    */
   private readonly retired = new Set<EntityId>();
 
+  /**
+   * Remaining screen-shake time (real ms) and its peak intensity (px) (M14-T01).
+   * Both are ZERO at rest, so `shakeIntensityAt()` returns exactly `0` and the
+   * camera is untouched by shake in the idle case (spec 22 §3.4) — which is what
+   * keeps the frozen camera-convergence assertions exact.
+   */
+  private shakeTimeMs = 0;
+  private shakeIntensity = 0;
+
+  /**
+   * The transient particle pool (M14-T01). Its layer is mounted into the CAMERA
+   * subtree LAZILY — only while sparks are alive — so an idle scene graph is
+   * byte-for-byte the pre-M14 one (spec 20 I13, spec 22 §4.3). `VFXManager`
+   * depends only on `pixi.js`, so it is safe to import here (spec 22 §2.5).
+   */
+  private readonly vfx = new VFXManager();
+
+  /** True while {@link vfx}'s layer is parented to the camera. */
+  private vfxAttached = false;
+
   constructor(app: Application) {
     this.app = app;
   }
@@ -368,6 +413,20 @@ export class GameRenderer {
   /** Live static-geometry block count (diagnostics / HUD). Zero when there are no walls. */
   public get wallViewCount(): number {
     return this.wallViews.size;
+  }
+
+  /** Live hit-spark count (diagnostics / assertions). Zero at rest (M14-T01). */
+  public get sparkCount(): number {
+    return this.vfx.particleCount;
+  }
+
+  /**
+   * Remaining screen-shake time in real milliseconds (diagnostics / assertions).
+   * Exactly `0` at rest — which is the observable form of "no hit => no shake"
+   * (M14-T01, spec 22 §3.4).
+   */
+  public get shakeTimeRemainingMs(): number {
+    return this.shakeTimeMs;
   }
 
   /** Attach the camera (and, under it, the render root and its FX layer) to the
@@ -403,15 +462,27 @@ export class GameRenderer {
    *
    * Real frame time for the visual FX is read from the app ticker: it is a VISUAL
    * concern and must not feed back into the simulation (spec 09 §3.6).
+   *
+   * M14-T01 adds a THIRD, OPTIONAL parameter: this frame's logic events
+   * (`FrameEvents`, drained from `ClientEventBridge`). It drives the screen shake
+   * and the hit/dash sparks. It is ADDITIVE and defaults to `undefined`, so the
+   * frozen `syncWorld(world)` / `syncWorld(world, alpha)` call shapes keep
+   * type-checking and behaving EXACTLY as before (spec 22 §4.3). The parameter
+   * carries facts the engine already published — the renderer still writes
+   * nothing back to `World`.
    */
-  public syncWorld(world: World, alpha = 1): void {
+  public syncWorld(world: World, alpha = 1, frameEvents?: FrameEvents): void {
     const clampedAlpha = Math.min(1, Math.max(0, alpha));
+    const deltaMs = this.app.ticker.deltaMS;
     // M12-T01: the room's geometry is drawn FIRST so it lands behind everything —
     // both inside the static layer (floor before walls) and on the stage (the layer
     // sits at index 0, below the render root).
     this.syncStaticGeometry(world);
     this.createMissingViews(world);
     this.syncTransforms(world, clampedAlpha);
+    // M14-T01: age + spawn transient FX and (re)trigger the screen shake BEFORE the
+    // camera is moved, so a hit landing this frame shakes the camera THIS frame.
+    this.syncEffects(deltaMs, frameEvents);
     // M12-T02: the camera is moved AFTER the transforms are projected, so it tracks
     // the INTERPOLATED player position (what the player actually sees) rather than
     // the raw logic coordinate (which would be half a frame ahead).
@@ -421,9 +492,9 @@ export class GameRenderer {
     this.syncHazards(world);
     // Age the floaters that already exist BEFORE spawning this frame's, so a fresh
     // floater starts at full alpha instead of losing a frame of life immediately.
-    this.advanceFloatingTexts(this.app.ticker.deltaMS);
+    this.advanceFloatingTexts(deltaMs);
     this.detectDamage(world);
-    this.advanceDeaths(this.app.ticker.deltaMS);
+    this.advanceDeaths(deltaMs);
     this.recycleDestroyed(world);
   }
 
@@ -439,6 +510,11 @@ export class GameRenderer {
     // `root` does not reach it — it has to be torn down explicitly or its blocks
     // would outlive the renderer.
     this.teardownStaticLayer();
+    // M14-T01: the particle layer may be parented to the camera. Destroy it FIRST
+    // (which detaches it) so the camera's recursive destroy below cannot double-free
+    // it.
+    this.vfx.destroy();
+    this.vfxAttached = false;
     // M12-T02: the camera is now the thing attached to the stage, so IT is what has
     // to be destroyed. `{ children: true }` reaches the render root, its entity
     // views, and the FX layer (with any floater still parented to it) in one pass.
@@ -506,6 +582,15 @@ export class GameRenderer {
     // operation, and avoids a visible pan across the new room on the first frame.
     this.cameraContainer.x = 0;
     this.cameraContainer.y = 0;
+
+    // M14-T01: the shake and the sparks also belong to the run being thrown away.
+    // Dropping them here (and unmounting the now-empty layer) keeps `reset()` a
+    // complete "forget the previous run" operation, the same discipline the floaters
+    // and the static layer follow.
+    this.shakeTimeMs = 0;
+    this.shakeIntensity = 0;
+    this.vfx.clear();
+    this.syncVfxLayer();
 
     // M12-T01: the room's geometry belongs to the run being thrown away. Dropping
     // the blocks here (rather than waiting for the next sync to notice the walls are
@@ -744,7 +829,97 @@ export class GameRenderer {
       const targetY = this.screenHeight() / 2 - view.container.y;
       this.cameraContainer.x += (targetX - this.cameraContainer.x) * CAMERA_LERP_FACTOR;
       this.cameraContainer.y += (targetY - this.cameraContainer.y) * CAMERA_LERP_FACTOR;
+
+      // M14-T01: the shake is layered ON TOP of the follow lerp. `shakeIntensityAt()`
+      // is EXACTLY 0 when no hit is active, so this branch is skipped and the camera
+      // is byte-for-byte the pre-M14 follow — which is what keeps the frozen camera
+      // convergence assertions (`toBeCloseTo(..., 6)`) exact (spec 22 §4.2).
+      const shake = this.shakeIntensityAt();
+      if (shake > 0) {
+        this.cameraContainer.x += (Math.random() - 0.5) * shake;
+        this.cameraContainer.y += (Math.random() - 0.5) * shake;
+      }
       return;
+    }
+  }
+
+  /**
+   * The current shake amplitude in pixels, `0` when the shake has decayed out.
+   *
+   * Linear decay from `SHAKE_INTENSITY` at the instant of impact to `0` at
+   * `SHAKE_DURATION_MS`. Returning a hard `0` at rest (rather than a tiny
+   * residual) is what makes "no hit => no shake" a bit-exact contract.
+   */
+  private shakeIntensityAt(): number {
+    if (this.shakeTimeMs <= 0) return 0;
+    return this.shakeIntensity * (this.shakeTimeMs / SHAKE_DURATION_MS);
+  }
+
+  /**
+   * Advance every transient effect by one rendered frame (M14-T01, spec 22 §4.2 /
+   * §4.3): decay the shake, age the particles, spawn this frame's new sparks and
+   * (re)trigger the shake from a landed hit, then mount/unmount the particle layer.
+   *
+   * Order is load-bearing:
+   *  - the shake is DECAYED before this frame's hits re-arm it, so a fresh hit
+   *    starts a full-length shake and an idle frame falls one step closer to zero;
+   *  - the particles are AGED before this frame's are spawned, so a fresh spark
+   *    starts at full alpha instead of losing a frame of life (same rule the
+   *    floaters follow).
+   */
+  private syncEffects(deltaMs: number, frameEvents: FrameEvents | undefined): void {
+    this.advanceShake(deltaMs);
+    this.vfx.advance(deltaMs);
+
+    if (frameEvents !== undefined) {
+      for (const hit of frameEvents.hits) {
+        // `HitEvent.position` is the HITBOX CENTRE in world units (spec 05 §3.1);
+        // the sparks fly from there, converted to pixels (spec 22 §7 T3).
+        this.vfx.spawnHitSparks(hit.position.x * PX_PER_UNIT, hit.position.y * PX_PER_UNIT);
+        this.shakeTimeMs = SHAKE_DURATION_MS;
+        this.shakeIntensity = SHAKE_INTENSITY;
+      }
+      for (const dash of frameEvents.dashes) {
+        this.vfx.spawnDashBurst(
+          dash.position.x * PX_PER_UNIT,
+          dash.position.y * PX_PER_UNIT,
+          dash.direction.x,
+          dash.direction.y,
+        );
+      }
+    }
+
+    this.syncVfxLayer();
+  }
+
+  /** Decay the shake clock by one frame; a no-op once it has reached zero. */
+  private advanceShake(deltaMs: number): void {
+    if (this.shakeTimeMs <= 0) return;
+    this.shakeTimeMs = Math.max(0, this.shakeTimeMs - deltaMs);
+  }
+
+  /**
+   * Mount the particle layer while sparks are alive and detach it when they are
+   * gone (M14-T01, spec 22 §4.3).
+   *
+   * LAZY MOUNT is the whole reason the frozen scene-graph contracts survive: the
+   * layer is inserted just BELOW the render root (so it draws over the static
+   * floor/walls but under the entity views, and the root stays the camera's LAST
+   * child — spec 20 I13), and it exists only during the ~180ms a spark lives. An
+   * idle frame therefore has exactly the pre-M14 camera children.
+   */
+  private syncVfxLayer(): void {
+    if (this.vfx.hasParticles) {
+      if (!this.vfxAttached) {
+        const insertIndex = Math.max(0, this.cameraContainer.children.length - 1);
+        this.cameraContainer.addChildAt(this.vfx.layer, insertIndex);
+        this.vfxAttached = true;
+      }
+      return;
+    }
+    if (this.vfxAttached) {
+      this.cameraContainer.removeChild(this.vfx.layer);
+      this.vfxAttached = false;
     }
   }
 

@@ -17,14 +17,35 @@
  * just finished (`PreviousTransformComponent`) and the tick we are now in
  * (`TransformComponent`). It is a READ-ONLY projection of render timing — it never
  * touches logic state (specs/10_render_juice_spec.md §4.1, ADR-002).
+ *
+ * M14-T01 adds a SECOND thing after the catch-up loop: the frame's logic events
+ * are drained from the injected `ClientEventBridge` (exactly once) and handed to
+ * the renderer (shake + sparks) and the audio sink (chimes). Both the bridge and
+ * the sink are OPTIONAL, so the loop's original behaviour — and its original
+ * three-argument constructor — are unchanged (spec 22 §4.1).
  */
 
 import type { Ticker } from 'pixi.js';
 
 import type { GameSimulator } from '../src/core/GameSimulator';
 import { isInHub } from '../src/ecs/components/GameStateComponent';
+import type { ClientEventBridge, FrameEvents } from './ClientEventBridge';
 import type { GameRenderer } from './GameRenderer';
 import type { KeyboardInput } from './KeyboardInput';
+
+/**
+ * The howler-FREE audio seam (M14-T01, spec 22 §2.5).
+ *
+ * `GameLoop` must never import `howler` (that would put it in the render suites'
+ * import graph via the renderer's siblings), so it talks to audio through this
+ * structural interface instead. `client/AudioManager` satisfies it without
+ * importing it.
+ */
+export interface AudioSink {
+  playHit(): void;
+  playDash(): void;
+  playCoin(): void;
+}
 
 /**
  * Hard cap on logic ticks advanced per rendered frame. Guards against the
@@ -39,13 +60,29 @@ export class GameLoop {
   private readonly input: KeyboardInput;
   private readonly onTick: (ticker: Ticker) => void;
 
+  /**
+   * The presentation-side event observer (M14-T01) and the audio sink. Both are
+   * OPTIONAL and default to `null`, so the pre-M14 `new GameLoop(sim, renderer,
+   * input)` shape keeps behaving EXACTLY as before (spec 22 §4.1).
+   */
+  private readonly bridge: ClientEventBridge | null;
+  private readonly audio: AudioSink | null;
+
   private accumulatorMs = 0;
   private running = false;
 
-  constructor(sim: GameSimulator, renderer: GameRenderer, input: KeyboardInput) {
+  constructor(
+    sim: GameSimulator,
+    renderer: GameRenderer,
+    input: KeyboardInput,
+    bridge: ClientEventBridge | null = null,
+    audio: AudioSink | null = null,
+  ) {
     this.sim = sim;
     this.renderer = renderer;
     this.input = input;
+    this.bridge = bridge;
+    this.audio = audio;
     this.onTick = (ticker: Ticker): void => {
       this.frame(ticker.deltaMS);
     };
@@ -84,7 +121,7 @@ export class GameLoop {
   private frame(deltaMs: number): void {
     if (isInHub(this.sim.world)) {
       this.accumulatorMs = 0;
-      this.renderer.syncWorld(this.sim.world, 0);
+      this.syncFrame(0);
       return;
     }
 
@@ -116,6 +153,41 @@ export class GameLoop {
     const alpha =
       tickDurationMs > 0 ? Math.min(1, Math.max(0, this.accumulatorMs / tickDurationMs)) : 0;
 
-    this.renderer.syncWorld(this.sim.world, alpha);
+    this.syncFrame(alpha);
+  }
+
+  /**
+   * Consume this frame's logic events (EXACTLY once) and hand them to the
+   * presentation consumers (M14-T01, spec 22 §4.1).
+   *
+   * The bridge is drained here — after the `step` loop — so the renderer can turn
+   * "a hit landed" into a shake + sparks, and the audio sink can turn it into a
+   * chime, in the SAME frame the events were produced. `drainFrame()` empties the
+   * buffer, which is what makes "consumed exactly once per frame" true.
+   *
+   * When no bridge was injected (the pre-M14 wiring) this is a plain
+   * `syncWorld(world, alpha)` — byte-for-byte the old behaviour.
+   */
+  private syncFrame(alpha: number): void {
+    const bridge = this.bridge;
+    if (bridge === null) {
+      this.renderer.syncWorld(this.sim.world, alpha);
+      return;
+    }
+    const events = bridge.drainFrame();
+    this.playSounds(events);
+    this.renderer.syncWorld(this.sim.world, alpha, events);
+  }
+
+  /** Fire one sound per event, through the howler-free sink. */
+  private playSounds(events: FrameEvents): void {
+    const audio = this.audio;
+    if (audio === null) return;
+    events.hits.forEach(() => {
+      audio.playHit();
+    });
+    events.dashes.forEach(() => {
+      audio.playDash();
+    });
   }
 }
