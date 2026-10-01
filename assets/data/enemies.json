@@ -49,5 +49,26 @@
       { "kind": "heal", "amount": 15 },
       { "kind": "darkness", "amount": 15 }
     ]
+  },
+  "gunner": {
+    "maxHp": 60,
+    "maxSpeed": 5,
+    "hurtboxRadius": 0.5,
+    "armor": 40,
+    "ai": {
+      "sightRadius": 20,
+      "attackRadius": 12,
+      "windupTicks": 30,
+      "cooldownTicks": 90
+    },
+    "hazard": {
+      "radius": 2.5,
+      "damage": 20,
+      "delayTicks": 30
+    },
+    "loot": [
+      { "kind": "gold", "amount": 8 },
+      { "kind": "darkness", "amount": 12 }
+    ]
   }
 }

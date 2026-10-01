@@ -14,5 +14,31 @@
       { "delayTicks": 0, "enemies": ["raider", "raider"] },
       { "delayTicks": 120, "enemies": ["raider", "bomber"] }
     ]
+  },
+  {
+    "depth": 2,
+    "roomId": "stress_room",
+    "waves": [
+      {
+        "delayTicks": 0,
+        "enemies": [
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt", "grunt",
+          "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner",
+          "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner",
+          "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner",
+          "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner",
+          "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner", "gunner"
+        ]
+      }
+    ]
   }
 ]

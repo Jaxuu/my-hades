@@ -148,21 +148,51 @@ export class World {
     return this.stores.get(ctor)?.delete(id) ?? false;
   }
 
-  /** Return all alive entities that own every listed component type, sorted by id. */
+  /**
+   * Return all alive entities that own every listed component type, sorted by id.
+   *
+   * WHY THE RESULT IS SORTED WITHOUT CALLING `sort` (M15-T01, lossless perf)
+   * ---------------------------------------------------------------------
+   * `alive` is a `Set` whose ids are inserted in STRICTLY ASCENDING order:
+   * `createEntity` is the only writer and it hands out `nextId` monotonically
+   * (and `clearEntities` — the one bulk removal — does not reset that counter, so
+   * the ids that follow a reset are still larger than every id that preceded it).
+   * `destroyEntity` only ever DELETES from the set, which cannot perturb the
+   * relative order of what remains. Iterating `alive` therefore already yields ids
+   * in ascending order, so the result array is built sorted and a comparator sort
+   * would be a pure `O(n log n)` re-shuffle of an already-ordered array.
+   *
+   * The `sort` is dropped rather than kept "just in case": the profile for M15-T01
+   * showed it costing ~4.7us per dense query (~5k `Map.has` calls' worth of
+   * comparator invocations), which is real money at 20+ queries per tick. The
+   * contract — "sorted by id" — is unchanged and is pinned by
+   * `tests/harness/ecs.test.ts`.
+   *
+   * WHY THE STORE LOOKUPS ARE HOISTED
+   * ---------------------------------
+   * The previous shape resolved `this.stores.get(ctor)` inside the per-entity loop,
+   * i.e. once per (entity x component-type) — ~500 `Map` lookups for a 170-entity
+   * 3-component query. Hoisting it to one lookup per component type is a pure
+   * constant-factor win with no semantic change.
+   */
   public query(...ctors: ComponentCtor[]): EntityId[] {
     if (ctors.length === 0) return [];
+    const stores: (Map<EntityId, Component> | undefined)[] = [];
+    for (const ctor of ctors) stores.push(this.stores.get(ctor));
+
     const result: EntityId[] = [];
     for (const id of this.alive) {
       let matches = true;
-      for (const ctor of ctors) {
-        if (!this.stores.get(ctor)?.has(id)) {
+      for (let k = 0; k < stores.length; k += 1) {
+        const store = stores[k];
+        if (store === undefined || !store.has(id)) {
           matches = false;
           break;
         }
       }
       if (matches) result.push(id);
     }
-    return result.sort((a, b) => a - b);
+    return result;
   }
 
   /** All alive entity ids, sorted ascending (deterministic). */

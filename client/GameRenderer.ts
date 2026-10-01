@@ -415,9 +415,29 @@ export class GameRenderer {
     return this.wallViews.size;
   }
 
-  /** Live hit-spark count (diagnostics / assertions). Zero at rest (M14-T01). */
+  /**
+   * Live hit-spark count (diagnostics / assertions). Zero at rest (M14-T01).
+   */
   public get sparkCount(): number {
     return this.vfx.particleCount;
+  }
+
+  /**
+   * How many ids the render layer has RETIRED (M15-T01).
+   *
+   * `retired` is the one piece of renderer state that is deliberately NEVER pruned
+   * during a run (see the field's own docstring): a corpse is never destroyed, so
+   * "this id's death FX already played" must be remembered or the FX would loop.
+   * Ids are never reused, so the set only ever grows — which makes it the renderer's
+   * ONE unbounded structure, and therefore the thing a leak guard has to be able to
+   * SEE. Exposed as a count rather than as the set itself so a caller can assert on
+   * its size without being able to mutate it (spec 09 §10 trade-off 4).
+   *
+   * `GameRenderer.reset()` clears it, and the run boundary in `client/main.ts` calls
+   * `reset()` for exactly this reason — see the note there.
+   */
+  public get retiredCount(): number {
+    return this.retired.size;
   }
 
   /**

@@ -115,7 +115,7 @@ import { TransformComponent } from '../components/TransformComponent';
 import { VelocityComponent } from '../components/VelocityComponent';
 import { HitboxComponent } from '../components/HitboxComponent';
 import { HurtboxComponent } from '../components/HurtboxComponent';
-import { FactionComponent } from '../components/FactionComponent';
+import { Faction, FactionComponent } from '../components/FactionComponent';
 import { ProjectileComponent } from '../components/ProjectileComponent';
 import { DEFAULT_WALL_SLAM_DAMAGE, WallComponent, circleBodyRadius } from '../components/WallComponent';
 import { applyDamageWithArmor } from '../components/ArmorComponent';
@@ -158,6 +158,25 @@ const SEPARATION_DIRECTION_SLOTS = 16;
 export function separationAngle(a: EntityId, b: EntityId): number {
   const mixed = (Math.imul(a + 1, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
   return ((mixed % SEPARATION_DIRECTION_SLOTS) / SEPARATION_DIRECTION_SLOTS) * Math.PI * 2;
+}
+
+/**
+ * One body's loop-invariant facts, resolved once per separation pass (M15-T01).
+ *
+ * A mutable record rather than a numeric typed array, and both halves of that are
+ * deliberate:
+ *
+ *  - the pass mutates the `TransformComponent` IN PLACE, exactly as the pre-M15 code
+ *    did, so there is no write-back step and therefore no way for a cached copy and
+ *    the component to drift apart;
+ *  - `faction` stays a `Faction` — a STRING enum (`'Player'` / `'Enemy'`). Parking it
+ *    in an `Int32Array` would coerce both to `0` and silently make every body the
+ *    same side, which is a behaviour change an "optimisation" must never introduce.
+ */
+interface SeparationBody {
+  readonly transform: TransformComponent;
+  readonly radius: number;
+  readonly faction: Faction;
 }
 
 export class MovementSystem implements System {
@@ -309,35 +328,66 @@ export class MovementSystem implements System {
       HurtboxComponent,
       FactionComponent,
     );
-    if (ids.length < 2) return;
+    const count = ids.length;
+    if (count < 2) return;
 
-    for (let i = 0; i < ids.length; i += 1) {
-      const idA = ids[i];
-      if (idA === undefined) continue;
-      if (isDead(world, idA)) continue;
+    // M15-T01 LOSSLESS SPEEDUP — WHY THE PAIR LOOP RUNS ON A PRECOMPUTED SLOT TABLE
+    // ----------------------------------------------------------------------------
+    // The pair loop below is inherently `O(bodies^2)` and, in a 150-enemy stress
+    // room, that is ~11k pairs per tick. The pre-M15 shape resolved SIX
+    // `World.getComponent` calls (three per body, each two `Map` lookups) inside the
+    // INNER loop — ~34k lookups per tick, which the M15 profile measured at ~1.2s
+    // over 600 ticks: the single largest cost in the whole simulation.
+    //
+    // Every one of those six reads is loop-invariant: `faction` and
+    // `hurtbox.radius` are never written during the pass, dead-ness is fixed (this
+    // phase deals no damage — `DeathSystem` runs later in the pipeline), and a
+    // body's `TransformComponent` OBJECT never changes identity. So each body's
+    // facts are resolved ONCE into a slot, and the pair loop then reads fields.
+    //
+    // The loop still mutates the `TransformComponent` objects IN PLACE, exactly as
+    // the original did, so the pass is bit-for-bit identical: same ascending-id
+    // outer loop, same `i < j` pair order, same same-faction gate, same strict `<`
+    // overlap predicate, same symmetric half-overlap correction in the same
+    // sequence, and the same "a body nudged by an earlier pair is measured at its
+    // CURRENT position" behaviour. `tests/physics/soft_collision*.test.ts` pin it,
+    // and the M15 snapshot-digest check proves a whole 601-tick run is unchanged.
+    const slots: (SeparationBody | undefined)[] = [];
 
-      const transformA = world.getComponent(idA, TransformComponent);
-      const hurtboxA = world.getComponent(idA, HurtboxComponent);
-      const factionA = world.getComponent(idA, FactionComponent);
-      if (transformA === undefined || hurtboxA === undefined || factionA === undefined) continue;
+    for (let k = 0; k < count; k += 1) {
+      const id = ids[k];
+      if (id === undefined) {
+        slots.push(undefined);
+        continue;
+      }
+      if (isDead(world, id)) {
+        slots.push(undefined);
+        continue;
+      }
+      const transform = world.getComponent(id, TransformComponent);
+      const hurtbox = world.getComponent(id, HurtboxComponent);
+      const faction = world.getComponent(id, FactionComponent);
+      slots.push(
+        transform === undefined || hurtbox === undefined || faction === undefined
+          ? undefined
+          : { transform, radius: hurtbox.radius, faction: faction.faction },
+      );
+    }
 
-      for (let j = i + 1; j < ids.length; j += 1) {
-        const idB = ids[j];
-        if (idB === undefined) continue;
-        if (isDead(world, idB)) continue;
+    for (let i = 0; i < count; i += 1) {
+      const a = slots[i];
+      if (a === undefined) continue;
 
-        const transformB = world.getComponent(idB, TransformComponent);
-        const hurtboxB = world.getComponent(idB, HurtboxComponent);
-        const factionB = world.getComponent(idB, FactionComponent);
-        if (transformB === undefined || hurtboxB === undefined || factionB === undefined) continue;
-
+      for (let j = i + 1; j < count; j += 1) {
+        const b = slots[j];
+        if (b === undefined) continue;
         // Only same-faction pairs separate (spec 20 I5): a player and an enemy may
         // legitimately overlap (a swing, a shove) and must be left alone.
-        if (factionA.faction !== factionB.faction) continue;
+        if (a.faction !== b.faction) continue;
 
-        const minDist = hurtboxA.radius + hurtboxB.radius;
-        const dx = transformB.x - transformA.x;
-        const dy = transformB.y - transformA.y;
+        const minDist = a.radius + b.radius;
+        const dx = b.transform.x - a.transform.x;
+        const dy = b.transform.y - a.transform.y;
         const distSq = dx * dx + dy * dy;
         // Touching (==) or separated (>) is not overlapping (spec 20 I7).
         if (distSq >= minDist * minDist) continue;
@@ -348,6 +398,9 @@ export class MovementSystem implements System {
         if (distSq === 0) {
           // Fully coincident: no direction to derive, so take the deterministic
           // id-derived one and push them all the way to tangent.
+          const idA = ids[i];
+          const idB = ids[j];
+          if (idA === undefined || idB === undefined) continue;
           const angle = separationAngle(idA, idB);
           nx = Math.cos(angle);
           ny = Math.sin(angle);
@@ -363,10 +416,10 @@ export class MovementSystem implements System {
         // direction. Not scaled by dt — this is a position fix, not a velocity
         // integration (spec 20 I8).
         const half = overlap * 0.5;
-        transformA.x -= nx * half;
-        transformA.y -= ny * half;
-        transformB.x += nx * half;
-        transformB.y += ny * half;
+        a.transform.x -= nx * half;
+        a.transform.y -= ny * half;
+        b.transform.x += nx * half;
+        b.transform.y += ny * half;
       }
     }
   }

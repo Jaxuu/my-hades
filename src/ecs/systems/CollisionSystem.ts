@@ -140,7 +140,37 @@ export class CollisionSystem implements System {
       FactionComponent,
       HealthComponent,
     );
-    if (targetIds.length === 0) return;
+    const targetCount = targetIds.length;
+    if (targetCount === 0) return;
+
+    // M15-T01 LOSSLESS SPEEDUP — PRECOMPUTE THE TARGET HALF OF THE PAIR LOOP
+    // ----------------------------------------------------------------------
+    // This is a `hitboxes x targets` double loop, so the target side is visited once
+    // per hitbox. The pre-M15 shape resolved four `World.getComponent` calls AND an
+    // `isDead` (another lookup) inside that inner loop, i.e. ~5 redundant lookups per
+    // (hitbox, target) pair. The M15 stress profile showed that at ~0.16s over 600
+    // ticks with only a handful of live hitboxes.
+    //
+    // Every one of those reads is loop-invariant here. `TransformComponent` object
+    // identity, `HurtboxComponent`, `FactionComponent` and dead-ness are all FIXED
+    // for the duration of this pass: nothing in `CollisionSystem` moves a body
+    // (`MovementSystem` already ran), and nothing tags a corpse (death is written by
+    // `DeathSystem`, later in the pipeline). Only `HealthComponent.hp` mutates — and
+    // that is exactly why the component REFERENCE is cached and `hp` is still read
+    // live below, preserving the "an entity that ran out of hit points earlier this
+    // tick is already settled" gate bit-for-bit.
+    const targetTransforms: (TransformComponent | undefined)[] = [];
+    const targetHurtboxes: (HurtboxComponent | undefined)[] = [];
+    const targetFactions: (FactionComponent | undefined)[] = [];
+    const targetHealths: (HealthComponent | undefined)[] = [];
+    const targetDead: boolean[] = [];
+    for (const id of targetIds) {
+      targetTransforms.push(world.getComponent(id, TransformComponent));
+      targetHurtboxes.push(world.getComponent(id, HurtboxComponent));
+      targetFactions.push(world.getComponent(id, FactionComponent));
+      targetHealths.push(world.getComponent(id, HealthComponent));
+      targetDead.push(isDead(world, id));
+    }
 
     for (const hitboxId of hitboxIds) {
       const hitboxTransform = world.getComponent(hitboxId, TransformComponent);
@@ -152,19 +182,21 @@ export class CollisionSystem implements System {
       // swing, not of any particular target.
       if (isDead(world, hitbox.ownerEntityId)) continue;
 
-      for (const targetId of targetIds) {
+      for (let k = 0; k < targetCount; k += 1) {
+        const targetId = targetIds[k];
+        if (targetId === undefined) continue;
         if (targetId === hitboxId) continue;
         if (hitbox.hitEntities.includes(targetId)) continue;
 
         // (b) Target gate: a corpse is not a hit target at all (M4-T02, spec 08
         // §4.2). Placed before the component fetch and the geometry test so a dead
-        // body costs one store lookup, never a distance computation.
-        if (isDead(world, targetId)) continue;
+        // body costs one array read, never a distance computation.
+        if (targetDead[k] === true) continue;
 
-        const targetTransform = world.getComponent(targetId, TransformComponent);
-        const hurtbox = world.getComponent(targetId, HurtboxComponent);
-        const targetFaction = world.getComponent(targetId, FactionComponent);
-        const targetHealth = world.getComponent(targetId, HealthComponent);
+        const targetTransform = targetTransforms[k];
+        const hurtbox = targetHurtboxes[k];
+        const targetFaction = targetFactions[k];
+        const targetHealth = targetHealths[k];
         if (
           targetTransform === undefined ||
           hurtbox === undefined ||

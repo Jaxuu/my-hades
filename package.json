@@ -1,6 +1,6 @@
 {
   "name": "my-hades",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Headless deterministic action-roguelike simulation core (Hades-like), logic fully decoupled from rendering.",

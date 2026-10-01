@@ -82,6 +82,15 @@
  *   - the coin chime is driven by a per-frame GOLD read (there is no pickup event),
  *     purely observational.
  *
+ * M15-T01 adds a STRESS-TEST BACKDOOR and nothing else:
+ *   - `?mode=stress` swaps the run builder for `buildStressRun`, which stands the
+ *     player up in the 30x30 `stress_room` against the 150-enemy wave declared in
+ *     `assets/data/encounters.json` at depth 2. The room's size and the wave's
+ *     roster are DATA, so re-tuning the stress scenario is a JSON edit;
+ *   - the normal run is untouched — the flag only selects a different `runSetup`,
+ *     and every other wire (pipeline, save, event bridge, renderer, UI) is the
+ *     production one, which is what makes the room an honest stress test.
+ *
  * This file is the ONLY place `src/` and the presentation layer are joined — the
  * one-way dependency stays intact (client -> src). It is also the only place the
  * seed is chosen and the only place the save is stored, which is what keeps the
@@ -97,7 +106,7 @@ import type { World } from '../src/ecs/World';
 import type { EntityId } from '../src/ecs/Entity';
 import { createDefaultSystems } from '../src/ecs/systems/pipeline';
 import { PlayerFactory } from '../src/ecs/prefabs/PlayerFactory';
-import { EncounterFactory } from '../src/ecs/prefabs/EncounterFactory';
+import { EncounterFactory, resolveEncounterWaves } from '../src/ecs/prefabs/EncounterFactory';
 import { GameStateFactory } from '../src/ecs/prefabs/GameStateFactory';
 import { HealthComponent } from '../src/ecs/components/HealthComponent';
 import { readDarkness, readGold } from '../src/ecs/components/InventoryComponent';
@@ -255,6 +264,78 @@ function findPlayerId(world: World): EntityId | undefined {
   return world.query(PlayerInputComponent)[0];
 }
 
+/**
+ * M15-T01 · the stress-test backdoor's two constants.
+ *
+ * `?mode=stress` loads ONE room — the 30x30 `stress_room` — with the huge wave
+ * `encounters.json` declares at `depth: 2`. Both facts stay in the DATA tables:
+ * this file names the depth and the room id, and nothing else about the scenario
+ * (how big the room is, which enemies, how many) is hard-coded here. That is the
+ * same discipline `buildRun` follows for the normal run (spec 17 AC-01).
+ */
+const STRESS_DEPTH = 2;
+const STRESS_ROOM_ID = 'stress_room';
+
+/**
+ * Whether the page was opened with `?mode=stress` (M15-T01).
+ *
+ * A URL-parameter BACKDOOR rather than a build flag: it must be reachable on the
+ * exact artifact a reviewer already has (a `vite dev` page or a `vite preview`
+ * build), with no rebuild and no env var. `URLSearchParams` is a browser global
+ * and this is the composition root, so it belongs here — `src/` never learns that
+ * a URL exists (ADR-001 R1).
+ *
+ * The read is wrapped because `window.location.search` can be unavailable in an
+ * exotic embedding; "not stress mode" is the honest answer there, and it is the
+ * same best-effort shape `resolveStorage` uses.
+ */
+function isStressMode(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('mode') === 'stress';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * M15-T01 · assemble the STRESS RUN instead of a normal one.
+ *
+ * Deliberately a SEPARATE builder rather than a branch inside `buildRun`, for the
+ * same reason `buildRun` is a free function: it is handed to `GameSimulator` as
+ * `runSetup`, so `restartRun` reaches it and the stress scenario is exactly as
+ * reproducible as a normal run.
+ *
+ * What it skips is the ROOM SEQUENCE: the run is a single room, so clearing it
+ * ends the run (spec 15 AC-04) rather than opening a draft and descending. That is
+ * the "跳过重置循环，直接加载压测房间" the milestone asks for — the point is to
+ * stand in the stress room immediately and keep standing in it, not to play a
+ * roguelike.
+ *
+ * The wave comes from the data table (`resolveEncounterWaves(STRESS_DEPTH)`), so
+ * re-tuning the stress scenario is a JSON edit, and the `roomIds` array is
+ * index-aligned with the one-room table so `LevelLoader.enterRoom` places the
+ * player on the room's own `2` tile.
+ */
+function buildStressRun(world: World, saveState: SaveState): void {
+  const player = PlayerFactory.spawnWithMeta(world, saveState, {
+    x: 0,
+    y: 0,
+    facingRadians: 0,
+  });
+
+  const roomEntity = EncounterFactory.spawn(world, {
+    waves: resolveEncounterWaves(STRESS_DEPTH),
+    roomIds: [STRESS_ROOM_ID],
+  });
+  const encounter = world.getComponent(roomEntity, EncounterStateComponent);
+
+  if (encounter !== undefined) {
+    LevelLoader.enterRoom(world, { roomId: STRESS_ROOM_ID, playerId: player, encounter });
+  }
+
+  GameStateFactory.spawn(world);
+}
+
 function start(app: Application): void {
   mountCanvas(app);
 
@@ -270,15 +351,20 @@ function start(app: Application): void {
   // presentation (spec 22 §4.1). The pipeline still sees plain `EventQueue`s.
   const bridge = new ClientEventBridge();
 
+  // M15-T01: `?mode=stress` swaps the run BUILDER, not the engine. Everything
+  // downstream — the pipeline, the save, the bridge, the renderer — is the exact
+  // production wiring, so what the stress room measures is the real thing.
+  const runSetup = isStressMode() ? buildStressRun : buildRun;
+
   const sim = new GameSimulator({
     systems: createDefaultSystems(bridge.hitQueue, bridge.deathQueue, bridge.dashQueue),
     seed: SEED,
-    runSetup: buildRun,
+    runSetup,
     initialSaveState: saveState,
   });
 
   // The FIRST run goes through the same builder every restart will use.
-  buildRun(sim.world, sim.saveState);
+  runSetup(sim.world, sim.saveState);
 
   const renderer = new GameRenderer(app);
   renderer.init();
@@ -338,6 +424,16 @@ function start(app: Application): void {
             // events for, so the buffer is dropped at the SAME boundary
             // (`scheduler.reset` cannot reach a client-side buffer). spec 22 §4.1.
             bridge.clear();
+            // M15-T01: the render layer is reset at the SAME boundary, and this is
+            // a LEAK FIX rather than a cosmetic one. Entity views recycle themselves
+            // on the next sync (`recycleDestroyed`), but `GameRenderer.retired` — the
+            // set that keeps a finished death FX from looping — is deliberately never
+            // pruned during a run, and `EntityId`s are never reused, so across many
+            // restarts it would grow without bound. `reset()` is the operation that
+            // drops it, and a run boundary is exactly when it is safe: the restart
+            // has already destroyed every entity of the previous run, so no corpse
+            // can be resurrected by forgetting its id (spec 14 I8).
+            renderer.reset();
             persistSaveState(storage, sim.saveState);
           },
         });
