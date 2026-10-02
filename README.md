@@ -99,12 +99,14 @@ TransformSnapshot → PlayerController → Freeze → AI → Hazard → Movement
 
 ```
 assets/data/     配置表（唯一数值来源）
-client/          表现层（组合根、渲染器、UI、音视频桥）
+assets/art/      美术资产（CC0）：atlas/ 图集 · ui/ 界面图 · raw/ 可复现的原始素材 · tools/ 生成器
+assets/audio/    音效资产（CC0）：sfx/ 成品 · raw/ 可复现的原始素材
+client/          表现层（组合根、渲染器、UI、音视频桥、assets/ 资产接入层）
 docs/            ADR-001 / ADR-002 / ADR-004
-specs/00…23      规格（每个里程碑一份验收基线）
+specs/00…24      规格（每个里程碑一份验收基线）
 src/core/        模拟器、时钟、调度器、关卡加载、PRNG、存档
 src/ecs/         World / Entity / Component / System + components / systems / prefabs
-tests/           642 例：harness · combat · physics · render · world · data · meta · ai · audio · performance
+tests/           803 例：harness · combat · physics · render · world · data · meta · ai · audio · assets · ui · performance
 ```
 
 ---
@@ -119,7 +121,7 @@ npm run dev              # → 然后打开 http://localhost:5173/?mode=stress  
 npm run build            # 生产构建
 npm run preview          # 预览构建产物
 
-npm test                 # Vitest 全量（642 例）
+npm test                 # Vitest 全量（803 例）
 npm run typecheck        # 逻辑层 + 测试 类型检查
 npm run typecheck:client # 表现层类型检查（独立 tsconfig，含 DOM lib）
 npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门禁）
@@ -128,6 +130,34 @@ npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门�
 ### 操作
 
 `W A S D` 移动 · `J` 攻击 · `K` 冲刺 · `R` 终局后回营地
+
+### 美术与音效资产（M16 / spec 024）
+
+全部视觉与听觉素材都是**本地分发**的 **CC0** 资产，运行期**零外部请求**（离线可用）。
+来源、逐项许可与做过的处理见 [`assets/art/LICENSES.md`](assets/art/LICENSES.md) 与
+[`assets/audio/LICENSES.md`](assets/audio/LICENSES.md)。
+
+| 用途 | 来源（全部 Kenney，CC0） |
+|---|---|
+| 玩家、5 类敌人、墙体/地面 | Tiny Dungeon（16×16） |
+| 界面面板 / 边框 / 按钮 / 覆盖层 | Fantasy UI Borders · Pixel UI pack |
+| 命中火花 / 冲刺拖尾 / 危险环、掉落物图标 | 本仓库程序化生成（同一调色板） |
+| 音效（命中 / 冲刺 / 拾取 / 敌人死亡 / 引爆 / UI / 奖励 / 终局） | RPG Audio · Digital Audio · UI Audio |
+
+**体积**：`assets/**` 合计 ≈ **407 KB**（预算 6 MB），单文件最大 124 KB（预算 1 MB）。
+
+**如何替换 / 扩展**：
+
+1. 把新的 CC0 素材放进 `assets/art/raw/<pack>/`（或 `assets/audio/raw/<pack>/Audio/`），
+   并保留其 `License.txt`；
+2. 在 `assets/art/tools/build-atlas.py` 里改素材索引 / `SFX_MAP`，然后
+   `python assets/art/tools/build-atlas.py all` 重新生成图集与音效；
+3. 在 `assets/art/LICENSES.md` 登记新条目（`tests/assets/licenses.test.ts` 会核对）；
+4. 在 `client/assets/manifest.ts` 里登记 id —— 它是**全仓唯一**直接 import 资产文件的地方，
+   所以**漏文件会让 `npm run build` 直接失败**，不会留到运行期 404。
+
+**降级**：任一资产缺失或解码失败只影响它自己 —— 该元素退回 M16 之前的几何占位（或静默），
+其余照常，游戏不崩溃、不黑屏（`tests/assets/degradation.test.ts`）。
 
 ### `?mode=stress`
 

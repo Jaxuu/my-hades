@@ -35,16 +35,18 @@
 - ESLint 钉 9.x；`vite` 留 5.x（`vitest@2.1.8` peer）；vitest 必须 `pool:'threads'`。根 tsconfig 不 include `client/`⇒`tsconfig.client.json`+`typecheck:client`。
 - 夹具陷阱：`createDefaultSystems()` **构造期**读 `zeus_strike`/`poseidon_dash`⇒mock bundle **不得清空词缀表**。尸体永不销毁⇒断言存活数必须过滤 `isDead`。
 - npm 锁文件平台相关。远端 github.com/Jaxuu/my-hades（PUBLIC,`main`）——切勿提交密钥。
+- 资产：**唯一引用点 `client/assets/manifest.ts`**（`?url` 静态导入 ⇒ 删文件即 `vite build` 失败）；`build.assetsInlineLimit: 0`（否则 <4 KB 资产被内联、不进 `dist/`）；根 tsconfig `types` 含 `vite/client`；生成器 `assets/art/tools/build-atlas.py`（Pillow，构建期工具）。`assets/**` 合计 ≈595 KB（预算 6 MB）。
+- 界面美术是 **48×48 九宫格白描框 ⇒ 必须 `border-image`（slice 12）**，`background-size:100% 100%` 会拉成满屏黑条。
 - `client/` 侧：**`GameRenderer` 导入图不得含 `howler`**（node 渲染套件只导入 `GameRenderer`）。真因是裸 `window` ⇒ 无 DOM 的 `typecheck` 报 **TS2304**，**不是** howler 导入炸（该前提已实测推翻）；`AudioManager` 只被 `main.ts` 导入。事件旁观用 `TeeEventQueue extends EventQueue` 覆写 `emit`（`src/` 零改动、Liskov 兼容）；run 边界**必须** `bridge.clear()`（`scheduler.reset()` 触不到客户端缓冲）。
 
 ## 5 里程碑不变量（明细见 memory/INVARIANTS.md）
 
-> **M0–M15** 的逐里程碑硬契约全在 **`.workbuddy-ai/memory/INVARIANTS.md`**，以避免本文件被注入时截断。改动任何里程碑相关代码前，先读那一份。
-> 旧按天日志（`2026-09-28.md` / `2026-09-29.md`）已蒸馏进 `INVARIANTS.md` 后删除；`memory/YYYY-MM-DD.md` 只保留近期工作带（当前为 `2026-10-01.md`）。
+> **M0–M16** 的逐里程碑硬契约全在 **`.workbuddy-ai/memory/INVARIANTS.md`**，以避免本文件被注入时截断。改动任何里程碑相关代码前，先读那一份。
+> 旧按天日志已蒸馏进 `INVARIANTS.md` 后删除；`memory/YYYY-MM-DD.md` 只保留近期工作带（当前为 `2026-10-02.md`）。
 
 ## 6 编排
 先冻结、再评审、后修复。派单带 Task ID/角色/优先级/上下文/Deliverables/Output Path/Handoff。高影响动作（commit/发布/删除）须人工审批；默认不 commit。
 
 ## 7 进度
-M0–M4 ✅209 · M5-T01 ✅212 · M5-T02 ✅234 · M6-T01 ✅264 · M6-T02 ✅285 · M7-T01 ✅336 · M8-T01 ✅359 · M9-T01 ✅394 · M10-T01 ✅414 · M10-T02 ✅436 · M11-T01 ✅467 · M12-T01 ✅500 · M12-T02 ✅578（78 新用例 = 实现 21 + 独立 QA 57；已提交 `3960c2a`(docs) + `18b2d6c`(feat)，**未 push**）· M13-T01 ✅613（35 新用例；五道闸门全绿；管道仍 **17 段**；已提交 `a189367`(docs) + `5ac7a3f`(feat)，**未 push**）· M14-T01 ✅634（21 新用例；四闸门 + `build` 全绿；`src/` 零改动、既有测试零改动、管道仍 **17 段**；已提交 `87b3486`(docs) + `698b4b2`(feat)，**未 push**）· **M15-T01 ✅642**（8 新用例 = 压测 5 + 渲染泄漏 3；五道闸门全绿；`src/` 三处**无损**提速（摘要逐位一致）、既有 634 例零改动、管道仍 **17 段**；⚠️ **「600 Tick < 100ms」目标未达成**，实测 ~460ms，缺口已登记 `specs/23` §7 T1；**未 commit**）。
+M0–M4 ✅209 · M5-T01 ✅212 · M5-T02 ✅234 · M6-T01 ✅264 · M6-T02 ✅285 · M7-T01 ✅336 · M8-T01 ✅359 · M9-T01 ✅394 · M10-T01 ✅414 · M10-T02 ✅436 · M11-T01 ✅467 · M12-T01 ✅500 · M12-T02 ✅578（78 新用例 = 实现 21 + 独立 QA 57；已提交 `3960c2a`(docs) + `18b2d6c`(feat)，**未 push**）· M13-T01 ✅613（35 新用例；五道闸门全绿；管道仍 **17 段**；已提交 `a189367`(docs) + `5ac7a3f`(feat)，**未 push**）· M14-T01 ✅634（21 新用例；四闸门 + `build` 全绿；`src/` 零改动、既有测试零改动、管道仍 **17 段**；已提交 `87b3486`(docs) + `698b4b2`(feat)，**未 push**）· **M15-T01 ✅642**（8 新用例；`src/` 三处**无损**提速，摘要逐位一致；⚠️「600 Tick < 100ms」未达成，实测 ~460ms，已登记 `specs/23` §7 T1；已提交 `02f99c1`）· **M16-T01 ✅803**（spec 024；**161 新用例** = 资产 59 + 渲染 56 + UI 30 + 音频 10 + 性能/无损 6；五道闸门全绿；`src/` **零改动**、`tests/render/` 既有 6 套件零改动、管道仍 **17 段**；性能比值 **1.01–1.09**（3 次全量运行；预算 1.2）；资产 ≈595 KB；真实 Chromium 视觉验收 V1–V9/O1–O4 全过；**未 commit**）。
 权威规格 `specs/00`…`specs/23`。ADR-001(headless ECS) · ADR-002(渲染插值) · ADR-004(确定性 PRNG)。
