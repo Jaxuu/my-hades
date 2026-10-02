@@ -6,4 +6,4 @@ coverage/
 .vitest/
 .vitest-cache/
 .tmp/
-vitest.config.ts.timestamp-*.mjs
+*.config.ts.timestamp-*.mjs

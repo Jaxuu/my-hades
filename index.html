@@ -3,15 +3,71 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-hades · roguelike run (M13-T01)</title>
+    <title>my-hades · 逃离冥府</title>
     <style>
+      /* =====================================================================
+       * M16 · the DOM skin (specs/024-real-art-assets T038).
+       *
+       * The STRUCTURE below is unchanged from M13: the same ids, the same class
+       * hooks, the same native <button> elements. What changed is the SKIN — the
+       * panels, frames and buttons are now drawn with CC0 art assets that
+       * `client/main.ts` injects as CSS custom properties (`--ui-*`).
+       *
+       * Why custom properties rather than `url()` literals here: the asset URLs
+       * are Vite build artifacts with content hashes, and this file cannot know
+       * them. Injecting them from the composition root keeps `manifest.ts` the
+       * single source of truth for "does this asset exist" AND keeps the
+       * build-time failure guarantee (delete a panel and `npm run build` fails).
+       *
+       * Every `--ui-*` variable defaults to `none`, so a degraded catalog (or a
+       * page opened with no JS at all) renders the plain CSS panel underneath —
+       * FR-013's graceful degradation, applied to the interface.
+       * ===================================================================== */
+
+      :root {
+        /* Art slots. `main.ts` overwrites these with url(...) once the catalog
+           has loaded; the `none` defaults are the degradation path. */
+        --ui-panel-hud: none;
+        --ui-panel-reward: none;
+        --ui-panel-camp: none;
+        --ui-frame-reward-card: none;
+        --ui-frame-talent-card: none;
+        --ui-button-primary: none;
+        --ui-overlay-death: none;
+        --ui-overlay-win: none;
+        --ui-frame-slot: none;
+        --ui-frame-slot-inlay: none;
+        --ui-bar-hud: none;
+
+        /* Palette, sampled from the art so the DOM and the canvas agree. */
+        --ink: #1a1622;
+        --parchment: #e8d9b8;
+        --parchment-dim: #b9a982;
+        --stone: #7f8aa3;
+        --stone-dark: #2a2f3d;
+        --gold: #ffcd4a;
+        --blood: #e23e4a;
+        --shadow: rgba(10, 8, 14, 0.72);
+
+        /* FR-019 · the text MUST stay readable with NO bundled font. A full CJK
+           face is 8–10 MB and would eat the whole asset budget on its own, so the
+           stack leans on the SYSTEM faces and keeps explicit CJK fallbacks
+           (`PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC`) so Chinese text
+           renders as glyphs rather than as tofu boxes. No web font is declared
+           anywhere — asserted by tests/ui/text_readability.test.ts. */
+        --font-body: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+          "PingFang SC", "Microsoft YaHei", monospace;
+      }
+
       html,
       body {
         margin: 0;
         height: 100%;
         background: #14161c;
-        color: #e6e6e6;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: var(--parchment);
+        font-family: var(--font-body);
       }
 
       #app {
@@ -23,52 +79,88 @@
         display: block;
       }
 
+      /* ---------------------------------------------------------------------
+       * Shared plate treatment.
+       *
+       * The UI art is a set of 48x48 NINE-SLICE frames (white line work with
+       * decorative corners and a transparent centre). They must therefore be drawn
+       * with `border-image`, never with `background-size: 100% 100%`: stretching a
+       * 48px frame across the viewport smears its corners into huge bars — which is
+       * exactly what the first browser pass of T048 caught.
+       *
+       * `border-color` is the degradation path: with `--ui-*` at `none` there is no
+       * border image, and the solid stone border is what remains.
+       * ------------------------------------------------------------------- */
+      #hud,
+      #keys,
+      #gold {
+        border-style: solid;
+        border-width: 10px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: var(--shadow);
+        background-repeat: no-repeat;
+        image-rendering: pixelated;
+      }
+
+      #hud,
+      #keys {
+        border-image-source: var(--ui-panel-hud);
+      }
+
       #hud {
         position: absolute;
         top: 12px;
         left: 12px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        background: rgba(0, 0, 0, 0.55);
+        padding: 4px 8px;
+        font-family: var(--font-mono);
         font-size: 13px;
         line-height: 1.5;
         pointer-events: none;
         white-space: pre;
+        color: var(--parchment-dim);
       }
 
       #keys {
         position: absolute;
         bottom: 12px;
         left: 12px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        background: rgba(0, 0, 0, 0.55);
+        padding: 4px 8px;
         font-size: 13px;
         line-height: 1.5;
         pointer-events: none;
+        color: var(--parchment-dim);
       }
 
-      /* M9-T01 · gold read-out. The one always-on HUD element the UIManager owns;
-         top-right so it never collides with the diagnostics block on the left. */
+      /* M9-T01 · gold / darkness read-out. The one always-on HUD element the
+         UIManager owns; top-right so it never collides with the diagnostics
+         block on the left. M16: skinned with the HUD panel art + a bar decal. */
       #gold {
         position: absolute;
         top: 12px;
         right: 12px;
-        padding: 8px 14px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 210, 77, 0.45);
-        background: rgba(0, 0, 0, 0.55);
-        color: #ffd24d;
+        padding: 4px 10px;
+        border-color: #6b5324;
+        border-image-source: var(--ui-panel-hud);
+        color: var(--gold);
         font-size: 14px;
         font-weight: 600;
         letter-spacing: 0.08em;
+        line-height: 1.5;
         pointer-events: none;
         white-space: pre;
+        /* The divider art is a thin rule, so it is sized explicitly rather than
+           stretched over the whole plate. */
+        background-image: var(--ui-bar-hud);
+        background-position: 50% 4px;
+        background-size: calc(100% - 24px) 8px;
       }
 
-      /* M6-T01 · boon-draft overlay. Hidden unless a draft is pending; the
-         UIManager toggles `is-visible`. It covers the whole viewport so a click
-         can never fall through to the canvas while the player is choosing. */
+      /* ---------------------------------------------------------------------
+       * The overlay root. Same element for the draft, both terminal states and
+       * the camp — only one is ever on screen (M6-T01 / M8-T01 / M9-T01 / M13-T01).
+       * ------------------------------------------------------------------- */
       #ui-layer {
         position: absolute;
         inset: 0;
@@ -77,169 +169,247 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 14px;
-        background: rgba(8, 10, 14, 0.62);
-        font-family: inherit;
+        gap: 16px;
+        font-family: var(--font-body);
+        background: rgba(8, 10, 14, 0.72);
       }
 
       #ui-layer.is-visible {
         display: flex;
       }
 
-      #ui-layer h2 {
-        margin: 0 0 6px;
-        font-size: 18px;
-        font-weight: 600;
-        color: #e6e6e6;
-        letter-spacing: 0.06em;
+      /* The draft shares the overlay root, so it gets its own frame. */
+      #ui-layer:not(.is-death):not(.is-win):not(.is-hub) {
+        border-style: solid;
+        border-width: 14px;
+        border-color: transparent;
+        border-image-source: var(--ui-panel-reward);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
       }
 
-      .reward-button {
-        min-width: 220px;
-        padding: 12px 20px;
-        border: 1px solid #4da3ff;
-        border-radius: 8px;
-        background: rgba(77, 163, 255, 0.14);
-        color: #e6e6e6;
+      .ui-heading {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--parchment);
+        letter-spacing: 0.08em;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      /* ---------------------------------------------------------------------
+       * Shared card skin for the two button families that present CHOICES.
+       * ------------------------------------------------------------------- */
+      .ui-card {
+        border-style: solid;
+        border-width: 12px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: rgba(20, 18, 28, 0.9);
+        color: var(--parchment);
         font: inherit;
-        font-size: 15px;
         cursor: pointer;
-        transition: background 120ms ease, transform 120ms ease;
+        image-rendering: pixelated;
+        transition: transform 110ms ease, filter 110ms ease;
       }
 
-      .reward-button:hover {
-        background: rgba(77, 163, 255, 0.32);
-        transform: translateY(-1px);
+      .talent-button.ui-card {
+        border-image-source: var(--ui-frame-talent-card);
       }
 
-      .reward-button:active {
+      .ui-card:hover:not(:disabled) {
+        transform: translateY(-2px);
+        filter: brightness(1.18);
+      }
+
+      .ui-card:active:not(:disabled) {
         transform: translateY(0);
       }
 
-      /* M8-T01 · death overlay. Same root element as the draft overlay (only one
-         is ever on screen), restyled into a terminal state: a deep red wash, a
+      .reward-button {
+        min-width: 240px;
+        padding: 4px 10px;
+        border-color: #3f6ea8;
+        border-image-source: var(--ui-frame-reward-card);
+        font-size: 15px;
+      }
+
+      /* M8-T01 · death overlay. A terminal state: a deep blood wash, a
          wide-tracked heading, and a hint line. */
       #ui-layer.is-death {
-        background: rgba(34, 4, 6, 0.86);
+        background-color: rgba(34, 4, 6, 0.9);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #4a1218;
+        border-image-source: var(--ui-overlay-death);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
       }
 
-      #ui-layer.is-death h2 {
-        font-size: 34px;
-        font-weight: 700;
-        color: #ff5a5a;
-        letter-spacing: 0.22em;
-        text-shadow: 0 0 18px rgba(255, 60, 60, 0.45);
+      .ui-heading-terminal {
+        font-size: 38px;
+        letter-spacing: 0.24em;
       }
 
-      #ui-layer .death-hint {
+      #ui-layer.is-death .ui-heading {
+        color: var(--blood);
+        text-shadow: 0 0 20px rgba(226, 62, 74, 0.5), 0 3px 0 rgba(0, 0, 0, 0.7);
+      }
+
+      .death-hint {
         margin: 0;
         font-size: 14px;
-        letter-spacing: 0.1em;
-        color: #e6e6e6;
-        opacity: 0.85;
+        letter-spacing: 0.12em;
+        color: var(--parchment);
+        opacity: 0.9;
       }
 
-      /* M9-T01 · victory overlay. Same root element and same structure as the death
-         overlay (only one is ever on screen), restyled into a positive terminal
-         state: a deep teal wash and a wide-tracked gold heading. Deliberately the
-         OPPOSITE temperature from `is-death`, so the two endings are never mistaken
-         for one another at a glance. */
+      /* M9-T01 · victory overlay. Same structure as the death overlay, restyled
+         into a positive terminal state: a deep teal wash and a gold heading.
+         Deliberately the OPPOSITE temperature from `is-death`, so the two
+         endings are never mistaken for one another at a glance. */
       #ui-layer.is-win {
-        background: rgba(4, 30, 28, 0.86);
+        background-color: rgba(4, 30, 28, 0.9);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #123f3a;
+        border-image-source: var(--ui-overlay-win);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
       }
 
-      #ui-layer.is-win h2 {
-        font-size: 34px;
-        font-weight: 700;
-        color: #ffd24d;
-        letter-spacing: 0.22em;
-        text-shadow: 0 0 18px rgba(255, 210, 77, 0.45);
+      #ui-layer.is-win .ui-heading {
+        color: var(--gold);
+        text-shadow: 0 0 20px rgba(255, 205, 74, 0.5), 0 3px 0 rgba(0, 0, 0, 0.7);
       }
 
-      /* M13-T01 · camp / talent screen. Same root element as the three overlays
-         above (only one is ever on screen), restyled as a MENU rather than a
-         verdict: a cool violet wash (the darkness colour), a normal-weight
-         heading, and a scrollable list of talents. */
+      /* M13-T01 · camp / talent screen. Same root element as the overlays, styled
+         as a MENU rather than a verdict: a cool violet wash (the darkness
+         colour), a normal-weight heading, and a scrollable list of talents. */
       #ui-layer.is-hub {
-        background: rgba(14, 10, 26, 0.92);
+        background-color: rgba(14, 10, 26, 0.94);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #2c2145;
+        border-image-source: var(--ui-panel-camp);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
       }
 
-      #ui-layer.is-hub h2 {
-        font-size: 26px;
-        font-weight: 600;
+      #ui-layer.is-hub .ui-heading {
+        font-size: 28px;
         color: #d8c8ff;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.18em;
       }
 
-      #ui-layer .hub-currency {
+      .hub-currency {
         margin: 0 0 4px;
+        padding: 6px 14px;
         font-size: 18px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        color: #b07dff;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: #c9a4ff;
+        border: 2px solid #4a3a6b;
+        border-radius: 4px;
+        background-color: rgba(20, 14, 36, 0.8);
       }
 
-      #ui-layer .hub-talents {
+      .hub-talents {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
         max-height: 50vh;
         overflow-y: auto;
-        padding: 4px;
+        padding: 6px;
       }
 
       /* A talent row: unaffordable and already-owned are both disabled, but they
          read differently — one is a goal, the other is a trophy. */
       .talent-button {
-        min-width: 320px;
-        padding: 10px 18px;
-        border: 1px solid #b07dff;
-        border-radius: 8px;
-        background: rgba(176, 125, 255, 0.16);
-        color: #e6e6e6;
-        font: inherit;
+        min-width: 340px;
+        padding: 4px 10px;
+        border-color: #5a4780;
+        border-image-source: var(--ui-frame-talent-card);
         font-size: 14px;
-        cursor: pointer;
-        transition: background 120ms ease, transform 120ms ease;
-      }
-
-      .talent-button:hover:not(:disabled) {
-        background: rgba(176, 125, 255, 0.34);
-        transform: translateY(-1px);
       }
 
       .talent-button:disabled {
         cursor: default;
-        opacity: 0.5;
+        opacity: 0.55;
       }
 
       .talent-button.is-owned {
         border-color: #4dff88;
-        background: rgba(77, 255, 136, 0.12);
-        opacity: 0.75;
+        color: #b8ffd0;
+        opacity: 0.8;
+      }
+
+      .talent-button.is-locked {
+        color: var(--parchment-dim);
       }
 
       /* The camp's ONE exit. Warmer and larger than a talent row, so "spend" and
          "go" are never mistaken for each other. */
       .start-button {
-        margin-top: 10px;
-        min-width: 220px;
-        padding: 12px 22px;
-        border: 1px solid #ffd24d;
-        border-radius: 8px;
-        background: rgba(255, 210, 77, 0.16);
-        color: #ffd24d;
+        margin-top: 12px;
+        min-width: 240px;
+        padding: 4px 12px;
+        border-style: solid;
+        border-width: 12px;
+        border-color: #8a6a1e;
+        border-image-source: var(--ui-button-primary);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: rgba(255, 205, 74, 0.18);
+        color: var(--gold);
         font: inherit;
         font-size: 16px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
+        font-weight: 700;
+        letter-spacing: 0.1em;
         cursor: pointer;
-        transition: background 120ms ease, transform 120ms ease;
+        image-rendering: pixelated;
+        transition: transform 110ms ease, filter 110ms ease;
       }
 
       .start-button:hover {
-        background: rgba(255, 210, 77, 0.32);
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+        filter: brightness(1.2);
+      }
+
+      /* M16 skin hooks. They carry NO logic — they exist so the interface can be
+         re-skinned without touching `UIManager`'s branches (ui-asset-slots.md
+         承诺 1). Each one is a superset partner of a frozen hook, never a
+         replacement for it. */
+      .ui-hint {
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      .ui-currency {
+        box-shadow: inset 0 0 0 2px rgba(201, 164, 255, 0.18);
+      }
+
+      .ui-list {
+        scrollbar-color: #5a4780 rgba(20, 14, 36, 0.6);
+      }
+
+      .ui-button-primary {
+        text-transform: none;
+      }
+
+      /* Keyboard reachability is a contract (ui-asset-slots.md 承诺 3): the
+         native <button> focus ring must stay visible, so it is restyled rather
+         than removed. */
+      .ui-card:focus-visible,
+      .start-button:focus-visible,
+      .reward-button:focus-visible,
+      .talent-button:focus-visible {
+        outline: 3px solid var(--gold);
+        outline-offset: 2px;
       }
     </style>
   </head>

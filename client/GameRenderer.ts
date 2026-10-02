@@ -55,10 +55,25 @@
  *
  * One-way dependency: this module imports `src/` (types + components) but `src/`
  * must never import it back (enforced by ESLint, spec 09 AC-01).
+ *
+ * M16 (specs/024-real-art-assets) replaces the placeholder geometry with real CC0
+ * art, WITHOUT touching a single one of the frozen contracts above:
+ *
+ *  - every view keeps its `Container`, its position, its `rotation` (= the
+ *    interpolated facing) and its `tint`; the ART is a child node inside it. That
+ *    is why `renderer_bridge.test.ts`'s `playerView.rotation === 0.75` and
+ *    `juice-verify.test.ts`'s near-`PI` rotation assertions still hold verbatim.
+ *  - the sprite child is counter-rotated by `-facing`, because the container's
+ *    rotation is a FROZEN contract and a top-down sprite must not spin with it.
+ *  - the static layer keeps its node and its position; only its CONTENTS change
+ *    (colour blocks -> tile sprites), so F1–F6 and `camera_follow`'s
+ *    `staticLayer.children[1].x === wall.x * PX_PER_UNIT` are untouched.
+ *  - every sprite branch has the pre-M16 geometry branch as its `else`, which is
+ *    what FR-013's "graceful degradation" actually means in code.
  */
 
-import { Container, Graphics, Text } from 'pixi.js';
-import type { Application, Rectangle, Ticker } from 'pixi.js';
+import { AnimatedSprite, Container, Graphics, Sprite, Text } from 'pixi.js';
+import type { Application, Rectangle, Texture, Ticker } from 'pixi.js';
 
 import type { EntityId } from '../src/ecs/Entity';
 import type { World } from '../src/ecs/World';
@@ -77,6 +92,21 @@ import { WallComponent } from '../src/ecs/components/WallComponent';
 
 import type { FrameEvents } from './ClientEventBridge';
 import { VFXManager } from './VFXManager';
+import { NULL_SPRITE_PROVIDER } from './assets/AssetCatalog';
+import type { SpriteProvider } from './assets/AssetCatalog';
+import {
+  FLOOR_TILE_ID,
+  HAZARD_RING_FX_ID,
+  PLAYER_SPRITE_ID,
+  WALL_TILE_ID,
+  animationCandidates,
+  animationFromState,
+  facingFromRadians,
+  hurtboxSpriteScale,
+  pickupIconId,
+  selectSprite,
+} from './assets/sprite-map';
+import type { AnimationState, Facing4 } from './assets/sprite-map';
 
 /**
  * The render layer's ONE constant contract: world units -> pixels (spec 09 C8).
@@ -212,6 +242,36 @@ const WALL_COLOR = 0x4a5266;
 const TWO_PI = Math.PI * 2;
 
 /**
+ * The natural pixel size of every sprite in the atlas (M16).
+ *
+ * One world unit is `PX_PER_UNIT` pixels and every source tile is 16x16, so a
+ * scene tile draws at `PX_PER_UNIT / TILE_NATURAL_PX` and a body draws at whatever
+ * its hurtbox says. Keeping the number here — rather than in `sprite-map` — is the
+ * same discipline `PX_PER_UNIT` follows: pixels are the renderer's business.
+ */
+const TILE_NATURAL_PX = 16;
+
+/**
+ * Real milliseconds per animation frame, by action (M16).
+ *
+ * Driven by the ticker's `deltaMS`, exactly like the floaters, the shake and the
+ * death fade — this is a VISUAL clock and must never be derived from logic ticks
+ * (ADR-002, spec 22 §3.4). Longer actions read as heavier: a dash snaps, an idle
+ * breathes.
+ */
+const ANIM_FRAME_MS: Readonly<Record<AnimationState, number>> = {
+  idle: 260,
+  move: 130,
+  dash: 90,
+  attack: 110,
+  hit: 120,
+  death: 150,
+};
+
+/** Scene-tile tint applied to the wall sprite so walls read darker than the floor. */
+const WALL_TILE_TINT = 0x9aa4b8;
+
+/**
  * Signed shortest-arc delta from `from` to `to`, normalised to [-PI, PI].
  *
  * The interval is closed on BOTH ends: `-PI` and `+PI` denote the same heading
@@ -252,11 +312,71 @@ export interface EntityView {
    * when `kind === 'hazard'`. Held by reference so the per-frame animation sets
    * their alphas directly instead of reaching into `container.children` by index —
    * the warning's layers are a structural fact, not a positional one.
+   *
+   * M16: when the atlas is available the ring is a `Sprite` instead of a `Graphics`,
+   * so the type is the union. Both expose `.alpha`, which is all `syncHazards`
+   * writes.
    */
   hazard?: {
     readonly fill: Graphics;
-    readonly ring: Graphics;
+    readonly ring: Graphics | Sprite;
   };
+  /**
+   * M16 · the animated body sprite, or `null` when this view fell back to the
+   * pre-M16 geometry. Its presence is the single source of truth for "is this view
+   * art or placeholder", so no other field has to be kept in step with it.
+   */
+  sprite: AnimatedSprite | null;
+  /**
+   * M16 · the animation key currently assigned to {@link sprite} (`null` for a
+   * geometry view). Re-assigning `AnimatedSprite.textures` RESTARTS the clip, so
+   * the assignment is guarded by "did the key change" — otherwise a walking enemy
+   * would be frozen on frame 0 forever.
+   */
+  animKey: string | null;
+  /**
+   * M16 · the ACTION the current clip belongs to. Kept beside {@link animKey}
+   * rather than parsed back out of it, because a sprite id contains dots
+   * (`player.base.idle.down`) and re-splitting that string in the hot path would be
+   * both slower and one rename away from being wrong.
+   */
+  animAction: AnimationState;
+  /** M16 · real elapsed milliseconds inside the current animation. */
+  animElapsedMs: number;
+  /**
+   * M16 · the sprite id this view draws, resolved ONCE at creation.
+   *
+   * An entity's faction and capability components are fixed for its whole life
+   * (data-model E3), so re-deriving the id every frame would be component lookups
+   * for a value that cannot move — and that cost is measured: see
+   * `tests/performance/render_art_cost.test.ts` (T045/SC-006).
+   */
+  spriteId: string | null;
+  /**
+   * M16 · the three inputs the animation choice actually depends on, cached so the
+   * per-frame path is three comparisons instead of a re-selection. `null` means
+   * "never selected yet".
+   */
+  animState: ActionState | null;
+  animDead: boolean;
+  animFacing: Facing4 | null;
+  /**
+   * M16 · the current clip's milliseconds-per-frame and frame count, cached when the
+   * clip is assigned.
+   *
+   * Both are otherwise re-derived EVERY frame per entity — a string-keyed record
+   * lookup and a `totalFrames` getter — and at ~180 entities that alone was ~2% of
+   * the per-frame budget. They are clip properties, so caching them cannot drift.
+   */
+  animFrameMs: number;
+  animTotal: number;
+  /**
+   * M16 · the raw container rotation the cached `animFacing` was derived from.
+   * `NaN` initially, which never compares equal to anything — so the first frame
+   * always recomputes. A CONSTANT facing (an enemy standing still, which is most of
+   * a stress room) then costs one float compare instead of a quantiser call.
+   */
+  animRot: number;
 }
 
 /** A live damage floater: a PixiJS `Text` plus the bookkeeping its lifetime needs. */
@@ -327,11 +447,15 @@ export class GameRenderer {
    */
   private staticLayer: Container | null = null;
 
-  /** The floor block. Child 0 of {@link staticLayer}; redrawn only when the extent moves. */
-  private floorGraphic: Graphics | null = null;
+  /**
+   * The floor node. Child 0 of {@link staticLayer}. Since M16 it is a `Container`
+   * holding one tile sprite per floor cell (or, when the atlas is unavailable, a
+   * single flat `Graphics` rectangle) and is rebuilt only when the extent moves.
+   */
+  private floorNode: Container | null = null;
 
-  /** One colour block per wall entity. Dropped when a wall is destroyed. */
-  private readonly wallViews = new Map<EntityId, Graphics>();
+  /** One node per wall entity. Dropped when a wall is destroyed. */
+  private readonly wallViews = new Map<EntityId, Container>();
 
   /**
    * Signature of the last drawn floor extent (`minX,minY,maxX,maxY,count`).
@@ -378,13 +502,25 @@ export class GameRenderer {
    * byte-for-byte the pre-M14 one (spec 20 I13, spec 22 §4.3). `VFXManager`
    * depends only on `pixi.js`, so it is safe to import here (spec 22 §2.5).
    */
-  private readonly vfx = new VFXManager();
+  private readonly vfx: VFXManager;
 
   /** True while {@link vfx}'s layer is parented to the camera. */
   private vfxAttached = false;
 
-  constructor(app: Application) {
+  /**
+   * The loaded art (M16). Defaults to {@link NULL_SPRITE_PROVIDER}, whose every
+   * lookup misses — so a renderer built without a catalog behaves EXACTLY like the
+   * pre-M16 one (geometry everywhere). That default is what lets the frozen render
+   * suites keep calling `new GameRenderer(app)` and stay green unchanged.
+   */
+  private readonly art: SpriteProvider;
+
+  constructor(app: Application, art: SpriteProvider = NULL_SPRITE_PROVIDER) {
     this.app = app;
+    this.art = art;
+    // The particle layer takes the SAME art source, so a degraded atlas degrades
+    // the sparks with everything else instead of half the screen.
+    this.vfx = new VFXManager(art);
   }
 
   /**
@@ -499,7 +635,10 @@ export class GameRenderer {
     // sits at index 0, below the render root).
     this.syncStaticGeometry(world);
     this.createMissingViews(world);
-    this.syncTransforms(world, clampedAlpha);
+    // M16: the transform pass ALSO advances the art clips, on the REAL frame clock
+    // (never on logic ticks). Fusing the two saves a second walk of the view map
+    // every frame, which is what keeps the art swap inside SC-006's 1.2x budget.
+    this.syncTransforms(world, clampedAlpha, deltaMs);
     // M14-T01: age + spawn transient FX and (re)trigger the screen shake BEFORE the
     // camera is moved, so a hit landing this frame shakes the camera THIS frame.
     this.syncEffects(deltaMs, frameEvents);
@@ -662,16 +801,60 @@ export class GameRenderer {
       maxY = Math.max(maxY, wall.y + wall.height);
 
       if (this.wallViews.has(id)) continue;
-      const block = new Graphics();
-      block
-        .rect(wall.x * PX_PER_UNIT, wall.y * PX_PER_UNIT, wall.width * PX_PER_UNIT, wall.height * PX_PER_UNIT)
-        .fill({ color: WALL_COLOR });
-      this.wallViews.set(id, block);
-      layer.addChild(block);
+      const node = this.buildWallNode(wall);
+      this.wallViews.set(id, node);
+      layer.addChild(node);
     }
 
     this.recycleWallViews(wallIds);
     this.syncFloor(layer, minX, minY, maxX, maxY, this.wallViews.size);
+  }
+
+  /**
+   * M16 · one wall entity's node.
+   *
+   * The node is POSITIONED at the wall's world pixel origin and its children are
+   * drawn relative to that — rather than drawing each block at absolute
+   * coordinates with the node at the origin. That is not cosmetic: the frozen
+   * `camera_follow` assertion `staticLayer.children[1].x === wall.x * PX_PER_UNIT`
+   * only held before because the first wall of `start_room` happens to sit at the
+   * origin; positioning the node makes it true for ANY room.
+   *
+   * A wall AABB can be wider or taller than one world unit (the loader meshes runs
+   * of tiles), so the art is TILED across the AABB rather than stretched — FR-009's
+   * "no stretching" applies to walls exactly as it does to the floor.
+   */
+  private buildWallNode(wall: WallComponent): Container {
+    const node = new Container();
+    node.x = wall.x * PX_PER_UNIT;
+    node.y = wall.y * PX_PER_UNIT;
+
+    const texture = this.tileTexture(WALL_TILE_ID);
+    if (texture === undefined) {
+      const block = new Graphics();
+      block
+        .rect(0, 0, wall.width * PX_PER_UNIT, wall.height * PX_PER_UNIT)
+        .fill({ color: WALL_COLOR });
+      node.addChild(block);
+      return node;
+    }
+
+    const cols = Math.max(1, Math.round(wall.width));
+    const rows = Math.max(1, Math.round(wall.height));
+    const scale = PX_PER_UNIT / TILE_NATURAL_PX;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const tile = new Sprite(texture);
+        tile.scale.set(scale);
+        tile.x = col * PX_PER_UNIT;
+        tile.y = row * PX_PER_UNIT;
+        // Slight darkening keeps the wall legible against the floor without
+        // competing with the hazard telegraph (spec 19 AC-08's colour rule).
+        tile.tint = WALL_TILE_TINT;
+        node.addChild(tile);
+      }
+    }
+    return node;
   }
 
   /** Create the static layer on demand and put it BEHIND the render root. */
@@ -680,7 +863,7 @@ export class GameRenderer {
     if (existing !== null) return existing;
 
     const layer = new Container();
-    const floor = new Graphics();
+    const floor = new Container();
     layer.addChild(floor);
     // Index 0 on the CAMERA: below the render root (which is appended by `init`), so
     // the floor and walls can never cover an entity or an FX. `addChildAt` on an
@@ -690,20 +873,24 @@ export class GameRenderer {
     // canvas origin.
     this.cameraContainer.addChildAt(layer, 0);
     this.staticLayer = layer;
-    this.floorGraphic = floor;
+    this.floorNode = floor;
     return layer;
   }
 
   /**
-   * Draw the floor block spanning the wall bounding box, but only when the extent
-   * actually changed (see `floorSignature`).
+   * Lay the floor across the wall bounding box, but only when the extent actually
+   * changed (see `floorSignature`).
    *
-   * The bounding box — rather than the union of the FLOOR tiles — is the honest
+   * The bounding box — rather than the union of the walkable tiles — is the honest
    * simplification here: a room's walls form its outline, so their bounding box IS
-   * the room's footprint, and the wall blocks drawn on top of it leave exactly the
+   * the room's footprint, and the wall nodes drawn on top of it leave exactly the
    * interior visible. A non-rectangular room therefore over-fills its corners, which
    * is invisible in a bordered room and is registered as a known simplification
    * (spec 19 §4.5).
+   *
+   * M16 tiles that area with `tile.floor` sprites instead of one flat rectangle, so
+   * the floor reads as a MATERIAL. The rebuild is signature-guarded, so a 30x30 room
+   * pays for ~900 sprites once per room transition — never per frame.
    */
   private syncFloor(
     layer: Container,
@@ -717,41 +904,76 @@ export class GameRenderer {
     if (signature === this.floorSignature) return;
     this.floorSignature = signature;
 
-    const floor = this.floorGraphic;
+    const floor = this.floorNode;
     if (floor === null) return;
-    floor.clear();
+    floor.removeChildren().forEach((child) => {
+      child.destroy();
+    });
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
-    floor
-      .rect(
-        minX * PX_PER_UNIT,
-        minY * PX_PER_UNIT,
-        (maxX - minX) * PX_PER_UNIT,
-        (maxY - minY) * PX_PER_UNIT,
-      )
-      .fill({ color: FLOOR_COLOR });
+
+    const texture = this.tileTexture(FLOOR_TILE_ID);
+    if (texture === undefined) {
+      const block = new Graphics();
+      block
+        .rect(
+          minX * PX_PER_UNIT,
+          minY * PX_PER_UNIT,
+          (maxX - minX) * PX_PER_UNIT,
+          (maxY - minY) * PX_PER_UNIT,
+        )
+        .fill({ color: FLOOR_COLOR });
+      floor.addChild(block);
+    } else {
+      const cols = Math.max(1, Math.ceil(maxX - minX));
+      const rows = Math.max(1, Math.ceil(maxY - minY));
+      const scale = PX_PER_UNIT / TILE_NATURAL_PX;
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const tile = new Sprite(texture);
+          tile.scale.set(scale);
+          tile.x = (minX + col) * PX_PER_UNIT;
+          tile.y = (minY + row) * PX_PER_UNIT;
+          floor.addChild(tile);
+        }
+      }
+    }
     // Re-assert child order: the floor must stay behind the wall blocks.
     layer.setChildIndex(floor, 0);
   }
 
-  /** Drop blocks whose wall is gone (a destroyed wall leaves `query`). */
+  /**
+   * M16 · the texture for a scene tile id.
+   *
+   * Prefers the single-frame animation NAMED after the id (`tile.floor`), because
+   * the tiles atlas holds two unrelated tiles — falling back to "the sheet's first
+   * frame" would silently paint every wall with the floor texture. The `texture()`
+   * lookup is the second chance, for an `image` entry.
+   */
+  private tileTexture(id: string): Texture | undefined {
+    const frames = this.art.animation(id);
+    if (frames !== undefined && frames[0] !== undefined) return frames[0];
+    return this.art.texture(id);
+  }
+
+  /** Drop nodes whose wall is gone (a destroyed wall leaves `query`). */
   private recycleWallViews(liveIds: readonly EntityId[]): void {
     const live = new Set<EntityId>(liveIds);
-    for (const [id, block] of this.wallViews) {
+    for (const [id, node] of this.wallViews) {
       if (live.has(id)) continue;
       this.wallViews.delete(id);
-      block.destroy();
+      node.destroy({ children: true });
     }
   }
 
-  /** Destroy the static layer and forget its blocks. A no-op when there is none. */
+  /** Destroy the static layer and forget its nodes. A no-op when there is none. */
   private teardownStaticLayer(): void {
     const layer = this.staticLayer;
     if (layer === null) return;
     this.wallViews.clear();
-    this.floorGraphic = null;
+    this.floorNode = null;
     this.floorSignature = '';
     this.staticLayer = null;
-    // Recursively destroys the floor and every wall block parented to the layer.
+    // Recursively destroys the floor and every wall node parented to the layer.
     layer.destroy({ children: true });
   }
 
@@ -778,7 +1000,7 @@ export class GameRenderer {
   }
 
   /** Step ② — project the transform (interpolated), apply the hit flash, tag corpses. */
-  private syncTransforms(world: World, alpha: number): void {
+  private syncTransforms(world: World, alpha: number, deltaMs: number): void {
     for (const [id, view] of this.views) {
       // A dying view is only driven by the death FX, never by the world (§4.4).
       if (view.isDying) continue;
@@ -804,10 +1026,64 @@ export class GameRenderer {
 
       // Hit flash (spec 10 AC-03): a frozen entity (hitstop) or a HITSTUN entity is
       // tinted. This is a pure READ — no system is added and no logic state changes.
+      // M16: `Container.tint` propagates to children in PixiJS v8, so the SAME
+      // assignment now tints the art sprite — the flash survives the art swap.
       const state = world.getComponent(id, StateComponent);
       const hit =
         isFrozen(world, id) || (state !== undefined && state.state === ActionState.HITSTUN);
       view.container.tint = hit ? HIT_FLASH_TINT : NO_TINT;
+
+      // M16: the art sprite must NOT inherit the container's facing rotation —
+      // `container.rotation === facingRadians` is a frozen contract that other
+      // suites assert on — so the sprite is counter-rotated and stays upright. The
+      // geometry fallback keeps rotating with the container, exactly as before.
+      //
+      // The animation is re-selected only when one of its THREE inputs changed.
+      // That guard is a performance contract, not a micro-optimisation: SC-006
+      // budgets the whole art swap at a 1.2x per-frame ratio, and re-deriving the
+      // sprite id (five component lookups) for 150 idle enemies every frame spent
+      // most of that budget on a value that cannot move.
+      // ONE `isDead` read per view per frame, shared by the art branch below and the
+      // death-FX branch further down: the component store lookup is the single most
+      // expensive thing this loop does, and reading it twice bought nothing.
+      const dead = isDead(world, id);
+      if (view.sprite !== null) {
+        // Recompute-on-CHANGE, never recompute-every-frame. Each of the three
+        // selection inputs is compared against the value it had when the clip was
+        // last chosen, so a standing enemy costs three primitive compares instead
+        // of a quantiser call, a switch and a clip lookup. SC-006 budgets the whole
+        // art swap at a 1.2x per-frame ratio; recomputing unchanged inputs spent
+        // most of it (tests/performance/render_art_cost.test.ts).
+        let stale = false;
+
+        const rotation = view.container.rotation;
+        if (rotation !== view.animRot) {
+          view.animRot = rotation;
+          const upright = -rotation;
+          if (view.sprite.rotation !== upright) view.sprite.rotation = upright;
+          const facing = facingFromRadians(rotation);
+          if (facing !== view.animFacing) {
+            view.animFacing = facing;
+            stale = true;
+          }
+        }
+
+        const rawState = state === undefined ? null : state.state;
+        if (rawState !== view.animState || dead !== view.animDead) {
+          view.animState = rawState;
+          view.animDead = dead;
+          const action = dead ? 'death' : animationFromState(rawState ?? undefined);
+          if (action !== view.animAction) {
+            view.animAction = action;
+            stale = true;
+          }
+        }
+
+        if (stale && view.animFacing !== null) {
+          this.selectAnimation(view, view.animAction, view.animFacing);
+        }
+        this.advanceAnimation(view, deltaMs);
+      }
 
       // Corpses are NEVER destroyed (spec 08 §4.4), so "play the death FX" must be
       // keyed on the DeadTag, not on the entity leaving the query (§3.3).
@@ -816,6 +1092,84 @@ export class GameRenderer {
         view.deathElapsedMs = 0;
       }
     }
+  }
+
+  /**
+   * Step ②a (M16) — pick the clip for one art view and (re)assign it when it
+   * CHANGED.
+   *
+   * The `key === view.animKey` early return is load-bearing, not an optimisation:
+   * assigning `AnimatedSprite.textures` calls `gotoAndStop(0)`, so an unguarded
+   * assignment would pin every sprite to its first frame for the whole session —
+   * the sprites would look correct and never move.
+   *
+   * `action` and `facing` arrive already resolved (the caller needed them for its
+   * own change detection), and the sprite id is read from the view, so this method
+   * performs NO component lookups.
+   *
+   * The lookup walks {@link animationCandidates}, so a sheet that carries only
+   * `<spriteId>.<action>.down` still plays the right action for a body facing up.
+   */
+  private selectAnimation(view: EntityView, action: AnimationState, facing: Facing4): void {
+    const sprite = view.sprite;
+    const spriteId = view.spriteId;
+    if (sprite === null || spriteId === null) return;
+
+    let frames: readonly Texture[] | undefined;
+    let key: string | null = null;
+    for (const candidate of animationCandidates({ spriteId, action, facing })) {
+      const found = this.art.animation(candidate);
+      if (found !== undefined && found.length > 0) {
+        frames = found;
+        key = candidate;
+        break;
+      }
+    }
+    if (frames === undefined || key === null) return;
+    if (key === view.animKey) return;
+
+    view.animKey = key;
+    view.animAction = action;
+    view.animFrameMs = ANIM_FRAME_MS[action];
+    view.animElapsedMs = 0;
+    // The setter restarts the clip at frame 0 and pushes the texture, so no extra
+    // `currentFrame` write is needed here.
+    sprite.textures = [...frames];
+    // ORDER IS LOAD-BEARING: `totalFrames` reads the textures the setter just
+    // installed. Reading it before the assignment caches the PREVIOUS clip's length,
+    // and `currentFrame` throws when handed an index past the new clip's end — a
+    // crash on the exact frame a longer action replaced a shorter one.
+    view.animTotal = sprite.totalFrames;
+    // The renderer owns the clock (see `syncAnimations`): leaving PixiJS's own
+    // auto-update on would drive the same clip from a second, uncontrolled source.
+    sprite.autoUpdate = false;
+  }
+
+  /**
+   * Step ②c (M16) — advance ONE art view's clip on the REAL frame clock.
+   *
+   * Why the renderer drives this instead of `AnimatedSprite.update(ticker)`:
+   * PixiJS's own update reads `ticker.deltaTime`, and the render suites build the
+   * `Application` as a duck-typed `{ stage, ticker }` stub with no `deltaTime` —
+   * driving the clip ourselves keeps the same code path in the browser and in the
+   * tests, and makes the frame index a pure function of `deltaMS`.
+   *
+   * The clip holds its LAST frame (it never wraps to 0), so `hit` (one frame) and
+   * `death` (a squash) settle instead of looping — the same "settle, do not
+   * flicker" rule the death FX follows.
+   */
+  private advanceAnimation(view: EntityView, deltaMs: number): void {
+    const sprite = view.sprite;
+    if (sprite === null) return;
+    // A view whose death FX is running holds its last frame (the FX owns the
+    // motion from here), and a single-frame clip has nowhere to advance to.
+    if (view.isDying) return;
+    const total = view.animTotal;
+    if (total <= 1) return;
+
+    view.animElapsedMs += deltaMs;
+    const index = Math.min(total - 1, Math.floor(view.animElapsedMs / view.animFrameMs));
+    if (sprite.currentFrame !== index) sprite.currentFrame = index;
   }
 
   /**
@@ -1118,10 +1472,18 @@ export class GameRenderer {
   }
 
   /**
-   * Build a hazard's warning: a translucent filled circle at the TRUE blast
-   * radius, plus a ring marking its edge. Both are drawn once at full radius and
-   * animated by `syncHazards` through `alpha` and `scale`, so no geometry is
-   * rebuilt per frame.
+   * Build a hazard's warning (M8-T01, art since M16).
+   *
+   * The WARNING is the one thing on screen that must own the player's attention, so
+   * its structure is unchanged: a translucent filled circle at the TRUE blast
+   * radius, plus a ring marking its edge, animated by `syncHazards` through `alpha`
+   * and `scale` so no geometry is rebuilt per frame.
+   *
+   * M16 swaps the RING for the `fx.hazard-ring` sprite when the atlas is available.
+   * The ring's shape language is deliberately the opposite of a pickup's — hollow
+   * and hard-edged versus solid and round — so "walk into this" and "run away from
+   * this" are distinguishable with the colour channel removed (FR-017). The fill
+   * stays a `Graphics`: it is a translucent AREA, and an area has no texture.
    */
   private createHazardView(hazard: HazardComponent): EntityView {
     const radiusPx = hazard.radius * PX_PER_UNIT;
@@ -1131,10 +1493,25 @@ export class GameRenderer {
     fill.circle(0, 0, radiusPx).fill({ color: HAZARD_COLOR, alpha: HAZARD_FILL_ALPHA_MIN });
     container.addChild(fill);
 
-    const ring = new Graphics();
-    ring
-      .circle(0, 0, radiusPx)
-      .stroke({ width: HAZARD_RING_WIDTH, color: HAZARD_COLOR, alpha: HAZARD_RING_ALPHA_MIN });
+    const ringFrames = this.art.animation(HAZARD_RING_FX_ID);
+    let ring: Graphics | Sprite;
+    if (ringFrames !== undefined && ringFrames[0] !== undefined) {
+      const sprite = new Sprite(ringFrames[0]);
+      sprite.anchor.set(0.5);
+      // The ring art is a fixed-size decal; scaling it to the blast diameter keeps
+      // the warning honest about the area it is warning about (FR-008's spirit).
+      const natural = ringFrames[0].width;
+      sprite.scale.set(radiusPx > 0 && natural > 0 ? (radiusPx * 2) / natural : 1);
+      sprite.tint = HAZARD_COLOR;
+      sprite.alpha = HAZARD_RING_ALPHA_MIN;
+      ring = sprite;
+    } else {
+      const graphic = new Graphics();
+      graphic
+        .circle(0, 0, radiusPx)
+        .stroke({ width: HAZARD_RING_WIDTH, color: HAZARD_COLOR, alpha: HAZARD_RING_ALPHA_MIN });
+      ring = graphic;
+    }
     container.addChild(ring);
 
     return {
@@ -1144,6 +1521,17 @@ export class GameRenderer {
       deathElapsedMs: 0,
       lastHp: undefined,
       hazard: { fill, ring },
+      sprite: null,
+      animKey: null,
+      animAction: 'idle',
+      animElapsedMs: 0,
+      spriteId: null,
+      animState: null,
+      animDead: false,
+      animFacing: null,
+      animFrameMs: ANIM_FRAME_MS.idle,
+      animTotal: 0,
+      animRot: Number.NaN,
     };
   }
 
@@ -1206,6 +1594,38 @@ export class GameRenderer {
     const radiusPx = pickup.radius * PX_PER_UNIT;
 
     const container = new Container();
+
+    // M16: the icon is looked up by KIND, so gold / heal / darkness are three
+    // different SHAPES rather than three colours of the same disc (FR-017). When
+    // the atlas is unavailable the pre-M16 disc is used, unchanged.
+    const iconFrames = this.art.animation(pickupIconId(pickup.kind));
+    if (iconFrames !== undefined && iconFrames[0] !== undefined) {
+      const icon = new Sprite(iconFrames[0]);
+      icon.anchor.set(0.5);
+      const natural = iconFrames[0].width;
+      const scale = hurtboxSpriteScale(pickup.radius, natural, PX_PER_UNIT);
+      icon.scale.set(scale);
+      container.addChild(icon);
+      return {
+        container,
+        kind: 'pickup',
+        isDying: false,
+        deathElapsedMs: 0,
+        lastHp: undefined,
+        sprite: null,
+        animKey: null,
+        animAction: 'idle',
+        animElapsedMs: 0,
+        spriteId: pickupIconId(pickup.kind),
+        animState: null,
+        animDead: false,
+        animFacing: null,
+        animFrameMs: ANIM_FRAME_MS.idle,
+        animTotal: 0,
+        animRot: Number.NaN,
+      };
+    }
+
     const graphic = new Graphics();
     graphic
       .circle(0, 0, radiusPx)
@@ -1213,7 +1633,24 @@ export class GameRenderer {
       .stroke({ width: PICKUP_RING_WIDTH, color: 0xffffff, alpha: 0.7 });
     container.addChild(graphic);
 
-    return { container, kind: 'pickup', isDying: false, deathElapsedMs: 0, lastHp: undefined };
+    return {
+      container,
+      kind: 'pickup',
+      isDying: false,
+      deathElapsedMs: 0,
+      lastHp: undefined,
+      sprite: null,
+      animKey: null,
+      animAction: 'idle',
+      animElapsedMs: 0,
+      spriteId: pickupIconId(pickup.kind),
+      animState: null,
+      animDead: false,
+      animFacing: null,
+      animFrameMs: ANIM_FRAME_MS.idle,
+      animTotal: 0,
+      animRot: Number.NaN,
+    };
   }
 
   private createHitboxView(hitbox: HitboxComponent): EntityView {
@@ -1225,50 +1662,158 @@ export class GameRenderer {
       .fill({ color, alpha: HITBOX_ALPHA })
       .stroke({ width: 1, color, alpha: 0.9 });
     container.addChild(graphic);
-    return { container, kind: 'hitbox', isDying: false, deathElapsedMs: 0, lastHp: undefined };
+    return {
+      container,
+      kind: 'hitbox',
+      isDying: false,
+      deathElapsedMs: 0,
+      lastHp: undefined,
+      sprite: null,
+      animKey: null,
+      animAction: 'idle',
+      animElapsedMs: 0,
+      spriteId: null,
+      animState: null,
+      animDead: false,
+      animFacing: null,
+      animFrameMs: ANIM_FRAME_MS.idle,
+      animTotal: 0,
+      animRot: Number.NaN,
+    };
   }
 
+  /**
+   * The player's view (M16: a real animated character).
+   *
+   * The ART is a child node; the container keeps its world position, its rotation
+   * and its tint, which is what keeps every frozen render assertion true. The
+   * pre-M16 circle + facing line is kept verbatim as the fallback (FR-013) — a
+   * missing atlas must degrade to "a blue dot", never to nothing.
+   */
   private createPlayerView(world: World, id: EntityId): EntityView {
     const container = new Container();
 
-    const body = new Graphics();
-    body
-      .circle(0, 0, PLAYER_RADIUS * PX_PER_UNIT)
-      .fill({ color: PLAYER_COLOR })
-      .stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
-    container.addChild(body);
+    const hurtbox = world.getComponent(id, HurtboxComponent);
+    const radiusUnits = hurtbox !== undefined ? hurtbox.radius : PLAYER_RADIUS;
+    const sprite = this.buildAnimatedBody(PLAYER_SPRITE_ID, radiusUnits);
+    if (sprite !== null) {
+      container.addChild(sprite);
+    } else {
+      const body = new Graphics();
+      body
+        .circle(0, 0, PLAYER_RADIUS * PX_PER_UNIT)
+        .fill({ color: PLAYER_COLOR })
+        .stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
+      container.addChild(body);
 
-    // Facing indicator: drawn along +x in LOCAL space; the container's rotation
-    // (= facingRadians, no sign flip) aims it in world space (spec 09 §3.2).
-    const facing = new Graphics();
-    facing
-      .moveTo(0, 0)
-      .lineTo(PLAYER_FACING_LENGTH * PX_PER_UNIT, 0)
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
-    container.addChild(facing);
+      // Facing indicator: drawn along +x in LOCAL space; the container's rotation
+      // (= facingRadians, no sign flip) aims it in world space (spec 09 §3.2).
+      const facing = new Graphics();
+      facing
+        .moveTo(0, 0)
+        .lineTo(PLAYER_FACING_LENGTH * PX_PER_UNIT, 0)
+        .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+      container.addChild(facing);
+    }
 
     this.addHurtboxOutline(container, world, id);
-    return { container, kind: 'player', isDying: false, deathElapsedMs: 0, lastHp: undefined };
+    return {
+      container,
+      kind: 'player',
+      isDying: false,
+      deathElapsedMs: 0,
+      lastHp: undefined,
+      sprite,
+      animKey: null,
+      animAction: 'idle',
+      animElapsedMs: 0,
+      spriteId: PLAYER_SPRITE_ID,
+      animState: null,
+      animDead: false,
+      animFacing: null,
+      animFrameMs: ANIM_FRAME_MS.idle,
+      animTotal: 0,
+      animRot: Number.NaN,
+    };
   }
 
+  /**
+   * An enemy's view (M16: five distinguishable monsters).
+   *
+   * The type is resolved ONCE, here, at view creation — never per frame. That is
+   * not a micro-optimisation: an entity's capability components are mounted at
+   * spawn and never change during its life (data-model E3), so re-deriving the
+   * type every frame would be pure churn on a value that cannot move.
+   *
+   * The body is scaled from the entity's HURTBOX, so the drawn monster is exactly
+   * the size the engine measures overlap against (FR-008): an elite's bigger body
+   * is visibly bigger because it IS bigger.
+   */
   private createEnemyView(world: World, id: EntityId): EntityView {
     const container = new Container();
 
     const hurtbox = world.getComponent(id, HurtboxComponent);
     const radiusUnits = hurtbox !== undefined ? hurtbox.radius : PLAYER_RADIUS;
-    const side = radiusUnits * 2 * PX_PER_UNIT;
-    const half = side / 2;
 
-    const body = new Graphics();
-    body
-      .rect(-half, -half, side, side)
-      .fill({ color: ENEMY_COLOR })
-      .stroke({ width: 1, color: 0x000000, alpha: 0.5 });
-    container.addChild(body);
+    const selection = selectSprite(world, id);
+    const sprite =
+      selection === undefined ? null : this.buildAnimatedBody(selection.spriteId, radiusUnits);
+
+    if (sprite !== null) {
+      container.addChild(sprite);
+    } else {
+      const side = radiusUnits * 2 * PX_PER_UNIT;
+      const half = side / 2;
+      const body = new Graphics();
+      body
+        .rect(-half, -half, side, side)
+        .fill({ color: ENEMY_COLOR })
+        .stroke({ width: 1, color: 0x000000, alpha: 0.5 });
+      container.addChild(body);
+    }
 
     this.addHurtboxOutline(container, world, id);
-    return { container, kind: 'enemy', isDying: false, deathElapsedMs: 0, lastHp: undefined };
+    return {
+      container,
+      kind: 'enemy',
+      isDying: false,
+      deathElapsedMs: 0,
+      lastHp: undefined,
+      sprite,
+      animKey: null,
+      animAction: 'idle',
+      animElapsedMs: 0,
+      spriteId: selection === undefined ? null : selection.spriteId,
+      animState: null,
+      animDead: false,
+      animFacing: null,
+      animFrameMs: ANIM_FRAME_MS.idle,
+      animTotal: 0,
+      animRot: Number.NaN,
+    };
   }
+
+  /**
+   * M16 · build an `AnimatedSprite` for `spriteId`, or `null` when the atlas cannot
+   * provide even its `idle.down` clip.
+   *
+   * The sprite starts on the fallback key (`<spriteId>.idle.down`) and is re-keyed
+   * on the first `syncTransforms`; starting it here means a view is never rendered
+   * with an unset texture, which PixiJS draws as an empty quad.
+   *
+   * `autoUpdate` is off because {@link syncAnimations} owns the clock.
+   */
+  private buildAnimatedBody(spriteId: string, radiusUnits: number): AnimatedSprite | null {
+    const frames = this.art.animation(`${spriteId}.idle.down`);
+    if (frames === undefined || frames.length === 0) return null;
+
+    const sprite = new AnimatedSprite([...frames]);
+    sprite.anchor.set(0.5);
+    sprite.scale.set(hurtboxSpriteScale(radiusUnits, TILE_NATURAL_PX, PX_PER_UNIT));
+    sprite.autoUpdate = false;
+    return sprite;
+  }
+
 
   /** Optional thin hurtbox outline (spec 09 AC-04). */
   private addHurtboxOutline(container: Container, world: World, id: EntityId): void {

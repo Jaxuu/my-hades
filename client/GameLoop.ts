@@ -29,9 +29,23 @@ import type { Ticker } from 'pixi.js';
 
 import type { GameSimulator } from '../src/core/GameSimulator';
 import { isInHub } from '../src/ecs/components/GameStateComponent';
+import { PlayerInputComponent } from '../src/ecs/components/PlayerInputComponent';
 import type { ClientEventBridge, FrameEvents } from './ClientEventBridge';
 import type { GameRenderer } from './GameRenderer';
-import type { KeyboardInput } from './KeyboardInput';
+
+/**
+ * The keyboard seam: everything this loop needs from the device layer.
+ *
+ * Structural rather than the concrete `KeyboardInput` class, and that is a
+ * type-surface decision with teeth: `KeyboardInput` reads the bare DOM globals
+ * `window` / `KeyboardEvent`, so even a TYPE import of it drags those names into
+ * the DOM-less `npm run typecheck` program (`lib: ["ES2022"]`) and fails it with
+ * TS2304. `client/main.ts` still passes the real class — an instance satisfies
+ * this interface structurally — so nothing about the wiring changes.
+ */
+export interface InputSource {
+  flush(sim: GameSimulator): void;
+}
 
 /**
  * The howler-FREE audio seam (M14-T01, spec 22 §2.5).
@@ -40,11 +54,29 @@ import type { KeyboardInput } from './KeyboardInput';
  * import graph via the renderer's siblings), so it talks to audio through this
  * structural interface instead. `client/AudioManager` satisfies it without
  * importing it.
+ *
+ * M16 (specs/024-real-art-assets T028) ADDS six optional methods at the TAIL. They
+ * are optional on purpose: a sink written against the pre-M16 interface still
+ * satisfies this one, so `new GameLoop(sim, renderer, input, bridge, sink)` keeps
+ * type-checking and behaving exactly as before. The loop calls each through `?.`,
+ * so an old sink simply does not hear the new cues.
  */
 export interface AudioSink {
   playHit(): void;
   playDash(): void;
   playCoin(): void;
+  /** M16: an enemy (or the player) died. */
+  playEnemyDeath?(): void;
+  /** M16: a hazard telegraph detonated. */
+  playHazardBlast?(): void;
+  /** M16: a UI button was pressed. */
+  playUiClick?(): void;
+  /** M16: a reward option was chosen. */
+  playRewardSelect?(): void;
+  /** M16: the run ended in death. */
+  playDeath?(): void;
+  /** M16: the run ended in victory. */
+  playWin?(): void;
 }
 
 /**
@@ -57,7 +89,7 @@ export const MAX_STEPS_PER_FRAME = 5;
 export class GameLoop {
   private readonly sim: GameSimulator;
   private readonly renderer: GameRenderer;
-  private readonly input: KeyboardInput;
+  private readonly input: InputSource;
   private readonly onTick: (ticker: Ticker) => void;
 
   /**
@@ -74,7 +106,7 @@ export class GameLoop {
   constructor(
     sim: GameSimulator,
     renderer: GameRenderer,
-    input: KeyboardInput,
+    input: InputSource,
     bridge: ClientEventBridge | null = null,
     audio: AudioSink | null = null,
   ) {
@@ -179,7 +211,16 @@ export class GameLoop {
     this.renderer.syncWorld(this.sim.world, alpha, events);
   }
 
-  /** Fire one sound per event, through the howler-free sink. */
+  /**
+   * Fire one sound per event, through the howler-free sink.
+   *
+   * M16 adds the death cue. Which one is decided by a READ of the world — the same
+   * "the engine publishes no event for this, so observe the state" trade-off
+   * `installCoinChime` documents: `PlayerInputComponent` is the engine's structural
+   * "this is the player" marker (spec 01 §3.3), so a death carrying it is the run
+   * ending rather than a monster falling. The six new sink methods are optional, so
+   * a pre-M16 sink still works and simply hears nothing new.
+   */
   private playSounds(events: FrameEvents): void {
     const audio = this.audio;
     if (audio === null) return;
@@ -188,6 +229,13 @@ export class GameLoop {
     });
     events.dashes.forEach(() => {
       audio.playDash();
+    });
+    events.deaths.forEach((death) => {
+      if (this.sim.world.getComponent(death.entityId, PlayerInputComponent) !== undefined) {
+        audio.playDeath?.();
+        return;
+      }
+      audio.playEnemyDeath?.();
     });
   }
 }

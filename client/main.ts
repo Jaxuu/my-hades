@@ -116,7 +116,8 @@ import {
   currentRoomId,
   findRewardDraft,
 } from '../src/ecs/components/EncounterStateComponent';
-import { findGameState, GameStatus } from '../src/ecs/components/GameStateComponent';
+import { findGameState, GameStatus, isInHub } from '../src/ecs/components/GameStateComponent';
+import { HazardComponent } from '../src/ecs/components/HazardComponent';
 import { LevelLoader } from '../src/core/LevelLoader';
 
 import { GameRenderer } from './GameRenderer';
@@ -125,6 +126,7 @@ import { KeyboardInput } from './KeyboardInput';
 import { UIManager } from './UIManager';
 import { ClientEventBridge } from './ClientEventBridge';
 import { AudioManager } from './AudioManager';
+import { AssetCatalog } from './assets/AssetCatalog';
 import { bootstrapClientData, installDataHotReload } from './bundled';
 import { loadSaveState, persistSaveState } from './SaveStore';
 
@@ -188,10 +190,79 @@ async function main(): Promise<void> {
     antialias: true,
   });
 
-  start(app);
+  // M16 (specs/024-real-assets T012): load the art AFTER the app exists and
+  // BEFORE the first run is assembled. The ordering is deliberate:
+  //
+  //  - after `app.init`, because loading needs the browser's image decoder and
+  //    nothing about it depends on the world;
+  //  - before `runSetup`, because the very first `syncWorld` must already know
+  //    whether it is drawing art or geometry — loading later would paint one
+  //    frame of placeholders and then swap, which is exactly the "残缺或闪烁"
+  //    that US5 acceptance scenario 3 forbids.
+  //
+  // `AssetCatalog.load()` NEVER throws (a per-entry try/catch turns every failure
+  // into a `degraded` terminal state), so this await cannot break the boot. A
+  // missing asset set means "geometry everywhere", not "no game" (FR-013).
+  const catalog = new AssetCatalog();
+  await catalog.load();
+  reportDegradedAssets(catalog);
+
+  start(app, catalog);
 }
 
 void main();
+
+/**
+ * M16 · say WHICH assets degraded, and why it is survivable.
+ *
+ * Diagnostics rather than an error: the game is fully playable with zero assets
+ * (every view falls back to its pre-M16 geometry), so a missing atlas is a
+ * quality-of-presentation fact, not a failure. Silently swallowing it would leave
+ * a reviewer staring at placeholder squares with no way to learn why.
+ */
+function reportDegradedAssets(catalog: AssetCatalog): void {
+  const degraded = catalog.degradedIds();
+  if (degraded.length === 0) {
+    console.info(`[assets] ${String(catalog.readyIds().length)} assets ready`);
+    return;
+  }
+  console.warn(
+    `[assets] ${String(degraded.length)} of ${String(degraded.length + catalog.readyIds().length)}` +
+      ` assets degraded to placeholder art (the game is unaffected): ${degraded.join(', ')}`,
+  );
+}
+
+/**
+ * M16 · publish the UI art to CSS.
+ *
+ * The DOM skin lives in `index.html`, which cannot know Vite's hashed asset URLs,
+ * so the composition root hands them over as CSS custom properties. Setting them
+ * on `documentElement` means one write for the whole document, and an id that
+ * degraded simply leaves its variable at `none` — which is what makes the
+ * plain-CSS panel underneath the art a real fallback rather than a comment
+ * (FR-013, ui-asset-slots.md 承诺 5).
+ */
+function applyUiSkin(catalog: AssetCatalog): void {
+  const slots: Readonly<Record<string, string>> = {
+    '--ui-panel-hud': 'ui.panel.hud',
+    '--ui-panel-reward': 'ui.panel.reward',
+    '--ui-panel-camp': 'ui.panel.camp',
+    '--ui-frame-reward-card': 'ui.frame.reward-card',
+    '--ui-frame-talent-card': 'ui.frame.talent-card',
+    '--ui-button-primary': 'ui.button.primary',
+    '--ui-overlay-death': 'ui.overlay.death',
+    '--ui-overlay-win': 'ui.overlay.win',
+    '--ui-frame-slot': 'ui.frame.slot',
+    '--ui-frame-slot-inlay': 'ui.frame.slot-inlay',
+    '--ui-bar-hud': 'ui.bar.hud',
+  };
+  const root = document.documentElement;
+  for (const [variable, id] of Object.entries(slots)) {
+    const url = catalog.url(id);
+    if (url === undefined) continue;
+    root.style.setProperty(variable, `url("${url}")`);
+  }
+}
 
 /**
  * Assemble ONE run: the player, the rooms and the run's state singleton.
@@ -336,8 +407,11 @@ function buildStressRun(world: World, saveState: SaveState): void {
   GameStateFactory.spawn(world);
 }
 
-function start(app: Application): void {
+function start(app: Application, catalog: AssetCatalog): void {
   mountCanvas(app);
+  // M16: the skin goes on before the first frame, so the interface never flashes
+  // its unskinned self.
+  applyUiSkin(catalog);
 
   // M13-T01: the save is read ONCE, before the simulator exists, and INJECTED.
   // `src/` never learns whether a storage medium exists at all (spec 21 AC-01 / I1);
@@ -366,14 +440,18 @@ function start(app: Application): void {
   // The FIRST run goes through the same builder every restart will use.
   runSetup(sim.world, sim.saveState);
 
-  const renderer = new GameRenderer(app);
+  const renderer = new GameRenderer(app, catalog);
   renderer.init();
 
   const input = new KeyboardInput(window);
   // M14-T01: the audio channel is created once, after the app exists. It is
   // best-effort — every method is a silent no-op when there is no audio backend,
   // so this never throws and never blocks the boot (spec 22 §4.4).
-  const audio = new AudioManager();
+  //
+  // M16: it is handed the CATALOG, so the nine real sfx files replace the old
+  // synthesised placeholders. A catalog that degraded yields a silent channel
+  // rather than a broken one (FR-013's `silent` fallback).
+  const audio = new AudioManager(catalog);
   const loop = new GameLoop(sim, renderer, input, bridge, audio);
 
   const uiRoot = document.getElementById('ui-layer');
@@ -386,6 +464,9 @@ function start(app: Application): void {
           // is absent, which the UIManager treats as "no HUD" rather than an error.
           hud: document.getElementById('gold'),
           onSelect: (rewardId: string) => {
+            // M16: the reward chime rides the SAME callback as the command, so the
+            // sound and the choice cannot drift apart (FR-011: same render frame).
+            audio.playRewardSelect();
             // A click is an EXTERNAL, tick-aligned command. `sim.tick` is stable
             // between frames, and `GameLoop` flushes input BEFORE `step`, so this
             // lands on the tick the player saw the option on — and can never be a
@@ -393,6 +474,8 @@ function start(app: Application): void {
             sim.inject({ kind: 'selectReward', tick: sim.tick, rewardId });
           },
           onEnterHub: () => {
+            // M16: a UI press, not a simulation input — so it sounds on the click.
+            audio.playUiClick();
             // `R` on a terminal overlay is an external command, but unlike a click
             // it is not tick-aligned: it is a RUN-BOUNDARY operation, not a
             // simulation input, so it does not ride the input queue (spec 14 §4.5).
@@ -406,6 +489,9 @@ function start(app: Application): void {
             persistSaveState(storage, sim.saveState);
           },
           onPurchase: (upgradeId: string) => {
+            // M16: the press sounds immediately; the simulator still re-validates,
+            // so a refused purchase is an audible press with no effect (spec 21 §4.6).
+            audio.playUiClick();
             // A purchase is a META-boundary command, exactly like the settlement
             // above — never a `step()` input. The simulator re-validates it, so a
             // forged id or an unaffordable price is simply refused (spec 21 §4.6).
@@ -414,6 +500,8 @@ function start(app: Application): void {
             }
           },
           onStartRun: () => {
+            // M16: leaving the camp is a press like any other.
+            audio.playUiClick();
             // The camp's ONE exit. `restartRun` rebuilds the world and hands the
             // save to `buildRun`, which is where a purchase becomes a stronger
             // player (spec 21 AC-04). Nothing changed, so nothing is persisted —
@@ -478,6 +566,54 @@ function start(app: Application): void {
   });
 
   installCoinChime(app, sim, audio);
+  // M16 · the two cues the engine publishes no event for, observed the same way
+  // the coin chime is (spec 22 §7 T4): a per-frame read of state, never a write.
+  installHazardBlast(app, sim, audio);
+  installTerminalSting(app, sim, audio);
+}
+
+/**
+ * M16 · play the detonation cue when a hazard telegraph goes off.
+ *
+ * WHY A COUNT OBSERVER RATHER THAN AN EVENT: `HazardSystem.detonate` spawns a blast
+ * hitbox and then DESTROYS the hazard entity in the same tick, so by the time the
+ * frame's events are drained there is no hazard left to identify — the hit's
+ * `attackerId` points at an entity that no longer exists. The count dropping is the
+ * one honest signal available, and it is exactly the shape `installCoinChime`
+ * already uses for "an event the engine does not publish".
+ *
+ * The guard against a run boundary is what keeps this precise in practice: a
+ * restart or a data reload clears the room too, and those are the two moments a
+ * spurious blast would be audible. While the hub is open no ticks advance, so the
+ * camp cannot produce a false positive either.
+ */
+function installHazardBlast(app: Application, sim: GameSimulator, audio: AudioManager): void {
+  let lastHazards = sim.world.query(HazardComponent).length;
+  app.ticker.add(() => {
+    const hazards = sim.world.query(HazardComponent).length;
+    if (hazards < lastHazards && !isInHub(sim.world)) {
+      audio.playHazardBlast();
+    }
+    lastHazards = hazards;
+  });
+}
+
+/**
+ * M16 · play the run-ending sting EXACTLY once per terminal transition.
+ *
+ * A level trigger turned into an edge: the sting fires on the frame the status
+ * CHANGES, so a run that stays dead for a thousand frames makes one sound.
+ */
+function installTerminalSting(app: Application, sim: GameSimulator, audio: AudioManager): void {
+  let lastStatus = findGameState(sim.world)?.status ?? GameStatus.PLAYING;
+  app.ticker.add(() => {
+    const status = findGameState(sim.world)?.status ?? GameStatus.PLAYING;
+    if (status !== lastStatus) {
+      if (status === GameStatus.RUN_FAILED) audio.playDeath();
+      if (status === GameStatus.RUN_WON) audio.playWin();
+    }
+    lastStatus = status;
+  });
 }
 
 /**

@@ -42,9 +42,12 @@
 
 import { Container, Graphics } from 'pixi.js';
 
+import { DASH_TRAIL_FX_ID, SPARK_FX_ID } from './assets/sprite-map';
+import type { SpriteProvider } from './assets/AssetCatalog';
+
 const TWO_PI = Math.PI * 2;
 
-/** Spark colour: a warm yellow-white, per spec 22 §3.2. */
+/** Spark colour: a warm yellow-white, per spec 22 §3.2. The FALLBACK tint. */
 const SPARK_COLOR = 0xfff1a8;
 
 /** How long a spark lives, in real milliseconds. */
@@ -74,6 +77,16 @@ const SPARK_DRAG = 0.86;
 const SPARK_LENGTH_PX = 5;
 const SPARK_THICKNESS_PX = 1.5;
 
+/**
+ * M16 · the drawn size of the textured spark / trail (PIXELS).
+ *
+ * Small on purpose: at 10px per world unit a 10px particle would be a whole tile.
+ * The art is a decal, not a body.
+ */
+const SPARK_ART_PX = 7;
+const DASH_ART_W_PX = 11;
+const DASH_ART_H_PX = 4;
+
 /** One live spark: a PixiJS node plus the bookkeeping its motion needs. */
 interface Spark {
   readonly node: Graphics;
@@ -89,6 +102,16 @@ interface Spark {
 export class VFXManager {
   private readonly particleLayer = new Container();
   private readonly particles: Spark[] = [];
+  /**
+   * M16 · the art source. Optional: with no provider (or a degraded atlas) every
+   * particle falls back to the pre-M16 streak, so a missing atlas costs the sparks
+   * their texture and nothing else.
+   */
+  private readonly art: SpriteProvider | undefined;
+
+  constructor(art?: SpriteProvider) {
+    this.art = art;
+  }
 
   /** The layer the renderer mounts/unmounts. Never null; may be detached. */
   public get layer(): Container {
@@ -111,7 +134,7 @@ export class VFXManager {
    */
   public spawnHitSparks(x: number, y: number): void {
     for (let i = 0; i < SPARK_COUNT_HIT; i += 1) {
-      this.spawnSpark(x, y, Math.random() * TWO_PI, randomSpeed());
+      this.spawnSpark(x, y, Math.random() * TWO_PI, randomSpeed(), 'hit');
     }
   }
 
@@ -124,7 +147,7 @@ export class VFXManager {
     const base = Math.atan2(dirY, dirX) + Math.PI;
     for (let i = 0; i < SPARK_COUNT_DASH; i += 1) {
       const angle = base + (Math.random() - 0.5) * DASH_SPREAD_RADIANS;
-      this.spawnSpark(x, y, angle, randomSpeed());
+      this.spawnSpark(x, y, angle, randomSpeed(), 'dash');
     }
   }
 
@@ -173,11 +196,42 @@ export class VFXManager {
     this.particleLayer.destroy();
   }
 
-  /** Build one spark node at `(x, y)` flying at `angle` / `speed`, and pool it. */
-  private spawnSpark(x: number, y: number, angle: number, speed: number): void {
+  /**
+   * Build one spark node at `(x, y)` flying at `angle` / `speed`, and pool it.
+   *
+   * M16 · the node is a `Graphics` filled with the fx atlas texture rather than a
+   * `Sprite`. That is a CONTRACT, not a preference: the frozen `juice_m14` suite
+   * asserts `spark instanceof Graphics` for every child of the particle layer (its
+   * "no Text leaked into the particle layer" guard). A `Graphics` with a texture
+   * fill gives the art without weakening that assertion — and the pre-M16 colour
+   * fill remains as the fallback when the atlas is unavailable.
+   */
+  private spawnSpark(
+    x: number,
+    y: number,
+    angle: number,
+    speed: number,
+    kind: 'hit' | 'dash',
+  ): void {
     const node = new Graphics();
-    node.rect(0, 0, SPARK_LENGTH_PX, SPARK_THICKNESS_PX).fill({ color: SPARK_COLOR });
-    node.rotation = angle;
+    const texture = this.art?.texture(kind === 'hit' ? SPARK_FX_ID : DASH_TRAIL_FX_ID);
+    if (texture !== undefined) {
+      if (kind === 'hit') {
+        // A square decal: the spark art is a star, so it is not stretched into a
+        // streak (FR-009's no-stretch rule reads the same for a particle).
+        node
+          .rect(-SPARK_ART_PX / 2, -SPARK_ART_PX / 2, SPARK_ART_PX, SPARK_ART_PX)
+          .fill({ texture });
+      } else {
+        node
+          .rect(-DASH_ART_W_PX / 2, -DASH_ART_H_PX / 2, DASH_ART_W_PX, DASH_ART_H_PX)
+          .fill({ texture });
+        node.rotation = angle;
+      }
+    } else {
+      node.rect(0, 0, SPARK_LENGTH_PX, SPARK_THICKNESS_PX).fill({ color: SPARK_COLOR });
+      node.rotation = angle;
+    }
     node.x = x;
     node.y = y;
     node.alpha = 1;

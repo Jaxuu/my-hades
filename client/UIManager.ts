@@ -288,13 +288,16 @@ export class UIManager {
     this.clear();
 
     const heading = document.createElement('h2');
+    // M16: a skin hook only. The heading's text, its position in the DOM and the
+    // branch that produces it are untouched (ui-asset-slots.md 承诺 1).
+    heading.className = 'ui-heading';
     heading.textContent = this.title;
     this.root.appendChild(heading);
 
     for (const id of ids) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'reward-button';
+      button.className = 'reward-button ui-card';
       // The label lives in the logic layer's pool table, read one-way, so the draft
       // and its display name can never drift apart.
       button.textContent = getRewardDefinition(id)?.label ?? id;
@@ -322,11 +325,12 @@ export class UIManager {
     this.clear();
 
     const heading = document.createElement('h2');
+    heading.className = 'ui-heading ui-heading-terminal';
     heading.textContent = kind === 'win' ? this.winTitle : this.deathTitle;
     this.root.appendChild(heading);
 
     const hint = document.createElement('p');
-    hint.className = 'death-hint';
+    hint.className = 'death-hint ui-hint';
     hint.textContent = kind === 'win' ? this.winHint : this.deathHint;
     this.root.appendChild(hint);
 
@@ -371,19 +375,19 @@ export class UIManager {
     this.root.appendChild(heading);
 
     const currency = document.createElement('p');
-    currency.className = 'hub-currency';
+    currency.className = 'hub-currency ui-currency';
     currency.textContent = `${this.darknessLabel} ${String(darkness)}`;
     this.root.appendChild(currency);
 
     const list = document.createElement('div');
-    list.className = 'hub-talents';
+    list.className = 'hub-talents ui-list';
     for (const id of DataManager.metaUpgradeIds) {
       const config = DataManager.getMetaUpgradeConfig(id);
       const owned = unlocked.includes(id);
 
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'talent-button';
+      button.className = 'talent-button ui-card';
       button.textContent = `${config.label ?? id} · ${String(config.cost)}`;
 
       if (owned) {
@@ -403,7 +407,7 @@ export class UIManager {
 
     const start = document.createElement('button');
     start.type = 'button';
-    start.className = 'start-button';
+    start.className = 'start-button ui-button-primary';
     start.textContent = this.startLabel;
     start.addEventListener('click', () => {
       this.onStartRun?.();

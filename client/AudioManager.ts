@@ -1,18 +1,19 @@
 /**
  * AudioManager — the presentation layer's audio channel.
- * See specs/22_audio_and_juice_spec.md §3.3 / §4.4 (AC-01).
+ * See specs/22_audio_and_juice_spec.md §3.3 / §4.4 and
+ * specs/024-real-art-assets/research.md D8 (M16).
  *
  * WHAT IT IS
  * ----------
- * Three short, SYNTHESISED placeholder sounds — a hit thud, a dash sweep and a
- * coin chime — played through howler. The sounds are generated in code as WAV
- * `data:` URIs at construction time, so:
+ * Nine REAL, locally-bundled CC0 sound effects — hit, dash, coin, enemy death,
+ * hazard blast, UI click, reward select, death, win — played through howler. The
+ * sources are Vite-resolved URLs handed in by `AssetCatalog`; this module never
+ * knows where a file lives, which is what keeps the asset manifest the single
+ * source of truth for "does this sound exist".
  *
- *   - there is NO asset file to fetch, and therefore NO 404 (spec 22 AC-01); the
- *     whole thing is one self-contained module;
- *   - howler is a REAL dependency of the shipped bundle (it owns loading, the
- *     global mute/volume channel and the playback calls) rather than a wrapper
- *     around raw Web Audio.
+ * (Before M16 this module SYNTHESISED three placeholder WAV `data:` URIs. Those are
+ * gone: the manifest declares `fallback: 'silent'` for every audio entry, so the
+ * honest degradation is silence, not a different noise.)
  *
  * SILENT DEGRADATION IS THE CONTRACT
  * ----------------------------------
@@ -20,8 +21,11 @@
  * the context, or on any environment where `Howl` / `AudioContext` is missing,
  * every method must be a silent no-op — NEVER a throw. `build()` wraps the whole
  * construction in try/catch and reports `available: false`; every play call is
- * guarded by `available` and its own try/catch. A missing sound must never be
- * able to break the game loop.
+ * guarded by `available` and its own try/catch. A missing sound must never be able
+ * to break the game loop (spec 22 I9).
+ *
+ * Degradation is PER SOUND as well as per channel: a URL the catalog could not
+ * resolve leaves that one `Howl` null while the other eight still play.
  *
  * ONE-WAY DEPENDENCY
  * ------------------
@@ -36,138 +40,84 @@
  * `tests/audio/audio_manager.test.ts`). The real constraint is that this module
  * referenced a BARE DOM global (`window`), which — pulled into `tests/**`
  * transitively via `GameRenderer` — breaks the DOM-less `npm run typecheck`
- * program (`lib: ["ES2022"]`) with TS2304. The guard below now reads
+ * program (`lib: ["ES2022"]`) with TS2304. The guard below reads
  * `globalThis.window`, which removes that hazard, but the isolation is kept as a
  * deliberate discipline: `howler` belongs to the audio channel and nothing else.
  */
 
 import { Howl, Howler } from 'howler';
 
-/** Sample rate for every synthesised placeholder. Small keeps the data URIs tiny. */
-const SAMPLE_RATE = 22050;
+/**
+ * The manifest ids this channel plays, in the vocabulary the SINK uses.
+ *
+ * Exported and frozen so `tests/audio/audio_assets.test.ts` can pin the mapping
+ * literally: a typo in an id would otherwise show up only as a silent game.
+ */
+export const SFX_IDS = Object.freeze({
+  hit: 'sfx.hit',
+  dash: 'sfx.dash',
+  coin: 'sfx.coin',
+  enemyDeath: 'sfx.enemy-death',
+  hazardBlast: 'sfx.hazard-blast',
+  uiClick: 'sfx.ui-click',
+  rewardSelect: 'sfx.reward-select',
+  death: 'sfx.death',
+  win: 'sfx.win',
+});
 
-/** Linear 16-bit PCM mono WAV, base64-encoded as a `data:` URI. */
-function encodeWavDataUri(samples: Float32Array): string {
-  const dataSize = samples.length * 2;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
+/** One of the nine playable sounds. */
+export type SfxName = keyof typeof SFX_IDS;
 
-  writeAscii(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(view, 8, 'WAVE');
-  writeAscii(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // fmt chunk size
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, SAMPLE_RATE, true);
-  view.setUint32(28, SAMPLE_RATE * 2, true); // byte rate = sampleRate * blockAlign
-  view.setUint16(32, 2, true); // block align = channels * bytesPerSample
-  view.setUint16(34, 16, true); // bits per sample
-  writeAscii(view, 36, 'data');
-  view.setUint32(40, dataSize, true);
+/** Every sound name, in manifest order. */
+export const SFX_NAMES: readonly SfxName[] = Object.freeze(
+  Object.keys(SFX_IDS) as SfxName[],
+);
 
-  let offset = 44;
-  for (let i = 0; i < samples.length; i += 1) {
-    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
-    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
-    offset += 2;
-  }
-
-  return `data:audio/wav;base64,${toBase64(new Uint8Array(buffer))}`;
-}
-
-/** Write an ASCII string (chunk tag) into the DataView at `offset`. */
-function writeAscii(view: DataView, offset: number, text: string): void {
-  for (let i = 0; i < text.length; i += 1) {
-    view.setUint8(offset + i, text.charCodeAt(i));
-  }
-}
-
-/** Base64-encode bytes without spreading a huge argument list. */
-function toBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i] ?? 0);
-  }
-  return btoa(binary);
-}
+/** Per-sound playback gain. Impacts are loud, ambience-ish cues are quieter. */
+const SFX_VOLUME: Readonly<Record<SfxName, number>> = {
+  hit: 0.55,
+  dash: 0.4,
+  coin: 0.45,
+  enemyDeath: 0.45,
+  hazardBlast: 0.5,
+  uiClick: 0.4,
+  rewardSelect: 0.5,
+  death: 0.6,
+  win: 0.6,
+};
 
 /**
- * A short, low, noise-edged thud: a tone falling 220 -> 60 Hz mixed with noise,
- * under an exponential decay (~120ms).
+ * The narrow seam this module needs from the asset layer: "the built URL for this
+ * asset id". Structural rather than "the AssetCatalog class" so the audio channel
+ * depends on one method instead of a loader.
  */
-function synthHit(): string {
-  const length = Math.floor(SAMPLE_RATE * 0.12);
-  const samples = new Float32Array(length);
-  let phase = 0;
-  for (let i = 0; i < length; i += 1) {
-    const progress = i / length;
-    const freq = 220 - 160 * progress;
-    phase += (2 * Math.PI * freq) / SAMPLE_RATE;
-    const envelope = Math.exp(-9 * progress);
-    const tone = Math.sin(phase);
-    const noise = Math.random() * 2 - 1;
-    samples[i] = (tone * 0.7 + noise * 0.3) * envelope * 0.8;
-  }
-  return encodeWavDataUri(samples);
+export interface SfxUrlSource {
+  url(id: string): string | undefined;
 }
 
-/**
- * A quick RISING sweep: a sine sweeping 200 -> 1200 Hz over ~150ms, windowed so
- * it fades in and out (a dash "whoosh").
- */
-function synthDash(): string {
-  const length = Math.floor(SAMPLE_RATE * 0.15);
-  const samples = new Float32Array(length);
-  let phase = 0;
-  for (let i = 0; i < length; i += 1) {
-    const progress = i / length;
-    const freq = 200 + 1000 * progress;
-    phase += (2 * Math.PI * freq) / SAMPLE_RATE;
-    const envelope = Math.sin(Math.PI * progress);
-    samples[i] = Math.sin(phase) * envelope * 0.5;
-  }
-  return encodeWavDataUri(samples);
-}
-
-/** A 1000 Hz sine for 100ms under a decay — the coin chime. */
-function synthCoin(): string {
-  const length = Math.floor(SAMPLE_RATE * 0.1);
-  const samples = new Float32Array(length);
-  let phase = 0;
-  for (let i = 0; i < length; i += 1) {
-    const progress = i / length;
-    phase += (2 * Math.PI * 1000) / SAMPLE_RATE;
-    const envelope = Math.exp(-6 * progress);
-    samples[i] = Math.sin(phase) * envelope * 0.5;
-  }
-  return encodeWavDataUri(samples);
-}
-
-/** The three howls plus whether construction succeeded. */
-interface BuiltSounds {
-  readonly hit: Howl | null;
-  readonly dash: Howl | null;
-  readonly coin: Howl | null;
+/** The nine howls (any of which may be null) plus whether a backend was built. */
+type BuiltSounds = {
+  readonly sounds: ReadonlyMap<SfxName, Howl>;
   readonly available: boolean;
-}
+};
 
 /**
- * The audio channel. Construct one at boot; it never throws, and every play
- * method is safe to call unconditionally.
+ * The audio channel. Construct one at boot; it never throws, and every play method
+ * is safe to call unconditionally.
  */
 export class AudioManager {
-  private readonly hit: Howl | null;
-  private readonly dash: Howl | null;
-  private readonly coin: Howl | null;
+  private readonly sounds: ReadonlyMap<SfxName, Howl>;
   private readonly available: boolean;
   private muted = false;
 
-  constructor() {
-    const built = AudioManager.build();
-    this.hit = built.hit;
-    this.dash = built.dash;
-    this.coin = built.coin;
+  /**
+   * @param urls the asset layer's URL resolver. OMITTED is a supported state: it
+   *   means "no assets", which degrades to a silent channel rather than to an
+   *   error — the same shape `resolveStorage` uses for a missing localStorage.
+   */
+  constructor(urls?: SfxUrlSource) {
+    const built = AudioManager.build(urls);
+    this.sounds = built.sounds;
     this.available = built.available;
   }
 
@@ -176,19 +126,61 @@ export class AudioManager {
     return this.available;
   }
 
+  /** How many of the nine sounds resolved to a playable source. */
+  public get loadedSoundCount(): number {
+    return this.sounds.size;
+  }
+
+  /** Play one named sound. No-op when audio is unavailable, muted, or missing. */
+  public play(name: SfxName): void {
+    const sound = this.sounds.get(name);
+    if (sound === undefined) return;
+    this.playHowl(sound);
+  }
+
   /** Play the hit thud. No-op when audio is unavailable or muted. */
   public playHit(): void {
-    this.play(this.hit);
+    this.play('hit');
   }
 
   /** Play the dash sweep. No-op when audio is unavailable or muted. */
   public playDash(): void {
-    this.play(this.dash);
+    this.play('dash');
   }
 
   /** Play the coin chime. No-op when audio is unavailable or muted. */
   public playCoin(): void {
-    this.play(this.coin);
+    this.play('coin');
+  }
+
+  /** Play the enemy-death crunch. No-op when audio is unavailable or muted. */
+  public playEnemyDeath(): void {
+    this.play('enemyDeath');
+  }
+
+  /** Play the hazard detonation. No-op when audio is unavailable or muted. */
+  public playHazardBlast(): void {
+    this.play('hazardBlast');
+  }
+
+  /** Play the UI button click. No-op when audio is unavailable or muted. */
+  public playUiClick(): void {
+    this.play('uiClick');
+  }
+
+  /** Play the reward-selection chime. No-op when audio is unavailable or muted. */
+  public playRewardSelect(): void {
+    this.play('rewardSelect');
+  }
+
+  /** Play the run-ending death sting. No-op when audio is unavailable or muted. */
+  public playDeath(): void {
+    this.play('death');
+  }
+
+  /** Play the run-ending victory sting. No-op when audio is unavailable or muted. */
+  public playWin(): void {
+    this.play('win');
   }
 
   /** Mute / unmute the whole channel (howler owns the global mute flag). */
@@ -204,8 +196,7 @@ export class AudioManager {
 
   /** Release the underlying howls (best-effort; safe to call twice). */
   public dispose(): void {
-    for (const sound of [this.hit, this.dash, this.coin]) {
-      if (sound === null) continue;
+    for (const sound of this.sounds.values()) {
       try {
         sound.unload();
       } catch {
@@ -214,8 +205,8 @@ export class AudioManager {
     }
   }
 
-  private play(sound: Howl | null): void {
-    if (!this.available || this.muted || sound === null) return;
+  private playHowl(sound: Howl): void {
+    if (!this.available || this.muted) return;
     try {
       sound.play();
     } catch {
@@ -224,11 +215,12 @@ export class AudioManager {
   }
 
   /**
-   * Synthesise the three sounds and build their howls. Any failure — no
-   * `window`, no `Howl`, a refusing audio backend — degrades to
-   * `available: false` with three `null` sounds.
+   * Build the nine howls from the catalog's URLs. Any failure — no `window`, no
+   * `Howl`, a refusing audio backend, a URL that never resolved — degrades that
+   * sound (or the whole channel) to silence, never to a throw.
    */
-  private static build(): BuiltSounds {
+  private static build(urls: SfxUrlSource | undefined): BuiltSounds {
+    const sounds = new Map<SfxName, Howl>();
     try {
       // `globalThis.window` rather than a bare `window`: the bare DOM global does not
       // exist in the DOM-free `npm run typecheck` program (`lib: ["ES2022"]`), which
@@ -237,17 +229,18 @@ export class AudioManager {
       // node audio suite (tests/audio/audio_manager.test.ts) exercise the silent-
       // degradation contract (spec 22 I9) that was otherwise untested.
       const hasWindow = typeof (globalThis as { window?: unknown }).window !== 'undefined';
-      if (!hasWindow || typeof Howl === 'undefined') {
-        return { hit: null, dash: null, coin: null, available: false };
+      if (!hasWindow || typeof Howl === 'undefined' || urls === undefined) {
+        return { sounds, available: false };
       }
-      return {
-        hit: new Howl({ src: [synthHit()], format: ['wav'], volume: 0.6 }),
-        dash: new Howl({ src: [synthDash()], format: ['wav'], volume: 0.4 }),
-        coin: new Howl({ src: [synthCoin()], format: ['wav'], volume: 0.4 }),
-        available: true,
-      };
+      for (const name of SFX_NAMES) {
+        const source = urls.url(SFX_IDS[name]);
+        // A single unresolved URL must not cost the other eight sounds.
+        if (source === undefined || source.length === 0) continue;
+        sounds.set(name, new Howl({ src: [source], volume: SFX_VOLUME[name] }));
+      }
+      return { sounds, available: sounds.size > 0 };
     } catch {
-      return { hit: null, dash: null, coin: null, available: false };
+      return { sounds: new Map<SfxName, Howl>(), available: false };
     }
   }
 }

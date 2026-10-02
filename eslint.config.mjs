@@ -31,7 +31,7 @@ export default tseslint.config(
       'coverage/',
       '.tmp/',
       '.vitest-cache/',
-      'vitest.config.ts.timestamp-*.mjs',
+      '*.config.ts.timestamp-*.mjs',
     ],
   },
 
