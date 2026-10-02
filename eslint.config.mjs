@@ -32,6 +32,14 @@ export default tseslint.config(
       '.tmp/',
       '.vitest-cache/',
       '*.config.ts.timestamp-*.mjs',
+      // M17-T01: `production/` holds milestone verification REPORTS plus the
+      // one-off Node scripts that produce their evidence (e.g.
+      // `m17-probe.mjs`, which drives a real Chromium over CDP). Those scripts
+      // are Node-side tooling — they legitimately use `process` / `Buffer` /
+      // `fetch` / `console`, none of which the browser/ES2022 config declares.
+      // Scoped to `*.mjs` so a future `.ts` helper in that directory is still
+      // linted, and deliberately NOT widened to touch any `src/` rule block.
+      'production/**/*.mjs',
     ],
   },
 

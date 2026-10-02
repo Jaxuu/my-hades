@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import os from 'node:os';
 
 export default defineConfig({
   test: {
@@ -22,5 +23,22 @@ export default defineConfig({
     // writes transformed modules to temp files, which some sandboxed/CI
     // environments deny (EPERM). Threads keeps the run hermetic and portable.
     pool: 'threads',
+    // M17-T01: cap the worker pool BELOW the core count.
+    //
+    // `tests/performance/stress.test.ts` G2 asserts a WALL-CLOCK ratio (300-enemy
+    // time / 50-enemy time < 9, typical ~7.1). Its own comment records that the
+    // absolute numbers drift by up to 2x with load, so it is only meaningful when
+    // the machine is not oversubscribed — and the default (`maxThreads` = core
+    // count, 8 here) runs one worker per core PLUS the main process, so the two
+    // halves of that ratio are measured against a saturated CPU. M17 measured the
+    // effect directly: with the pool saturated, adding 8 test files moved the
+    // ratio from ~7 to ~10 and the assertion failed 4 runs in 5; leaving one core
+    // of headroom is the standard remedy and does not touch a single assertion.
+    poolOptions: {
+      threads: {
+        maxThreads: Math.max(1, Math.floor((os.availableParallelism?.() ?? 4) / 2)),
+        minThreads: 1,
+      },
+    },
   },
 });
