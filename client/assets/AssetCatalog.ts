@@ -25,7 +25,7 @@
  * an assertable statement instead of a browser-only hope.
  */
 
-import { Assets, Spritesheet, Texture } from 'pixi.js';
+import { Assets, Spritesheet, Texture, TextureSource } from 'pixi.js';
 
 import type { AssetKind } from './manifest';
 import { MANIFEST, MANIFEST_IDS, SHEET_DATA } from './manifest';
@@ -119,6 +119,19 @@ export class AssetCatalog implements SpriteProvider {
   public async load(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
+
+    // M17 (specs/025-camera-zoom-viewport FR-008): the atlas is PIXEL ART and M17
+    // magnifies it by up to 16x, so it must be sampled nearest-neighbour. PixiJS's
+    // default is `linear`, which smears every source texel into its neighbours —
+    // at 8.64x that turns crisp 16x16 tiles into mush.
+    //
+    // THIS LINE'S POSITION IS THE WHOLE POINT: `TextureSource` copies
+    // `defaultOptions` at CONSTRUCTION time, so a texture built before this runs is
+    // already committed to `linear` and would stay blurry for the whole session.
+    // It is therefore set before the first `loadTexture` call below, not after the
+    // loop — and it is a global default rather than a per-texture patch so a new
+    // atlas entry cannot forget it.
+    TextureSource.defaultOptions.scaleMode = 'nearest';
 
     // Load each distinct SOURCE once; each id then adopts the result inside its
     // own try/catch. The promise is cached BEFORE awaiting so a shared source is

@@ -70,6 +70,37 @@
  *    `staticLayer.children[1].x === wall.x * PX_PER_UNIT` are untouched.
  *  - every sprite branch has the pre-M16 geometry branch as its `else`, which is
  *    what FR-013's "graceful degradation" actually means in code.
+ *
+ * M17 (specs/025-camera-zoom-viewport) makes the camera SCALE, which is the one
+ * thing every previous milestone explicitly froze it against. The whole feature is
+ * therefore built as a pair of properties rather than a new structure:
+ *
+ *  - **`z` is a PURE function of `(room extent, viewport)`.** The room extent is the
+ *    wall AABB the static-geometry pass ALREADY computes for the floor tiling, and
+ *    the viewport is a guarded read of `app.screen`. Nothing is cached across frames,
+ *    so a window resize needs no event listener (FR-010) and the same inputs always
+ *    give the same factor (FR-020).
+ *  - **`z` is written to `cameraContainer.scale`, and nowhere else.** The camera is
+ *    the ONLY common parent of the static layer and the render root, so one write
+ *    scales the floor, the walls, the entities, the particles and the damage floaters
+ *    together (FR-001) — and, because no node is added, all six frozen scene-graph
+ *    contracts (F1–F6) survive untouched.
+ *
+ * Two consequences worth stating because they are deliberate, not incidental:
+ *
+ *  - **The HUD is untouched, by construction.** It is DOM (`#ui-layer` / `#hud` /
+ *    `#gold`), so it is not in the Pixi scene graph at all and the camera's scale
+ *    cannot reach it. The contract is that this stays true: UI MUST NOT be moved
+ *    into the camera subtree (FR-006 / FR-007).
+ *  - **The framing has two modes and only two.** When the room fits, the room's
+ *    centre is pinned to the screen's centre and the player is NOT an input — the
+ *    room holds still while the player walks (FR-004). When the room is larger than
+ *    the viewport, the pre-M17 player-centred follow returns, clamped to the room.
+ *
+ * And the hinge that makes all of this backwards-compatible: on every degraded path
+ * (viewport unreadable, or no room to fit — no walls, a camp) `z === 1` and the
+ * target is the pre-M17 formula, written with the same expressions. IEEE-754 gives
+ * `x * 1 === x`, so the pre-M17 camera assertions hold bit-for-bit.
  */
 
 import { AnimatedSprite, Container, Graphics, Sprite, Text } from 'pixi.js';
@@ -89,6 +120,7 @@ import { isDead } from '../src/ecs/components/DeadTagComponent';
 import { HazardComponent } from '../src/ecs/components/HazardComponent';
 import { PickupComponent, PickupKind } from '../src/ecs/components/PickupComponent';
 import { WallComponent } from '../src/ecs/components/WallComponent';
+import { isInHub } from '../src/ecs/components/GameStateComponent';
 
 import type { FrameEvents } from './ClientEventBridge';
 import { VFXManager } from './VFXManager';
@@ -126,6 +158,140 @@ export const PX_PER_UNIT = 10;
  * buried in `syncCamera`.
  */
 export const CAMERA_LERP_FACTOR = 0.2;
+
+/**
+ * M17 · How much of the viewport's constrained axis the room is allowed to fill
+ * (specs/025-camera-zoom-viewport, research.md D1).
+ *
+ * `1.0` would weld the room's outer walls to the screen edge, which reads as
+ * "cropped" the moment a viewport's aspect ratio or a float boundary disagrees.
+ * `0.8` leaves a 10% margin on each side and pins a 10x10 room at 80% of the
+ * viewport's short side on 1080p — the middle of SC-001's 55%-85% window, with
+ * room on both sides for other aspect ratios.
+ */
+export const ZOOM_FIT_MARGIN = 0.8;
+
+/**
+ * M17 · The zoom's LOWER bound, and it is deliberately `1` — the identity.
+ *
+ * `1` is the pre-M17 world-unit -> pixel mapping (`PX_PER_UNIT`), so "zoom >= 1"
+ * means this feature can only ever ENLARGE the world, never shrink it (FR-003).
+ * It is also what makes the whole feature backwards-compatible: on a degraded
+ * path `z === 1`, and in IEEE-754 `x * 1 === x`, so every pre-M17 camera
+ * assertion holds bit-for-bit (FR-014 / FR-017).
+ */
+export const ZOOM_MIN = 1.0;
+
+/**
+ * M17 · The zoom's UPPER bound, which exists only for absurdly small rooms.
+ *
+ * `16` caps a single 1x1 cell at `10 * 16 = 160` CSS px (~15% of a 1080p height),
+ * so a hypothetical 3x3 room reads as "a small room" rather than "one tile fills
+ * the screen". No shipped room comes close: 4K needs only 17.28 for a 10x10 room
+ * and is clamped to 16, which still leaves it at 74% of the short side.
+ */
+export const ZOOM_MAX = 16.0;
+
+/**
+ * M17 · The viewport, as the render layer sees it (data-model E1).
+ *
+ * NOT new data: it is a GUARDED read of `app.screen`. `readable` is the whole
+ * point of the type — the render test rigs are duck-typed `Application`s whose
+ * `screen` is `undefined`, so "no viewport" has to be a representable state
+ * rather than a thrown error.
+ */
+export interface Viewport {
+  /** CSS pixels; `0` when unreadable. */
+  readonly width: number;
+  /** CSS pixels; `0` when unreadable. */
+  readonly height: number;
+  /** `width > 0 && height > 0 && both finite`. */
+  readonly readable: boolean;
+}
+
+/**
+ * M17 · The current room's world-space bounding box (data-model E3).
+ *
+ * NOT new data either: it is the wall AABB the static-geometry pass ALREADY
+ * computes for the floor tiling, plus the derived pixel extent the zoom needs.
+ * `determinable` is `false` for a world with no walls, a non-positive extent, or
+ * the camp — which is exactly when the zoom must degrade to identity (FR-021).
+ */
+export interface RoomExtent {
+  /** AABB left edge, world units. */
+  readonly minX: number;
+  /** AABB top edge, world units. */
+  readonly minY: number;
+  /** AABB right edge, world units. */
+  readonly maxX: number;
+  /** AABB bottom edge, world units. */
+  readonly maxY: number;
+  /** Room width in WORLD PIXELS (`<= 0` when not determinable). */
+  readonly pxW: number;
+  /** Room height in WORLD PIXELS (`<= 0` when not determinable). */
+  readonly pxH: number;
+  /** `pxW > 0 && pxH > 0 && !isInHub(world)`. */
+  readonly determinable: boolean;
+}
+
+/** The camera-translation window implied by a room that is LARGER than the view. */
+interface CameraBounds {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
+
+/**
+ * M17 · One frame's zoom state, computed ONCE by `syncZoom` and handed to the
+ * framing pass.
+ *
+ * WHY IT IS PASSED RATHER THAN STORED: the zoom is a pure function of
+ * `(room extent, viewport)`, and computing it twice per frame (once for the camera's
+ * scale, once for the framing target) doubles a cost SC-007 budgets at 1.2x. Passing
+ * the value along the call chain keeps it computed once WITHOUT introducing a
+ * cross-frame cache — there is no field to go stale, and `zoom` / `viewport` /
+ * `roomFits` remain live reads for diagnostics and assertions.
+ */
+interface ZoomFrame {
+  readonly viewport: Viewport;
+  /** The factor written to `cameraContainer.scale` this frame. */
+  readonly z: number;
+  /** `viewport.readable && extent.determinable`. */
+  readonly active: boolean;
+}
+
+/** The degraded viewport: no `screen`, or a size that cannot be trusted. */
+const EMPTY_VIEWPORT: Viewport = Object.freeze({
+  width: 0,
+  height: 0,
+  readable: false,
+});
+
+/** The degraded room extent: no walls (or a camp), hence no room to fit. */
+const EMPTY_ROOM_EXTENT: RoomExtent = Object.freeze({
+  minX: 0,
+  minY: 0,
+  maxX: 0,
+  maxY: 0,
+  pxW: 0,
+  pxH: 0,
+  determinable: false,
+});
+
+/**
+ * `Math.min(Math.max(...))`, except that an EMPTY interval returns the value
+ * untouched instead of collapsing to an endpoint.
+ *
+ * An empty interval is reachable in the follow path (it means "the room is
+ * smaller than the viewport", i.e. the case room mode already handles), and
+ * silently snapping the camera to one edge there would be a jump — the thing
+ * SC-005 forbids.
+ */
+function clampNumber(value: number, min: number, max: number): number {
+  if (min > max) return value;
+  return Math.min(max, Math.max(min, value));
+}
 
 /** Radius (world units) of the player placeholder circle. */
 const PLAYER_RADIUS = 0.5;
@@ -401,6 +567,16 @@ export class GameRenderer {
    * the existing root instead of re-parenting its children — which is what keeps the
    * frozen M5 child-index contracts intact (see the class docstring).
    *
+   * M17 REVISES THE FIRST HALF OF THAT SENTENCE: the camera now carries an EQUAL
+   * `x`/`y` SCALE as well as a translation (`specs/025-camera-zoom-viewport` is the
+   * single authorising document for that extension of spec 20 I11). The reason it is
+   * still a plain `Container` is unchanged and is exactly why the extension is safe:
+   * a scale is a property of a node, not a new node, so nothing in the scene graph
+   * moves — `stage`'s only child is still the camera, the root is still its last
+   * child, and the static layer is still its child at index 0. The rotation and
+   * bounds halves of the sentence are still true: the camera never rotates and has
+   * no PixiJS bounds of its own (the follow clamp is computed in `cameraBounds`).
+   *
    * Held under `cameraContainer` rather than `camera` because `camera` is the name of
    * the public getter below; TypeScript forbids a field and an accessor sharing a
    * name, and the getter is the shape the tests and diagnostics want.
@@ -497,6 +673,18 @@ export class GameRenderer {
   private shakeIntensity = 0;
 
   /**
+   * M17 · The current room's extent, refreshed ONCE per frame by the
+   * static-geometry pass and read by the zoom (data-model E3).
+   *
+   * It is a CACHE of a per-frame derivation, not new state: the wall AABB is
+   * already computed in `syncStaticGeometry` for the floor tiling, so the zoom
+   * reuses it rather than issuing a second `World.query` (research.md D10).
+   * Defaults to "not determinable", so a renderer that has never synced — or one
+   * whose world has no walls — zooms by exactly `1`.
+   */
+  private roomExtentState: RoomExtent = EMPTY_ROOM_EXTENT;
+
+  /**
    * The transient particle pool (M14-T01). Its layer is mounted into the CAMERA
    * subtree LAZILY — only while sparks are alive — so an idle scene graph is
    * byte-for-byte the pre-M14 one (spec 20 I13, spec 22 §4.3). `VFXManager`
@@ -585,6 +773,69 @@ export class GameRenderer {
     return this.shakeTimeMs;
   }
 
+  /**
+   * The current viewport (M17, diagnostics / assertions).
+   *
+   * A LIVE read of `app.screen` every time it is asked, never a cached value: the
+   * app is configured with `resizeTo: window`, so PixiJS updates `app.screen`
+   * itself and a per-frame read picks a window resize up with no event listener
+   * at all (FR-010, research.md D6). Reading `app.renderer.*` instead would throw
+   * in the adversarial rig whose `renderer` getter is a trap.
+   */
+  public get viewport(): Viewport {
+    return this.readViewport();
+  }
+
+  /**
+   * The current room's extent (M17, diagnostics / assertions).
+   *
+   * Refreshed by the static-geometry pass each frame; `determinable === false`
+   * whenever there is no room to fit (no walls, a non-positive extent, or the
+   * camp — FR-021).
+   */
+  public get roomExtent(): RoomExtent {
+    return this.roomExtentState;
+  }
+
+  /**
+   * Whether the zoom is LIVE this frame (M17, diagnostics / assertions).
+   *
+   * The predicate — not the value of `z` — is what "bit-for-bit identical to
+   * before" is keyed on: `false` means `z === 1`, no clamping, and the pre-M17
+   * framing formula. Note that `true` with `z === 1` (a room large enough that the
+   * fit is clamped up to the lower bound) is deliberately NOT equivalent to the
+   * old behaviour — that is the case room mode and clamping exist for.
+   */
+  public get zoomActive(): boolean {
+    return this.readViewport().readable && this.roomExtentState.determinable;
+  }
+
+  /**
+   * The world-space zoom factor `z` (M17, diagnostics / assertions).
+   *
+   * `z = clamp(min(vw / roomPxW, vh / roomPxH) * ZOOM_FIT_MARGIN, ZOOM_MIN,
+   * ZOOM_MAX)` — a PURE function of `(roomExtent, viewport)`, recomputed on every
+   * read, so it can neither drift nor depend on when it was last asked (FR-020).
+   * It is `1` on every degraded path.
+   */
+  public get zoom(): number {
+    return this.computeZoom(this.roomExtentState, this.readViewport());
+  }
+
+  /**
+   * Whether the room currently fits inside the viewport (M17, diagnostics /
+   * assertions) — i.e. whether the camera is in ROOM mode.
+   *
+   * `false` on a degraded path, because there is no framing mode to be in then
+   * (FR-014 / FR-021).
+   */
+  public get roomFits(): boolean {
+    const viewport = this.readViewport();
+    const extent = this.roomExtentState;
+    if (!viewport.readable || !extent.determinable) return false;
+    return this.computeRoomFits(extent, viewport, this.computeZoom(extent, viewport));
+  }
+
   /** Attach the camera (and, under it, the render root and its FX layer) to the
    * stage. Call once, after `app.init`. */
   public init(): void {
@@ -642,10 +893,18 @@ export class GameRenderer {
     // M14-T01: age + spawn transient FX and (re)trigger the screen shake BEFORE the
     // camera is moved, so a hit landing this frame shakes the camera THIS frame.
     this.syncEffects(deltaMs, frameEvents);
+    // M17: the zoom is recomputed EVERY frame from `(room extent, viewport)`. The
+    // extent was refreshed above by the static-geometry pass; the viewport is read
+    // live from `app.screen`, which `resizeTo: window` keeps current — so a window
+    // resize takes effect with no event listener and no cached state to invalidate
+    // (FR-010, research.md D6). It runs BEFORE `syncCamera` because the camera's
+    // target depends on it. The frame's zoom state is computed ONCE here and handed
+    // to the camera, so the factor is not derived twice per frame.
+    const zoomFrame = this.syncZoom();
     // M12-T02: the camera is moved AFTER the transforms are projected, so it tracks
     // the INTERPOLATED player position (what the player actually sees) rather than
     // the raw logic coordinate (which would be half a frame ahead).
-    this.syncCamera(world);
+    this.syncCamera(world, zoomFrame);
     // M8-T01: hazard warnings are animated from their own countdown, so they are
     // synced here rather than inside `syncTransforms` (which is about position).
     this.syncHazards(world);
@@ -741,6 +1000,13 @@ export class GameRenderer {
     // operation, and avoids a visible pan across the new room on the first frame.
     this.cameraContainer.x = 0;
     this.cameraContainer.y = 0;
+    // M17: the zoom belongs to the run being thrown away too. Leaving the previous
+    // run's factor on the camera would draw the new room at the old room's scale for
+    // one frame (the new extent is not known until the next sync) — a visible pop.
+    this.cameraContainer.scale.set(1);
+    // M17: and so does the cached room extent; the next sync re-derives it from the
+    // new run's walls.
+    this.roomExtentState = EMPTY_ROOM_EXTENT;
 
     // M14-T01: the shake and the sparks also belong to the run being thrown away.
     // Dropping them here (and unmounting the now-empty layer) keeps `reset()` a
@@ -781,6 +1047,9 @@ export class GameRenderer {
     const wallIds = world.query(WallComponent);
     if (wallIds.length === 0) {
       this.teardownStaticLayer();
+      // M17: no walls ⇒ no room to fit ⇒ the zoom degrades to identity. Recorded
+      // here rather than re-queried later, so the zoom costs no second walk.
+      this.roomExtentState = EMPTY_ROOM_EXTENT;
       return;
     }
 
@@ -807,6 +1076,9 @@ export class GameRenderer {
     }
 
     this.recycleWallViews(wallIds);
+    // M17: the room's extent is the SAME bounding box the floor is tiled across, so
+    // the zoom reads it from here instead of walking the walls a second time.
+    this.roomExtentState = this.deriveRoomExtent(world, minX, minY, maxX, maxY);
     this.syncFloor(layer, minX, minY, maxX, maxY, this.wallViews.size);
   }
 
@@ -1194,15 +1466,21 @@ export class GameRenderer {
    * player, or one mid-respawn — the camera is left exactly where it is and nothing
    * throws (spec 20 §4.3).
    */
-  private syncCamera(_world: World): void {
+  private syncCamera(_world: World, zoomFrame: ZoomFrame): void {
     for (const view of this.views.values()) {
       if (view.kind !== 'player') continue;
       if (view.isDying) continue;
 
-      const targetX = this.screenWidth() / 2 - view.container.x;
-      const targetY = this.screenHeight() / 2 - view.container.y;
-      this.cameraContainer.x += (targetX - this.cameraContainer.x) * CAMERA_LERP_FACTOR;
-      this.cameraContainer.y += (targetY - this.cameraContainer.y) * CAMERA_LERP_FACTOR;
+      // M17: the target now comes from {@link cameraTarget}, which picks one of
+      // three framings — degraded (the pre-M17 formula), room mode (the room is
+      // pinned to the screen centre and does NOT follow the player), or follow mode
+      // (the pre-M17 player-centred framing, clamped to the room). The lerp and the
+      // shake below are unchanged, and the shake is still layered on AFTER the lerp
+      // as an independent translation component — so it cannot scale with `z` and
+      // `z` cannot read it (FR-019).
+      const target = this.cameraTarget(view, zoomFrame);
+      this.cameraContainer.x += (target.x - this.cameraContainer.x) * CAMERA_LERP_FACTOR;
+      this.cameraContainer.y += (target.y - this.cameraContainer.y) * CAMERA_LERP_FACTOR;
 
       // M14-T01: the shake is layered ON TOP of the follow lerp. `shakeIntensityAt()`
       // is EXACTLY 0 when no hit is active, so this branch is skipped and the camera
@@ -1320,6 +1598,184 @@ export class GameRenderer {
     const screen: Rectangle | undefined = this.app.screen;
     if (screen === undefined) return 0;
     return Number.isFinite(screen.height) ? screen.height : 0;
+  }
+
+  /**
+   * M17 · Read the viewport, defensively (data-model E1, contract §1).
+   *
+   * Two rules, both load-bearing:
+   *  - it touches `app.screen` and NOTHING else. `app.renderer.*` is the other
+   *    plausible home for a size and is forbidden — the adversarial rig makes it a
+   *    throwing getter precisely so a violation is a failure rather than a pass.
+   *  - a missing / non-finite / non-positive size collapses to `(0, 0, false)`
+   *    rather than propagating. A minimised window or a hidden container must not
+   *    be able to produce `NaN` or a divide-by-zero zoom (FR-014).
+   */
+  private readViewport(): Viewport {
+    const width = this.screenWidth();
+    const height = this.screenHeight();
+    const readable =
+      width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height);
+    if (!readable) return EMPTY_VIEWPORT;
+    return { width, height, readable: true };
+  }
+
+  /**
+   * M17 · Derive the room extent from an ALREADY-COMPUTED wall bounding box
+   * (data-model E3).
+   *
+   * The bbox is passed in rather than queried here on purpose: `syncStaticGeometry`
+   * walks the walls for the floor tiling anyway, and a second `World.query` per
+   * frame would be pure duplicated work (research.md D10). The only thing this adds
+   * is the pixel conversion and the `isInHub` clause.
+   *
+   * WHY THE CAMP IS EXCLUDED: `GameSimulator.enterHub` deliberately does NOT
+   * rebuild the world (spec 21 — the camp shows the run that just ended), so the
+   * previous room's walls are still alive and "are there walls?" would answer yes.
+   * `isInHub` is the same read-only predicate `UIManager` already uses, and it is
+   * what makes FR-021 true rather than approximately true.
+   */
+  private deriveRoomExtent(
+    world: World,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+  ): RoomExtent {
+    const pxW = (maxX - minX) * PX_PER_UNIT;
+    const pxH = (maxY - minY) * PX_PER_UNIT;
+    // A non-positive extent is treated as "not determinable" rather than as a room
+    // of zero size, so the fit can never divide by zero.
+    const determinable = pxW > 0 && pxH > 0 && !isInHub(world);
+    return { minX, minY, maxX, maxY, pxW, pxH, determinable };
+  }
+
+  /**
+   * M17 · The fit formula (data-model E2, contract §2).
+   *
+   * `min` over the two axes — not `max`, and not a naive "short side" ratio — is
+   * the only geometrically correct choice: it is precisely the largest factor that
+   * puts the WHOLE room inside the viewport, and it is therefore what makes FR-011
+   * ("the constrained axis decides") fall out for free rather than being special
+   * cased. Using `max` would overflow the other axis.
+   *
+   * Pure: same `(extent, viewport)` in, same number out, always — no clock, no
+   * randomness, no history (FR-020). Degenerate input short-circuits to `1` before
+   * any division happens.
+   */
+  private computeZoom(extent: RoomExtent, viewport: Viewport): number {
+    if (!viewport.readable || !extent.determinable) return ZOOM_MIN;
+    const fitZoom = Math.min(viewport.width / extent.pxW, viewport.height / extent.pxH);
+    const raw = fitZoom * ZOOM_FIT_MARGIN;
+    if (!Number.isFinite(raw)) return ZOOM_MIN;
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, raw));
+  }
+
+  /**
+   * M17 · Does the room fit inside the viewport at zoom `z`? (contract §3)
+   *
+   * The SOLE input to the framing-mode decision, and it takes exactly three
+   * arguments — no player position, no camera state, no tick. That is what FR-004
+   * means by "the mode MUST NOT depend on the player": the room holds still while
+   * the player walks around inside it.
+   */
+  private computeRoomFits(extent: RoomExtent, viewport: Viewport, z: number): boolean {
+    return extent.pxW * z <= viewport.width && extent.pxH * z <= viewport.height;
+  }
+
+  /**
+   * M17 · The camera-translation window for a room that is LARGER than the
+   * viewport (research.md D3).
+   *
+   * Derived from "no part of the room may leave the screen": the room's left edge
+   * in screen space is `camera.x + roomMinPx * z` and must stay `<= 0`, while its
+   * right edge `camera.x + roomMaxPx * z` must stay `>= screenWidth`. Solving both
+   * gives the interval below. It is only ever consulted in FOLLOW mode, where the
+   * interval is non-empty by construction.
+   */
+  private cameraBounds(extent: RoomExtent, z: number): CameraBounds {
+    const minPx = extent.minX * PX_PER_UNIT * z;
+    const maxPx = extent.maxX * PX_PER_UNIT * z;
+    const minPy = extent.minY * PX_PER_UNIT * z;
+    const maxPy = extent.maxY * PX_PER_UNIT * z;
+    const screenW = this.screenWidth();
+    const screenH = this.screenHeight();
+    return {
+      minX: Math.min(screenW - maxPx, -minPx),
+      maxX: Math.max(screenW - maxPx, -minPx),
+      minY: Math.min(screenH - maxPy, -minPy),
+      maxY: Math.max(screenH - maxPy, -minPy),
+    };
+  }
+
+  /**
+   * M17 · Push this frame's zoom onto the camera's scale (step ②b-pre).
+   *
+   * Written to `cameraContainer.scale` — the ONE node every piece of world-space
+   * content hangs under — so the floor, the walls, the entities, the particles and
+   * the damage floaters all scale together and keep their relative sizes (FR-001 /
+   * FR-005). Deliberately NOT a new scene node: any new node would break one of the
+   * six frozen scene-graph contracts (research.md D2).
+   *
+   * Both axes get the SAME number, which is the whole of "equally scaled".
+   */
+  private syncZoom(): ZoomFrame {
+    const viewport = this.readViewport();
+    const extent = this.roomExtentState;
+    const z = this.computeZoom(extent, viewport);
+    const scale = this.cameraContainer.scale;
+    if (scale.x !== z) scale.x = z;
+    if (scale.y !== z) scale.y = z;
+    return { viewport, z, active: viewport.readable && extent.determinable };
+  }
+
+  /**
+   * M17 · The camera's translation target for this frame (contract §2).
+   *
+   * Three branches, and the ORDER between them is the contract:
+   *
+   *  1. **Degraded** (`zoomActive === false`) — the pre-M17 formula,
+   *     `screen/2 - playerPx`, written with the exact same expressions as before so
+   *     it is bit-for-bit identical. This is the hinge the 803 existing assertions
+   *     hang on.
+   *  2. **Room mode** (`roomFits`) — the room's centre is pinned to the screen's
+   *     centre. The player is NOT an input, which is what makes the room hold still
+   *     while the player walks (FR-004 / US1 AS3).
+   *  3. **Follow mode** — the pre-M17 player-centred framing, clamped to the room so
+   *     nothing outside it can enter the viewport.
+   *
+   * The target is computed BEFORE the lerp, never corrected after: a post-lerp
+   * correction would yank the camera at a mode switch or a boundary touch, which is
+   * the visible jump SC-005 forbids (research.md D3).
+   */
+  private cameraTarget(view: EntityView, frame: ZoomFrame): { x: number; y: number } {
+    if (!frame.active) {
+      // The per-axis guarded reads, NOT `frame.viewport` — the viewport type zeroes
+      // BOTH axes, while the pre-M17 camera zeroed only the non-finite one. Bit
+      // identity on this path is the whole zero-regression guarantee (FR-014).
+      return {
+        x: this.screenWidth() / 2 - view.container.x,
+        y: this.screenHeight() / 2 - view.container.y,
+      };
+    }
+
+    const extent = this.roomExtentState;
+    const viewport = frame.viewport;
+    const z = frame.z;
+
+    if (this.computeRoomFits(extent, viewport, z)) {
+      const centreX = ((extent.minX + extent.maxX) / 2) * PX_PER_UNIT;
+      const centreY = ((extent.minY + extent.maxY) / 2) * PX_PER_UNIT;
+      return { x: viewport.width / 2 - centreX * z, y: viewport.height / 2 - centreY * z };
+    }
+
+    const desiredX = viewport.width / 2 - view.container.x * z;
+    const desiredY = viewport.height / 2 - view.container.y * z;
+    const bounds = this.cameraBounds(extent, z);
+    return {
+      x: clampNumber(desiredX, bounds.minX, bounds.maxX),
+      y: clampNumber(desiredY, bounds.minY, bounds.maxY),
+    };
   }
 
   /**

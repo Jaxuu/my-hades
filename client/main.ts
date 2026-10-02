@@ -162,6 +162,24 @@ function mountCanvas(app: Application): void {
 }
 
 /**
+ * M17 · The device pixel ratio to render at, or `1` when it cannot be trusted.
+ *
+ * Guarded for the same reason `resolveStorage` is: this is a browser global read on
+ * the boot path, and a renderer whose backing store is the wrong size is a much
+ * smaller problem than a boot that throws. A non-finite or non-positive ratio
+ * (some emulators report `0`) falls back to `1`, which is exactly the pre-M17
+ * behaviour — so the worst case of this read failing is "no worse than before".
+ */
+function resolveDevicePixelRatio(): number {
+  try {
+    const ratio = window.devicePixelRatio;
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Boot the data layer, then the presentation layer (M10-T01, spec 16 AC-03).
  *
  * `await bootstrapClientData()` is the FIRST thing that happens, and it is
@@ -184,10 +202,28 @@ async function main(): Promise<void> {
   const app = new Application();
 
   // v8: async init; the canvas is `app.canvas` (NOT `app.view`).
+  //
+  // M17 (specs/025-camera-zoom-viewport FR-009 / FR-008):
+  //
+  //  - `resolution: devicePixelRatio` + `autoDensity: true` fixes a REAL defect: the
+  //    default `resolution` is 1, so on a high-DPI display the canvas' backing store
+  //    is smaller than the physical pixels it is shown at and the BROWSER upscales
+  //    it — the picture is already soft before M17's zoom is even applied. Matching
+  //    the ratio means each logical pixel is drawn by the right number of physical
+  //    ones. `autoDensity` is what keeps the canvas' CSS size in step with the
+  //    backing store; without it the canvas would be stretched and look worse.
+  //    Neither changes the camera maths: `app.screen` stays in CSS pixels, so the
+  //    zoom factor is independent of the device pixel ratio (research.md D5).
+  //  - `antialias: false` because the art is pixel art whose sharpness comes from
+  //    nearest-neighbour sampling (see `AssetCatalog.load`). MSAA softens exactly the
+  //    hard sprite edges the style depends on, and buys nothing for axis-aligned
+  //    quads.
   await app.init({
     background: 0x14161c,
     resizeTo: window,
-    antialias: true,
+    antialias: false,
+    resolution: resolveDevicePixelRatio(),
+    autoDensity: true,
   });
 
   // M16 (specs/024-real-assets T012): load the art AFTER the app exists and
