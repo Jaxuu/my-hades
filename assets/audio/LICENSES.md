@@ -42,5 +42,9 @@
 | `assets/audio/sfx/**`（随包分发） | 91 KB |
 | 单文件最大 | `coin.ogg` 25 KB（预算 1 MB） |
 
-`assets/audio/raw/**` 只保留实际使用的 9 个源文件与 3 份 `License.txt`，供
-`tools/build-atlas.py sfx` 复现；未使用的音效已删除（体积从 1.9 MB 降到 167 KB）。
+`assets/audio/raw/**` 只保留实际使用的 9 个源文件与 3 份 `License.txt`（上游 `License.txt`
+随包保留），供人工复核来源；未使用的音效已删除（体积从 1.9 MB 降到 167 KB）。
+
+> **M18 注（FR-017）**：原先用于复制/派生这些音效的构建期脚本
+> `assets/art/tools/build-atlas.py` 已随像素管线一并删除。音频资产本身**未改动**
+> （FR-030 明确音频不在 M18 范围内），其来源仍可逐项追溯至下方素材包。

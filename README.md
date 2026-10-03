@@ -99,14 +99,14 @@ TransformSnapshot → PlayerController → Freeze → AI → Hazard → Movement
 
 ```
 assets/data/     配置表（唯一数值来源）
-assets/art/      美术资产（CC0）：atlas/ 图集 · ui/ 界面图 · raw/ 可复现的原始素材 · tools/ 生成器
+assets/art/      美术资产：hd/ 高清世界图集（M18）· ui/ 界面贴图 · LICENSES.md 许可登记
 assets/audio/    音效资产（CC0）：sfx/ 成品 · raw/ 可复现的原始素材
 client/          表现层（组合根、渲染器、UI、音视频桥、assets/ 资产接入层）
 docs/            ADR-001 / ADR-002 / ADR-004
-specs/00…24      规格（每个里程碑一份验收基线）
+specs/00…25      规格（每个里程碑一份验收基线）· specs/024…026 为特性规格
 src/core/        模拟器、时钟、调度器、关卡加载、PRNG、存档
 src/ecs/         World / Entity / Component / System + components / systems / prefabs
-tests/           803 例：harness · combat · physics · render · world · data · meta · ai · audio · assets · ui · performance
+tests/           947 例：harness · combat · physics · render · world · data · meta · ai · audio · assets · ui · performance
 ```
 
 ---
@@ -121,7 +121,7 @@ npm run dev              # → 然后打开 http://localhost:5173/?mode=stress  
 npm run build            # 生产构建
 npm run preview          # 预览构建产物
 
-npm test                 # Vitest 全量（803 例）
+npm test                 # Vitest 全量（947 例）
 npm run typecheck        # 逻辑层 + 测试 类型检查
 npm run typecheck:client # 表现层类型检查（独立 tsconfig，含 DOM lib）
 npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门禁）
@@ -131,33 +131,45 @@ npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门�
 
 `W A S D` 移动 · `J` 攻击 · `K` 冲刺 · `R` 终局后回营地
 
-### 美术与音效资产（M16 / spec 024）
+### 美术与音效资产（M18 / spec 026）
 
-全部视觉与听觉素材都是**本地分发**的 **CC0** 资产，运行期**零外部请求**（离线可用）。
+全部视觉与听觉素材都是**本地分发**的开放许可资产，运行期**零外部请求**（离线可用）。
 来源、逐项许可与做过的处理见 [`assets/art/LICENSES.md`](assets/art/LICENSES.md) 与
 [`assets/audio/LICENSES.md`](assets/audio/LICENSES.md)。
 
-| 用途 | 来源（全部 Kenney，CC0） |
-|---|---|
-| 玩家、5 类敌人、墙体/地面 | Tiny Dungeon（16×16） |
-| 界面面板 / 边框 / 按钮 / 覆盖层 | Fantasy UI Borders · Pixel UI pack |
-| 命中火花 / 冲刺拖尾 / 危险环、掉落物图标 | 本仓库程序化生成（同一调色板） |
-| 音效（命中 / 冲刺 / 拾取 / 敌人死亡 / 引爆 / UI / 奖励 / 终局） | RPG Audio · Digital Audio · UI Audio |
+**M18 把局内世界美术从 16×16 像素整体换成 128 基准的高清逐帧图集**，像素图集、
+像素派生生成器（`build-atlas.py`）与像素源素材包已**彻底移除**（FR-016…FR-018）。
 
-**体积**：`assets/**` 合计 ≈ **407 KB**（预算 6 MB），单文件最大 124 KB（预算 1 MB）。
+| 用途 | 来源 | 形态 |
+|---|---|---|
+| 玩家（4 向 × 6 动作）、6 类敌人（4 向 × 5 动作 + `dash` 别名） | 本仓库原创 · 程序化生成（CC0-1.0） | 128² / 96² / 160² 逐帧图集 |
+| 地牢墙体 / 地面 | 同上 | 128²；墙体含**格内三带**（顶面 55% / 立面 43% / 墙脚阴影 2%）+ **8 邻 47 部件 autotile**；地面 8 个变体（按格坐标确定性哈希选件） |
+| 命中火花 / 冲刺拖尾 / 危险预警环 / 三类掉落物 | 同上 | 128² 贴花（火花运行时仍为 `Graphics` 纹理填充） |
+| 界面面板 / 边框 / 按钮 / 覆盖层 / 图标 | Fantasy UI Borders · Pixel UI pack（Kenney，CC0） | **本特性不改动**（FR-030） |
+| 音效 | RPG / Digital / UI Audio（Kenney，CC0） | **本特性不改动**（FR-030） |
+
+**纹理过滤**：全局默认保持 `nearest`（M17 像素锐利契约），**HD 世界美术按纹理显式设
+`linear` + mipmap** —— 放大不出现锯齿、缩小不出现摩尔纹（FR-025）。
+
+**体积**：`assets/art/**` ≈ **634 KB**（预算 12 MB），单文件最大 ≈ 51 KB（预算 3 MB），
+单图集最大 2000×700（上限 4096²），图集数 10（上限 12）。
 
 **如何替换 / 扩展**：
 
-1. 把新的 CC0 素材放进 `assets/art/raw/<pack>/`（或 `assets/audio/raw/<pack>/Audio/`），
-   并保留其 `License.txt`；
-2. 在 `assets/art/tools/build-atlas.py` 里改素材索引 / `SFX_MAP`，然后
-   `python assets/art/tools/build-atlas.py all` 重新生成图集与音效；
+1. 把新的 HD 素材导出为**逐帧图集**：`<spriteId>.<action>.<facing>.<n>` 命名，
+   相邻帧留 ≥ 4px 透明 gutter，并在图集 JSON 里声明 `frames` / `animations` / `meta.scale`
+   / `meta.tilePx`（契约见 `specs/026-hd-2d-art-assets/contracts/hd-spritesheet-schema.md`）；
+2. 放进 `assets/art/hd/`（按**装载单元**切分：player 1 张 · 每类敌人 1 张 · tiles 1 张 · fx 1 张）；
 3. 在 `assets/art/LICENSES.md` 登记新条目（`tests/assets/licenses.test.ts` 会核对）；
 4. 在 `client/assets/manifest.ts` 里登记 id —— 它是**全仓唯一**直接 import 资产文件的地方，
    所以**漏文件会让 `npm run build` 直接失败**，不会留到运行期 404。
 
-**降级**：任一资产缺失或解码失败只影响它自己 —— 该元素退回 M16 之前的几何占位（或静默），
-其余照常，游戏不崩溃、不黑屏（`tests/assets/degradation.test.ts`）。
+> 当前图集是**程序化生成的占位 HD 资产**，可用 `node production/m18-placeholder-atlases.mjs`
+> 重新生成；真实 HD 美术就位后该脚本与占位图集一并退役。
+
+**降级**：任一资产缺失或解码失败只影响它自己 —— 该元素退回高清之前的几何占位（或静默），
+其余照常，游戏不崩溃、不黑屏（`tests/assets/degradation.test.ts`；真实浏览器实测见
+`production/m18-evidence.md` 的 T064）。
 
 ### `?mode=stress`
 

@@ -23,7 +23,9 @@
 > **⚠️ 两项主观判定仍 PENDING（需 ≥1 名人类观察者）**：SC-002「房间大小合适、内容清晰可读」与
 > SC-009「缩放与震动互不干扰」——客观部分均已机器判定，见证据文件 §4 / §10 / §14-R2。详见 T019 / T031 的行内注记。
 >
-> **⚠️ 未提交**：按 §Notes，本阶段不 commit；提交须经人工审批。
+> **✅ 已提交**（老板批准 2026-10-02）：`b1583a8` `chore(test): optimize vitest concurrency, fix cpu contention and update eslint ignores`
+> + `da17474` `feat(client): implement camera zoom, viewport adaptation and high-DPI support (M17)`。**未 push**。
+> 提交后五道闸门复核全绿（893 例、G2 ratio 6.79）。
 
 **Input**: Design documents from `/specs/025-camera-zoom-viewport/`
 
