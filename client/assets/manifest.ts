@@ -85,6 +85,18 @@ import uiFrameSlot from '../../assets/art/ui/slot.png?url';
 import uiFrameSlotInlay from '../../assets/art/ui/slot-inlay.png?url';
 import uiBarHud from '../../assets/art/ui/bar.png?url';
 
+// ── M19 material UI frames (HUD / boon cards / status panel) ─────────────────
+// Seven nine-slice frames, all 48x48, all drawn with `border-image` (slice 12).
+// No ICON entry is added: user ruling U3 makes the boon icon a pure CSS glyph, so
+// `boons.json`'s `icon` field is a glyph token rather than an asset id.
+import uiFrameHealth from '../../assets/art/ui/frame-health.png?url';
+import uiFrameDash from '../../assets/art/ui/frame-dash.png?url';
+import uiFrameBoonCommon from '../../assets/art/ui/frame-boon-common.png?url';
+import uiFrameBoonEpic from '../../assets/art/ui/frame-boon-epic.png?url';
+import uiFrameBoonLegendary from '../../assets/art/ui/frame-boon-legendary.png?url';
+import uiPanelStatus from '../../assets/art/ui/panel-status.png?url';
+import uiRuleBronze from '../../assets/art/ui/rule-bronze.png?url';
+
 // ── Audio (FR-030: NOT in this feature's scope, unchanged) ────────────────────
 import sfxHit from '../../assets/audio/sfx/hit.ogg?url';
 import sfxDash from '../../assets/audio/sfx/dash.ogg?url';
@@ -213,6 +225,17 @@ export const MANIFEST: Readonly<Record<string, AssetEntry>> = Object.freeze({
   'ui.frame.slot': visual('ui.frame.slot', 'image', uiFrameSlot),
   'ui.frame.slot-inlay': visual('ui.frame.slot-inlay', 'image', uiFrameSlotInlay),
   'ui.bar.hud': visual('ui.bar.hud', 'image', uiBarHud),
+
+  // M19 · the material UI frames. Slots are `--ui-*` in `index.html`, injected by
+  // `main.ts::applyUiSkin`; every one defaults to `none` so a degraded catalog
+  // falls back to the plain-CSS surface underneath.
+  'ui.frame.health': visual('ui.frame.health', 'image', uiFrameHealth),
+  'ui.frame.dash': visual('ui.frame.dash', 'image', uiFrameDash),
+  'ui.frame.boon-common': visual('ui.frame.boon-common', 'image', uiFrameBoonCommon),
+  'ui.frame.boon-epic': visual('ui.frame.boon-epic', 'image', uiFrameBoonEpic),
+  'ui.frame.boon-legendary': visual('ui.frame.boon-legendary', 'image', uiFrameBoonLegendary),
+  'ui.panel.status': visual('ui.panel.status', 'image', uiPanelStatus),
+  'ui.rule.bronze': visual('ui.rule.bronze', 'image', uiRuleBronze),
 
   'sfx.hit': audio('sfx.hit', sfxHit),
   'sfx.dash': audio('sfx.dash', sfxDash),

@@ -111,3 +111,79 @@ describe('the art slots are wired as CSS custom properties (FR-018)', () => {
     expect(INDEX_HTML).toContain('image-rendering: pixelated');
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * M19 · the material UI hooks (specs/027-hud-boon-ui T013).
+ *
+ * APPEND-ONLY: every frozen assertion above is untouched. These pin the NEW
+ * class / id hooks the material HUD, the boon cards and the Tab status panel
+ * use, so a re-skin cannot quietly rename one out from under the manager that
+ * keys its own `classList.contains()` checks on it.
+ * ------------------------------------------------------------------------- */
+describe('M19 · the material UI keeps its new hooks (ui-asset-slots.md §1)', () => {
+  const M19_CLASSES = [
+    'is-status',
+    'hud-health',
+    'hud-dash',
+    'hud-gold',
+    'boon-card',
+    'boon-rarity-common',
+    'boon-rarity-epic',
+    'boon-rarity-legendary',
+    'boon-rarity-tag',
+    'boon-pips',
+    'boon-icon',
+    'boon-icon-frame--square',
+    'boon-icon-frame--cut',
+    'boon-icon-frame--crown',
+    'boon-name',
+    'boon-desc',
+    'status-panel',
+    'status-row',
+    'status-empty',
+  ] as const;
+
+  it.each(M19_CLASSES)('styles and emits `%s`', (className) => {
+    // Present in the stylesheet...
+    expect(INDEX_HTML).toContain(`.${className}`);
+    // ...and still emitted by the DOM owner.
+    expect(UI_MANAGER).toContain(className);
+  });
+
+  it('adds the `#hud-material` element without entering the frozen selector list', () => {
+    expect(INDEX_HTML).toContain('id="hud-material"');
+    // The readability contract scans `#hud, #keys, #gold {` for contiguity; the new
+    // element MUST be declared on its own, not appended to that list.
+    expect(INDEX_HTML).not.toContain('#hud, #keys, #gold, #hud-material');
+  });
+
+  it('declares the seven new `--ui-*` slots', () => {
+    for (const variable of [
+      '--ui-frame-health',
+      '--ui-frame-dash',
+      '--ui-frame-boon-common',
+      '--ui-frame-boon-epic',
+      '--ui-frame-boon-legendary',
+      '--ui-panel-status',
+      '--ui-rule',
+    ]) {
+      expect(INDEX_HTML).toContain(variable);
+    }
+  });
+
+  it('declares the three rarity colours and NO boon icon slot (U3)', () => {
+    for (const variable of ['--rarity-common', '--rarity-epic', '--rarity-legendary']) {
+      expect(INDEX_HTML).toContain(variable);
+    }
+    // User ruling U3: the boon icon is a CSS glyph, so there is no icon asset slot.
+    expect(INDEX_HTML).not.toContain('--ui-icon-boon');
+  });
+
+  it('keeps nine-slice frames on `border-image`, never a stretched background', () => {
+    expect(INDEX_HTML).toContain('border-image-slice: 12');
+    // Stretching a 48px frame across the viewport smears its corners into bars —
+    // the exact defect the first browser pass caught. The ban is on the DECLARATION
+    // (the stylesheet's own comment is allowed to name it while forbidding it).
+    expect(INDEX_HTML).not.toMatch(/background-size:\s*100%\s+100%\s*;/);
+  });
+});

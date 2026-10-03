@@ -291,6 +291,15 @@ function applyUiSkin(catalog: AssetCatalog): void {
     '--ui-frame-slot': 'ui.frame.slot',
     '--ui-frame-slot-inlay': 'ui.frame.slot-inlay',
     '--ui-bar-hud': 'ui.bar.hud',
+    // M19 · the material UI frames. A degraded id simply leaves its variable at
+    // `none`, so the plain-CSS surface underneath is the real fallback (FR-050).
+    '--ui-frame-health': 'ui.frame.health',
+    '--ui-frame-dash': 'ui.frame.dash',
+    '--ui-frame-boon-common': 'ui.frame.boon-common',
+    '--ui-frame-boon-epic': 'ui.frame.boon-epic',
+    '--ui-frame-boon-legendary': 'ui.frame.boon-legendary',
+    '--ui-panel-status': 'ui.panel.status',
+    '--ui-rule': 'ui.rule.bronze',
   };
   const root = document.documentElement;
   for (const [variable, id] of Object.entries(slots)) {
@@ -496,9 +505,15 @@ function start(app: Application, catalog: AssetCatalog): void {
       ? null
       : new UIManager({
           root: uiRoot,
-          // The gold / darkness read-out (M9-T01 / M13-T01). `null` when the markup
-          // is absent, which the UIManager treats as "no HUD" rather than an error.
+          // The gold plate (M9-T01, reused by M19). `null` when the markup is
+          // absent, which the UIManager treats as "no HUD" rather than an error.
           hud: document.getElementById('gold'),
+          // M19 · the material HUD (health bar + dash ring). A separate element from
+          // the diagnostics block, so the two never show a contradictory reading.
+          hudMaterial: document.getElementById('hud-material'),
+          // M19 · the engine's OWN frame duration, injected so a tick count can be
+          // rendered as a duration without hard-coding `1/60` (Principle II).
+          tickSeconds: sim.fixedDeltaSeconds,
           onSelect: (rewardId: string) => {
             // M16: the reward chime rides the SAME callback as the command, so the
             // sound and the choice cannot drift apart (FR-011: same render frame).

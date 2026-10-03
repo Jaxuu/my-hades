@@ -112,3 +112,24 @@
 **预算**：单文件 **≤ 3 MB** · 资产总量 **≤ 12 MB** · 单图集 **≤ 4096²**（目标 ≤ 2048²）· 图集数 **≤ 12**。
 实测最大图集 = `enemy-grunt.png` 2000 × 700，全部 10 张图集均 ≤ 2048²。
 
+---
+
+## 7. M19 · 新增界面九宫格框体（`027-hud-boon-ui` · 本仓库原创 · 程序化生成）
+
+**生成方式**：`production/m19-ui-frames.mjs`（Node，零依赖，`node:zlib` 手工编码 PNG，**幂等**——重复运行逐字节相同）。
+**修改说明**：全部内容为**本仓库原创的程序化绘制**，**未**从任何上游素材包派生像素；因此不涉及第三方素材的再分发（`research.md` D18 的「本仓库原创 / 程序化生成」分支）。
+**形态**：**48×48 RGBA8 九宫格框体**，`border-image-slice: 12`，**透明中心（24×24）+ 装饰角**（`index.html` 以 `border-image` 消费，**禁** `background-size: 100% 100%`）；`rule-bronze.png` 为铜色分隔条，经 `background-size` 显式定尺寸（非九宫格）。
+
+| assetId | packName | author | sourceUrl | license | modifications |
+|---|---|---|---|---|---|
+| `ui.frame.health` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² 石/羊皮纸**双线**框（M16 白描同族，四角 45° 斜角拼接），透明中心；供生命条外框 `--ui-frame-health` |
+| `ui.frame.dash` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² 石/羊皮纸**双线**框（同上，同一 HUD 材质家族），透明中心；供冲刺外框 `--ui-frame-dash` |
+| `ui.frame.boon-common` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² **单线**框 + 直角角块，**品质色蓝 `#3f6ea8` 烘进线描**；供 Common 卡片框 `--ui-frame-boon-common` |
+| `ui.frame.boon-epic` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² **双线**框 + 四角**菱形刻口**，**品质色紫 `#8a5cd0` 烘进线描**；供 Epic 卡片框 `--ui-frame-boon-epic` |
+| `ui.frame.boon-legendary` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² **三线**框 + 四角**月桂卷草**，**品质色金 `#ffcd4a` 烘进线描**；供 Legendary 卡片框 `--ui-frame-boon-legendary` |
+| `ui.panel.status` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² 石色**三线**框（M16 面板同族，四角斜角拼接），透明中心；供 Tab 状态面板底板 `--ui-panel-status` |
+| `ui.rule.bronze` | 本仓库原创 | 本仓库 | — | CC0-1.0 | 程序化绘制 48² 铜色分隔条（`#b98a3c` 族，高光/核心/暗影三带，垂直居中）；供覆盖层标题分隔 `--ui-rule` |
+
+> **品质色为何烘进线描**（design §2.4）：`border-image` 一旦生效，浏览器**不绘制 `border-color`**，纯白描会盖住品质色。三套品质框体把**基色 / 亮色 / 暗色**直接烘进线描，且**线数与角饰亦不同**（单线+直角 / 双线+菱形 / 三线+卷草），故 `grayscale(1)` 下三品质仍两两可分（SC-014）。三色两两欧氏 **ΔRGB ≥ 86.9**、max-channel **Δ ≥ 75**（SC-003 判据：欧氏 ≥ 60 且 max-channel ≥ 50）。
+> **体积**：M19 增量见 `production/m19-ui-volume.md`（7 文件合计 **1 359 B**；`assets/art/ui/**` 实测 **7.4 KiB**，远在全局预算内；按用户裁定 **U2 不设 UI 子预算**）。
+

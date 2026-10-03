@@ -82,3 +82,32 @@ describe('the canvas and the DOM agree on the palette', () => {
     expect(block).toContain('image-rendering: pixelated');
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * M19 · the material UI adds no font face (specs/027-hud-boon-ui T049).
+ *
+ * APPEND-ONLY: the nine assertions above are untouched. The material HUD, the
+ * boon cards and the Tab status panel introduce new surfaces, and a new surface
+ * is exactly where a bundled font tends to sneak in. It did not.
+ * ------------------------------------------------------------------------- */
+describe('M19 · the material UI keeps the no-font contract (FR-019)', () => {
+  it('still declares exactly TWO font stacks (no new `--font-*`)', () => {
+    const stacks = INDEX_HTML.match(/--font-(?:body|mono):[^;]+;/g) ?? [];
+    expect(stacks).toHaveLength(2);
+  });
+
+  it('declares every `font-family` through one of the two stacks', () => {
+    const families = INDEX_HTML.match(/font-family:\s*[^;]+;/g) ?? [];
+    // Guard against a vacuous pass: the stylesheet really does set font-family.
+    expect(families.length).toBeGreaterThan(0);
+    for (const family of families) {
+      expect(family).toMatch(/var\(--font-(?:body|mono)\)/);
+    }
+  });
+
+  it('keeps the M19 surfaces on the shared plate treatment', () => {
+    // The new HUD element and the status panel are real surfaces, not one-offs.
+    expect(INDEX_HTML).toContain('#hud-material');
+    expect(INDEX_HTML).toContain('.status-panel');
+  });
+});

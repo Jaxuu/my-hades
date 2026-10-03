@@ -1,0 +1,27 @@
+{
+  "zeus_strike": {
+    "rarity": "epic",
+    "icon": "lightning",
+    "description": "攻击命中时在目标处引发 {damage} 点雷电伤害"
+  },
+  "dionysus_strike": {
+    "rarity": "epic",
+    "icon": "grape",
+    "description": "命中使目标中毒：每 {intervalSeconds} 秒每层 {damagePerStack} 点伤害，最多 {maxStacks} 层"
+  },
+  "poseidon_dash": {
+    "rarity": "legendary",
+    "icon": "trident",
+    "description": "冲刺时在原地引发冲击波，造成 {damage} 点伤害并击退 {knockbackForce}"
+  },
+  "hp_up": {
+    "rarity": "common",
+    "icon": "heart",
+    "description": "生命上限 +{amount}"
+  },
+  "dash_up": {
+    "rarity": "common",
+    "icon": "boot",
+    "description": "冲刺冷却 -{reduction} 帧"
+  }
+}
