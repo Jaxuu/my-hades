@@ -1,0 +1,2545 @@
+{
+ "animations": {
+  "enemy.gunner.idle.down": [
+   "enemy.gunner.idle.down.0",
+   "enemy.gunner.idle.down.1",
+   "enemy.gunner.idle.down.2",
+   "enemy.gunner.idle.down.3",
+   "enemy.gunner.idle.down.4",
+   "enemy.gunner.idle.down.5",
+   "enemy.gunner.idle.down.6",
+   "enemy.gunner.idle.down.7"
+  ],
+  "enemy.gunner.idle.up": [
+   "enemy.gunner.idle.up.0",
+   "enemy.gunner.idle.up.1",
+   "enemy.gunner.idle.up.2",
+   "enemy.gunner.idle.up.3",
+   "enemy.gunner.idle.up.4",
+   "enemy.gunner.idle.up.5",
+   "enemy.gunner.idle.up.6",
+   "enemy.gunner.idle.up.7"
+  ],
+  "enemy.gunner.idle.left": [
+   "enemy.gunner.idle.left.0",
+   "enemy.gunner.idle.left.1",
+   "enemy.gunner.idle.left.2",
+   "enemy.gunner.idle.left.3",
+   "enemy.gunner.idle.left.4",
+   "enemy.gunner.idle.left.5",
+   "enemy.gunner.idle.left.6",
+   "enemy.gunner.idle.left.7"
+  ],
+  "enemy.gunner.idle.right": [
+   "enemy.gunner.idle.right.0",
+   "enemy.gunner.idle.right.1",
+   "enemy.gunner.idle.right.2",
+   "enemy.gunner.idle.right.3",
+   "enemy.gunner.idle.right.4",
+   "enemy.gunner.idle.right.5",
+   "enemy.gunner.idle.right.6",
+   "enemy.gunner.idle.right.7"
+  ],
+  "enemy.gunner.move.down": [
+   "enemy.gunner.move.down.0",
+   "enemy.gunner.move.down.1",
+   "enemy.gunner.move.down.2",
+   "enemy.gunner.move.down.3",
+   "enemy.gunner.move.down.4",
+   "enemy.gunner.move.down.5",
+   "enemy.gunner.move.down.6",
+   "enemy.gunner.move.down.7"
+  ],
+  "enemy.gunner.move.up": [
+   "enemy.gunner.move.up.0",
+   "enemy.gunner.move.up.1",
+   "enemy.gunner.move.up.2",
+   "enemy.gunner.move.up.3",
+   "enemy.gunner.move.up.4",
+   "enemy.gunner.move.up.5",
+   "enemy.gunner.move.up.6",
+   "enemy.gunner.move.up.7"
+  ],
+  "enemy.gunner.move.left": [
+   "enemy.gunner.move.left.0",
+   "enemy.gunner.move.left.1",
+   "enemy.gunner.move.left.2",
+   "enemy.gunner.move.left.3",
+   "enemy.gunner.move.left.4",
+   "enemy.gunner.move.left.5",
+   "enemy.gunner.move.left.6",
+   "enemy.gunner.move.left.7"
+  ],
+  "enemy.gunner.move.right": [
+   "enemy.gunner.move.right.0",
+   "enemy.gunner.move.right.1",
+   "enemy.gunner.move.right.2",
+   "enemy.gunner.move.right.3",
+   "enemy.gunner.move.right.4",
+   "enemy.gunner.move.right.5",
+   "enemy.gunner.move.right.6",
+   "enemy.gunner.move.right.7"
+  ],
+  "enemy.gunner.attack.down": [
+   "enemy.gunner.attack.down.0",
+   "enemy.gunner.attack.down.1",
+   "enemy.gunner.attack.down.2",
+   "enemy.gunner.attack.down.3",
+   "enemy.gunner.attack.down.4",
+   "enemy.gunner.attack.down.5"
+  ],
+  "enemy.gunner.attack.up": [
+   "enemy.gunner.attack.up.0",
+   "enemy.gunner.attack.up.1",
+   "enemy.gunner.attack.up.2",
+   "enemy.gunner.attack.up.3",
+   "enemy.gunner.attack.up.4",
+   "enemy.gunner.attack.up.5"
+  ],
+  "enemy.gunner.attack.left": [
+   "enemy.gunner.attack.left.0",
+   "enemy.gunner.attack.left.1",
+   "enemy.gunner.attack.left.2",
+   "enemy.gunner.attack.left.3",
+   "enemy.gunner.attack.left.4",
+   "enemy.gunner.attack.left.5"
+  ],
+  "enemy.gunner.attack.right": [
+   "enemy.gunner.attack.right.0",
+   "enemy.gunner.attack.right.1",
+   "enemy.gunner.attack.right.2",
+   "enemy.gunner.attack.right.3",
+   "enemy.gunner.attack.right.4",
+   "enemy.gunner.attack.right.5"
+  ],
+  "enemy.gunner.hit.down": [
+   "enemy.gunner.hit.down.0",
+   "enemy.gunner.hit.down.1",
+   "enemy.gunner.hit.down.2",
+   "enemy.gunner.hit.down.3"
+  ],
+  "enemy.gunner.hit.up": [
+   "enemy.gunner.hit.up.0",
+   "enemy.gunner.hit.up.1",
+   "enemy.gunner.hit.up.2",
+   "enemy.gunner.hit.up.3"
+  ],
+  "enemy.gunner.hit.left": [
+   "enemy.gunner.hit.left.0",
+   "enemy.gunner.hit.left.1",
+   "enemy.gunner.hit.left.2",
+   "enemy.gunner.hit.left.3"
+  ],
+  "enemy.gunner.hit.right": [
+   "enemy.gunner.hit.right.0",
+   "enemy.gunner.hit.right.1",
+   "enemy.gunner.hit.right.2",
+   "enemy.gunner.hit.right.3"
+  ],
+  "enemy.gunner.death.down": [
+   "enemy.gunner.death.down.0",
+   "enemy.gunner.death.down.1",
+   "enemy.gunner.death.down.2",
+   "enemy.gunner.death.down.3",
+   "enemy.gunner.death.down.4",
+   "enemy.gunner.death.down.5"
+  ],
+  "enemy.gunner.death.up": [
+   "enemy.gunner.death.up.0",
+   "enemy.gunner.death.up.1",
+   "enemy.gunner.death.up.2",
+   "enemy.gunner.death.up.3",
+   "enemy.gunner.death.up.4",
+   "enemy.gunner.death.up.5"
+  ],
+  "enemy.gunner.death.left": [
+   "enemy.gunner.death.left.0",
+   "enemy.gunner.death.left.1",
+   "enemy.gunner.death.left.2",
+   "enemy.gunner.death.left.3",
+   "enemy.gunner.death.left.4",
+   "enemy.gunner.death.left.5"
+  ],
+  "enemy.gunner.death.right": [
+   "enemy.gunner.death.right.0",
+   "enemy.gunner.death.right.1",
+   "enemy.gunner.death.right.2",
+   "enemy.gunner.death.right.3",
+   "enemy.gunner.death.right.4",
+   "enemy.gunner.death.right.5"
+  ],
+  "enemy.gunner.dash.down": [
+   "enemy.gunner.move.down.0",
+   "enemy.gunner.move.down.1",
+   "enemy.gunner.move.down.2",
+   "enemy.gunner.move.down.3",
+   "enemy.gunner.move.down.4",
+   "enemy.gunner.move.down.5",
+   "enemy.gunner.move.down.6",
+   "enemy.gunner.move.down.7"
+  ],
+  "enemy.gunner.dash.up": [
+   "enemy.gunner.move.up.0",
+   "enemy.gunner.move.up.1",
+   "enemy.gunner.move.up.2",
+   "enemy.gunner.move.up.3",
+   "enemy.gunner.move.up.4",
+   "enemy.gunner.move.up.5",
+   "enemy.gunner.move.up.6",
+   "enemy.gunner.move.up.7"
+  ],
+  "enemy.gunner.dash.left": [
+   "enemy.gunner.move.left.0",
+   "enemy.gunner.move.left.1",
+   "enemy.gunner.move.left.2",
+   "enemy.gunner.move.left.3",
+   "enemy.gunner.move.left.4",
+   "enemy.gunner.move.left.5",
+   "enemy.gunner.move.left.6",
+   "enemy.gunner.move.left.7"
+  ],
+  "enemy.gunner.dash.right": [
+   "enemy.gunner.move.right.0",
+   "enemy.gunner.move.right.1",
+   "enemy.gunner.move.right.2",
+   "enemy.gunner.move.right.3",
+   "enemy.gunner.move.right.4",
+   "enemy.gunner.move.right.5",
+   "enemy.gunner.move.right.6",
+   "enemy.gunner.move.right.7"
+  ]
+ },
+ "frames": {
+  "enemy.gunner.idle.down.0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.1": {
+   "frame": {
+    "x": 132,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.2": {
+   "frame": {
+    "x": 264,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.3": {
+   "frame": {
+    "x": 396,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.4": {
+   "frame": {
+    "x": 528,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.5": {
+   "frame": {
+    "x": 660,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.6": {
+   "frame": {
+    "x": 792,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.down.7": {
+   "frame": {
+    "x": 924,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.0": {
+   "frame": {
+    "x": 1056,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.1": {
+   "frame": {
+    "x": 1188,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.2": {
+   "frame": {
+    "x": 1320,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.3": {
+   "frame": {
+    "x": 1452,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.4": {
+   "frame": {
+    "x": 1584,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.5": {
+   "frame": {
+    "x": 1716,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.6": {
+   "frame": {
+    "x": 1848,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.up.7": {
+   "frame": {
+    "x": 0,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.0": {
+   "frame": {
+    "x": 132,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.1": {
+   "frame": {
+    "x": 264,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.2": {
+   "frame": {
+    "x": 396,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.3": {
+   "frame": {
+    "x": 528,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.4": {
+   "frame": {
+    "x": 660,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.5": {
+   "frame": {
+    "x": 792,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.6": {
+   "frame": {
+    "x": 924,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.left.7": {
+   "frame": {
+    "x": 1056,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.0": {
+   "frame": {
+    "x": 1188,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.1": {
+   "frame": {
+    "x": 1320,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.2": {
+   "frame": {
+    "x": 1452,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.3": {
+   "frame": {
+    "x": 1584,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.4": {
+   "frame": {
+    "x": 1716,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.5": {
+   "frame": {
+    "x": 1848,
+    "y": 132,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.6": {
+   "frame": {
+    "x": 0,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.idle.right.7": {
+   "frame": {
+    "x": 132,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.0": {
+   "frame": {
+    "x": 264,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.1": {
+   "frame": {
+    "x": 396,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.2": {
+   "frame": {
+    "x": 528,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.3": {
+   "frame": {
+    "x": 660,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.4": {
+   "frame": {
+    "x": 792,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.5": {
+   "frame": {
+    "x": 924,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.6": {
+   "frame": {
+    "x": 1056,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.down.7": {
+   "frame": {
+    "x": 1188,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.0": {
+   "frame": {
+    "x": 1320,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.1": {
+   "frame": {
+    "x": 1452,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.2": {
+   "frame": {
+    "x": 1584,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.3": {
+   "frame": {
+    "x": 1716,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.4": {
+   "frame": {
+    "x": 1848,
+    "y": 264,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.5": {
+   "frame": {
+    "x": 0,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.6": {
+   "frame": {
+    "x": 132,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.up.7": {
+   "frame": {
+    "x": 264,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.0": {
+   "frame": {
+    "x": 396,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.1": {
+   "frame": {
+    "x": 528,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.2": {
+   "frame": {
+    "x": 660,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.3": {
+   "frame": {
+    "x": 792,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.4": {
+   "frame": {
+    "x": 924,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.5": {
+   "frame": {
+    "x": 1056,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.6": {
+   "frame": {
+    "x": 1188,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.left.7": {
+   "frame": {
+    "x": 1320,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.0": {
+   "frame": {
+    "x": 1452,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.1": {
+   "frame": {
+    "x": 1584,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.2": {
+   "frame": {
+    "x": 1716,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.3": {
+   "frame": {
+    "x": 1848,
+    "y": 396,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.4": {
+   "frame": {
+    "x": 0,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.5": {
+   "frame": {
+    "x": 132,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.6": {
+   "frame": {
+    "x": 264,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.move.right.7": {
+   "frame": {
+    "x": 396,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.0": {
+   "frame": {
+    "x": 528,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.1": {
+   "frame": {
+    "x": 660,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.2": {
+   "frame": {
+    "x": 792,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.3": {
+   "frame": {
+    "x": 924,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.4": {
+   "frame": {
+    "x": 1056,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.down.5": {
+   "frame": {
+    "x": 1188,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.0": {
+   "frame": {
+    "x": 1320,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.1": {
+   "frame": {
+    "x": 1452,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.2": {
+   "frame": {
+    "x": 1584,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.3": {
+   "frame": {
+    "x": 1716,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.4": {
+   "frame": {
+    "x": 1848,
+    "y": 528,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.up.5": {
+   "frame": {
+    "x": 0,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.0": {
+   "frame": {
+    "x": 132,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.1": {
+   "frame": {
+    "x": 264,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.2": {
+   "frame": {
+    "x": 396,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.3": {
+   "frame": {
+    "x": 528,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.4": {
+   "frame": {
+    "x": 660,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.left.5": {
+   "frame": {
+    "x": 792,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.0": {
+   "frame": {
+    "x": 924,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.1": {
+   "frame": {
+    "x": 1056,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.2": {
+   "frame": {
+    "x": 1188,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.3": {
+   "frame": {
+    "x": 1320,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.4": {
+   "frame": {
+    "x": 1452,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.attack.right.5": {
+   "frame": {
+    "x": 1584,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.down.0": {
+   "frame": {
+    "x": 1716,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.down.1": {
+   "frame": {
+    "x": 1848,
+    "y": 660,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.down.2": {
+   "frame": {
+    "x": 0,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.down.3": {
+   "frame": {
+    "x": 132,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.up.0": {
+   "frame": {
+    "x": 264,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.up.1": {
+   "frame": {
+    "x": 396,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.up.2": {
+   "frame": {
+    "x": 528,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.up.3": {
+   "frame": {
+    "x": 660,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.left.0": {
+   "frame": {
+    "x": 792,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.left.1": {
+   "frame": {
+    "x": 924,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.left.2": {
+   "frame": {
+    "x": 1056,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.left.3": {
+   "frame": {
+    "x": 1188,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.right.0": {
+   "frame": {
+    "x": 1320,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.right.1": {
+   "frame": {
+    "x": 1452,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.right.2": {
+   "frame": {
+    "x": 1584,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.hit.right.3": {
+   "frame": {
+    "x": 1716,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.0": {
+   "frame": {
+    "x": 1848,
+    "y": 792,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.1": {
+   "frame": {
+    "x": 0,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.2": {
+   "frame": {
+    "x": 132,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.3": {
+   "frame": {
+    "x": 264,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.4": {
+   "frame": {
+    "x": 396,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.down.5": {
+   "frame": {
+    "x": 528,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.0": {
+   "frame": {
+    "x": 660,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.1": {
+   "frame": {
+    "x": 792,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.2": {
+   "frame": {
+    "x": 924,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.3": {
+   "frame": {
+    "x": 1056,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.4": {
+   "frame": {
+    "x": 1188,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.up.5": {
+   "frame": {
+    "x": 1320,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.0": {
+   "frame": {
+    "x": 1452,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.1": {
+   "frame": {
+    "x": 1584,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.2": {
+   "frame": {
+    "x": 1716,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.3": {
+   "frame": {
+    "x": 1848,
+    "y": 924,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.4": {
+   "frame": {
+    "x": 0,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.left.5": {
+   "frame": {
+    "x": 132,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.0": {
+   "frame": {
+    "x": 264,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.1": {
+   "frame": {
+    "x": 396,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.2": {
+   "frame": {
+    "x": 528,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.3": {
+   "frame": {
+    "x": 660,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.4": {
+   "frame": {
+    "x": 792,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "enemy.gunner.death.right.5": {
+   "frame": {
+    "x": 924,
+    "y": 1056,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  }
+ },
+ "meta": {
+  "app": "my-hades m18-placeholder-atlases.mjs",
+  "format": "RGBA8888",
+  "image": "enemy-gunner.png",
+  "scale": 1,
+  "size": {
+   "w": 1980,
+   "h": 1188
+  },
+  "tilePx": 128,
+  "silhouettes": {
+   "enemy.gunner": {
+    "grid": "0011100000111000001110000111111101111111011111000011100000000000",
+    "rows": [
+     46,
+     516,
+     606,
+     1101,
+     1187,
+     739,
+     374,
+     0
+    ],
+    "opaque": 4569
+   }
+  }
+ }
+}

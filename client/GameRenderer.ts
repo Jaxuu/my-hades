@@ -408,14 +408,21 @@ const WALL_COLOR = 0x4a5266;
 const TWO_PI = Math.PI * 2;
 
 /**
- * The natural pixel size of every sprite in the atlas (M16).
+ * The natural pixel size of every world sprite's base frame (M16; M18 HD baseline).
  *
- * One world unit is `PX_PER_UNIT` pixels and every source tile is 16x16, so a
- * scene tile draws at `PX_PER_UNIT / TILE_NATURAL_PX` and a body draws at whatever
- * its hurtbox says. Keeping the number here — rather than in `sprite-map` — is the
- * same discipline `PX_PER_UNIT` follows: pixels are the renderer's business.
+ * One world unit is `PX_PER_UNIT` pixels and the HD scene tile is 128x128, so a
+ * scene tile draws at `PX_PER_UNIT / TILE_NATURAL_PX = 10 / 128` and a body draws
+ * at whatever its hurtbox says. Keeping the number here — rather than in
+ * `sprite-map` — is the same discipline `PX_PER_UNIT` follows: pixels are the
+ * renderer's business.
+ *
+ * M18 (research.md D2): this was `16` while the atlas was pixel art. It is the
+ * "natural pixels <-> world unit" conversion base, so an HD atlas makes it
+ * mandatory to update — otherwise every tile would be drawn at 1/8 of its size.
+ * `tiles.json`'s `meta.tilePx` MUST equal this value, and
+ * `tests/assets/licenses.test.ts` asserts that cross-check plus the literal.
  */
-const TILE_NATURAL_PX = 16;
+export const TILE_NATURAL_PX = 128;
 
 /**
  * Real milliseconds per animation frame, by action (M16).
@@ -424,18 +431,51 @@ const TILE_NATURAL_PX = 16;
  * death fade — this is a VISUAL clock and must never be derived from logic ticks
  * (ADR-002, spec 22 §3.4). Longer actions read as heavier: a dash snaps, an idle
  * breathes.
+ *
+ * Exported because the animation-continuity acceptance (`SC-015` / quickstart V11)
+ * measures "adjacent frame interval vs the clip's NOMINAL frame duration" against
+ * this exact table rather than against a copy of it.
  */
-const ANIM_FRAME_MS: Readonly<Record<AnimationState, number>> = {
+export const ANIM_FRAME_MS: Readonly<Record<AnimationState, number>> = {
   idle: 260,
   move: 130,
   dash: 90,
   attack: 110,
   hit: 120,
-  death: 150,
+  // M18: shortened from 150. The death clip must COMPLETE inside the death FX's
+  // window (`DEATH_FADE_MS` = 400ms), or "stops on its last frame" (research.md
+  // D13) would be unreachable: 8 frames x 150ms = 1200ms > 400ms, so the view
+  // would be retired mid-clip. 8 x 45ms = 360ms leaves the last pose on screen for
+  // the final 40ms. This is a presentation tuning constant, not a contract.
+  death: 45,
 };
+
+/**
+ * M18 (research.md D13) · which clips LOOP.
+ *
+ * `idle` and `move` are cycles; `dash` / `attack` / `hit` / `death` are one-shots
+ * that must settle on their last frame (FR-006: 待机与移动为循环动作，攻击与受击有
+ * 明确起止、停在末帧不回绕).
+ */
+const LOOPING_ACTIONS: ReadonlySet<AnimationState> = new Set<AnimationState>(['idle', 'move']);
+
+/** True when `action` cycles rather than settling on its last frame. */
+export function isLoopingAction(action: AnimationState): boolean {
+  return LOOPING_ACTIONS.has(action);
+}
 
 /** Scene-tile tint applied to the wall sprite so walls read darker than the floor. */
 const WALL_TILE_TINT = 0x9aa4b8;
+
+/**
+ * M18 · the damage numeral's palette (see `spawnFloatingText`).
+ *
+ * A warm off-white over a dark outline, matching the HD decals' key-light + ink
+ * treatment, so a floating number belongs to the same picture as the sparks and the
+ * pickups it is reporting on.
+ */
+const FLOATING_TEXT_FILL = 0xfff4e2;
+const FLOATING_TEXT_STROKE = 0x1c202b;
 
 /**
  * Signed shortest-arc delta from `from` to `to`, normalised to [-PI, PI].
@@ -453,6 +493,134 @@ function shortestArcDelta(from: number, to: number): number {
   if (delta > Math.PI) delta -= TWO_PI;
   else if (delta < -Math.PI) delta += TWO_PI;
   return delta;
+}
+
+/**
+ * M18 · the natural pixel size of a frame texture.
+ *
+ * Guards keep the result usable by `hurtboxSpriteScale`: a texture whose width is
+ * not a finite positive number (a stub in a unit test, a failed decode) degrades to
+ * the tile base rather than to `NaN`/`0`, either of which would make the sprite
+ * invisible or explosive.
+ */
+function naturalPxOf(texture: Texture): number {
+  const width = texture.width;
+  if (!Number.isFinite(width) || width <= 0) return TILE_NATURAL_PX;
+  return width;
+}
+
+/**
+ * M18 · the 8-neighbour bit layout, in bit order (contract §3.1):
+ *
+ *   bit 0: up   bit 1: up-right   bit 2: right   bit 3: down-right
+ *   bit 4: down bit 5: down-left  bit 6: left    bit 7: up-left
+ */
+const WALL_NEIGHBOUR_OFFSETS: readonly (readonly [number, number])[] = [
+  [0, -1],
+  [1, -1],
+  [1, 0],
+  [1, 1],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [-1, -1],
+];
+
+/**
+ * M18 · collapse an 8-neighbour mask to its canonical form.
+ *
+ * A DIAGONAL neighbour only matters when BOTH of its adjacent edges are walls: if
+ * there is no wall above and none to the right, then "is there a wall up-right" has
+ * no visible consequence, so the two masks must select the SAME part. Applying that
+ * reduction to all 256 raw masks leaves exactly **47** distinct values — the classic
+ * blob-tile set (contract §3.2 / research.md D9).
+ */
+export function canonicalWallMask(mask: number): number {
+  const north = mask & 1;
+  const northEast = mask & 2;
+  const east = mask & 4;
+  const southEast = mask & 8;
+  const south = mask & 16;
+  const southWest = mask & 32;
+  const west = mask & 64;
+  const northWest = mask & 128;
+  let out = north | east | south | west;
+  if (north !== 0 && east !== 0 && northEast !== 0) out |= 2;
+  if (east !== 0 && south !== 0 && southEast !== 0) out |= 8;
+  if (south !== 0 && west !== 0 && southWest !== 0) out |= 32;
+  if (west !== 0 && north !== 0 && northWest !== 0) out |= 128;
+  return out;
+}
+
+/** The 47 canonical masks, ascending. Index `i` is the part `tile.wall.p<i>`. */
+export const WALL_PART_MASKS: readonly number[] = (() => {
+  const set = new Set<number>();
+  for (let mask = 0; mask < 256; mask += 1) set.add(canonicalWallMask(mask));
+  return Object.freeze([...set].sort((a, b) => a - b));
+})();
+
+/** The part count the atlas must carry (contract §3.2). */
+export const WALL_PART_COUNT = WALL_PART_MASKS.length;
+
+/** Raw mask -> part index, precomputed so the hot path is one array read. */
+const WALL_PART_INDEX_BY_MASK: Int16Array = (() => {
+  const table = new Int16Array(256);
+  for (let raw = 0; raw < 256; raw += 1) {
+    table[raw] = WALL_PART_MASKS.indexOf(canonicalWallMask(raw));
+  }
+  return table;
+})();
+
+/**
+ * M18 · the wall part index for a raw 8-neighbour mask.
+ *
+ * TOTAL: every one of the 256 masks resolves to a part in `[0, 47)`, so a wall can
+ * never be drawn as a hole (contract §3.2's completeness requirement / VR-13). An
+ * out-of-range input is treated as "isolated wall" rather than throwing — a renderer
+ * that can throw mid-frame is a black screen.
+ */
+export function wallPartIndex(mask: number): number {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 255) return 0;
+  const index = WALL_PART_INDEX_BY_MASK[mask] ?? 0;
+  return index < 0 ? 0 : index;
+}
+
+/** The animation key of the part for a raw mask (e.g. `tile.wall.p12`). */
+export function wallPartAnimationKey(mask: number): string {
+  return `tile.wall.p${String(wallPartIndex(mask))}`;
+}
+
+/**
+ * M18 · the floor variant for one cell.
+ *
+ * A deterministic hash of the CELL COORDINATE — never randomness, never a clock
+ * (contract §4 / §7). Two builds of the same room therefore choose the same variant
+ * for the same cell, which is what makes the floor stable across a room re-entry and
+ * what `tests/render/tilemap_autotile.test.ts` asserts. `count <= 1` short-circuits
+ * so a single-variant atlas cannot divide by zero.
+ */
+export function floorVariantIndex(col: number, row: number, count: number): number {
+  if (!Number.isFinite(count) || count <= 1) return 0;
+  let hash = Math.imul(col | 0, 0x1f1f1f1f) ^ Math.imul(row | 0, 0x27d4eb2d);
+  hash = Math.imul(hash ^ (hash >>> 15), 0x2545f491);
+  hash = (hash ^ (hash >>> 13)) >>> 0;
+  return hash % Math.floor(count);
+}
+
+/**
+ * M18 · the room's wall occupancy, in CELL coordinates.
+ *
+ * The renderer only ever sees meshed wall AABBs (`WallComponent`), so the cell grid
+ * the autotile needs is RECONSTRUCTED from them — read-only, deterministically, with
+ * no extra query and no write to the world. Cells outside the bounding box read as
+ * "not a wall", which is correct: a room's outline is its boundary.
+ */
+interface WallGrid {
+  readonly minX: number;
+  readonly minY: number;
+  readonly cols: number;
+  readonly rows: number;
+  readonly cells: Uint8Array;
 }
 
 /** View classification, decided by component presence (spec 09 §4.3). */
@@ -536,6 +704,14 @@ export interface EntityView {
    */
   animFrameMs: number;
   animTotal: number;
+  /**
+   * M18 · whether the current clip CYCLES (research.md D13).
+   *
+   * `idle` / `move` loop; `dash` / `attack` / `hit` / `death` settle on their last
+   * frame. Cached beside {@link animFrameMs} for the same reason: it is a property
+   * of the clip that was just assigned, so it cannot drift.
+   */
+  animLoop: boolean;
   /**
    * M16 · the raw container rotation the cached `animFacing` was derived from.
    * `NaN` initially, which never compares equal to anything — so the first frame
@@ -1068,9 +1244,19 @@ export class GameRenderer {
       minY = Math.min(minY, wall.y);
       maxX = Math.max(maxX, wall.x + wall.width);
       maxY = Math.max(maxY, wall.y + wall.height);
+    }
 
+    // M18: reconstruct the room's wall occupancy ONCE per geometry change. The
+    // autotile mask of a cell then costs eight array reads instead of a re-scan of
+    // every wall entity, and — because it is built from the SAME read-only data the
+    // floor is laid across — the mask can never disagree with the collision grid.
+    const grid = this.buildWallGrid(world, wallIds, minX, minY, maxX, maxY);
+
+    for (const id of wallIds) {
       if (this.wallViews.has(id)) continue;
-      const node = this.buildWallNode(wall);
+      const wall = world.getComponent(id, WallComponent);
+      if (wall === undefined) continue;
+      const node = this.buildWallNode(wall, grid);
       this.wallViews.set(id, node);
       layer.addChild(node);
     }
@@ -1083,7 +1269,7 @@ export class GameRenderer {
   }
 
   /**
-   * M16 · one wall entity's node.
+   * M16 · one wall entity's node. M18: its cells are picked by AUTOTILE.
    *
    * The node is POSITIONED at the wall's world pixel origin and its children are
    * drawn relative to that — rather than drawing each block at absolute
@@ -1094,28 +1280,47 @@ export class GameRenderer {
    *
    * A wall AABB can be wider or taller than one world unit (the loader meshes runs
    * of tiles), so the art is TILED across the AABB rather than stretched — FR-009's
-   * "no stretching" applies to walls exactly as it does to the floor.
+   * "no stretching" applies to walls exactly as it does to the floor. M18 keeps that
+   * rule and adds the part choice: each cell draws the autotile part for its own
+   * 8-neighbour mask, so an exposed corner, a straight run and a pillar all read
+   * differently.
    */
-  private buildWallNode(wall: WallComponent): Container {
+  private buildWallNode(wall: WallComponent, grid: WallGrid | null): Container {
     const node = new Container();
     node.x = wall.x * PX_PER_UNIT;
     node.y = wall.y * PX_PER_UNIT;
 
-    const texture = this.tileTexture(WALL_TILE_ID);
-    if (texture === undefined) {
+    const cols = Math.max(1, Math.round(wall.width));
+    const rows = Math.max(1, Math.round(wall.height));
+    const fallbackTexture = this.tileTexture(WALL_TILE_ID);
+
+    // No wall art at all (a degraded atlas / no provider): keep the pre-M18 single
+    // block, so a missing atlas costs the room its detail and nothing else.
+    if (fallbackTexture === undefined) {
       const block = new Graphics();
-      block
-        .rect(0, 0, wall.width * PX_PER_UNIT, wall.height * PX_PER_UNIT)
-        .fill({ color: WALL_COLOR });
+      block.rect(0, 0, wall.width * PX_PER_UNIT, wall.height * PX_PER_UNIT).fill({ color: WALL_COLOR });
       node.addChild(block);
       return node;
     }
 
-    const cols = Math.max(1, Math.round(wall.width));
-    const rows = Math.max(1, Math.round(wall.height));
+    // M18 (research.md D9/D10): ONE sprite per cell, whose art already carries the
+    // three depth bands (top cap / face / contact shadow). Two consequences matter:
+    //
+    //  - the node's child count is still `cols * rows`, so the frozen
+    //    `staticLayer.children.length === 1 + wallCount` and F1-F6 contracts are
+    //    untouched — no new layer, no new node (FR-027);
+    //  - every part is exactly one cell wide, so a wall's pixels cannot project onto
+    //    a walkable cell (FR-008 / FR-010).
+    const c0 = grid === null ? 0 : Math.round(wall.x) - grid.minX;
+    const r0 = grid === null ? 0 : Math.round(wall.y) - grid.minY;
     const scale = PX_PER_UNIT / TILE_NATURAL_PX;
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
+        let texture = fallbackTexture;
+        if (grid !== null) {
+          const part = this.art.animation(wallPartAnimationKey(this.wallMaskAt(grid, c0 + col, r0 + row)));
+          if (part !== undefined && part[0] !== undefined) texture = part[0];
+        }
         const tile = new Sprite(texture);
         tile.scale.set(scale);
         tile.x = col * PX_PER_UNIT;
@@ -1127,6 +1332,61 @@ export class GameRenderer {
       }
     }
     return node;
+  }
+
+  /**
+   * M18 · reconstruct the room's wall occupancy from the meshed wall AABBs.
+   *
+   * Read-only, deterministic, and derived from the SAME entities the floor is laid
+   * across — so the autotile mask is a view of the collision geometry rather than a
+   * second, independently-maintained copy of it (contract §7).
+   */
+  private buildWallGrid(
+    world: World,
+    wallIds: readonly EntityId[],
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+  ): WallGrid | null {
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+    const originX = Math.round(minX);
+    const originY = Math.round(minY);
+    const cols = Math.max(1, Math.round(maxX) - originX);
+    const rows = Math.max(1, Math.round(maxY) - originY);
+    const cells = new Uint8Array(cols * rows);
+
+    for (const id of wallIds) {
+      const wall = world.getComponent(id, WallComponent);
+      if (wall === undefined) continue;
+      const c0 = Math.round(wall.x) - originX;
+      const r0 = Math.round(wall.y) - originY;
+      const cw = Math.max(1, Math.round(wall.width));
+      const ch = Math.max(1, Math.round(wall.height));
+      for (let row = 0; row < ch; row += 1) {
+        for (let col = 0; col < cw; col += 1) {
+          const x = c0 + col;
+          const y = r0 + row;
+          if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+          cells[y * cols + x] = 1;
+        }
+      }
+    }
+    return { minX: originX, minY: originY, cols, rows, cells };
+  }
+
+  /** The raw 8-neighbour mask of a cell, read-only. Off-grid neighbours are empty. */
+  private wallMaskAt(grid: WallGrid, cx: number, cy: number): number {
+    let mask = 0;
+    for (let bit = 0; bit < 8; bit += 1) {
+      const offset = WALL_NEIGHBOUR_OFFSETS[bit];
+      if (offset === undefined) continue;
+      const x = cx + offset[0];
+      const y = cy + offset[1];
+      if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) continue;
+      if (grid.cells[y * grid.cols + x] === 1) mask |= 1 << bit;
+    }
+    return mask;
   }
 
   /** Create the static layer on demand and put it BEHIND the render root. */
@@ -1183,8 +1443,9 @@ export class GameRenderer {
     });
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
 
-    const texture = this.tileTexture(FLOOR_TILE_ID);
-    if (texture === undefined) {
+    const variants = this.art.animation(FLOOR_TILE_ID);
+    const single = variants !== undefined && variants[0] !== undefined ? variants[0] : this.art.texture(FLOOR_TILE_ID);
+    if (single === undefined) {
       const block = new Graphics();
       block
         .rect(
@@ -1199,8 +1460,15 @@ export class GameRenderer {
       const cols = Math.max(1, Math.ceil(maxX - minX));
       const rows = Math.max(1, Math.ceil(maxY - minY));
       const scale = PX_PER_UNIT / TILE_NATURAL_PX;
+      const variantCount = variants !== undefined ? variants.length : 1;
+      const originX = Math.round(minX);
+      const originY = Math.round(minY);
       for (let row = 0; row < rows; row += 1) {
         for (let col = 0; col < cols; col += 1) {
+          // M18 (contract §4): the variant is chosen by a DETERMINISTIC hash of the
+          // cell coordinate — never `World.rng`, never a clock — so re-entering a
+          // room reproduces the same floor and the renderer stays a pure observer.
+          const texture = variants?.[floorVariantIndex(originX + col, originY + row, variantCount)] ?? single;
           const tile = new Sprite(texture);
           tile.scale.set(scale);
           tile.x = (minX + col) * PX_PER_UNIT;
@@ -1275,7 +1543,15 @@ export class GameRenderer {
   private syncTransforms(world: World, alpha: number, deltaMs: number): void {
     for (const [id, view] of this.views) {
       // A dying view is only driven by the death FX, never by the world (§4.4).
-      if (view.isDying) continue;
+      if (view.isDying) {
+        // M18: EXCEPT its own death clip. The FX owns position / scale / alpha; the
+        // clip owns the POSE, and FR-006 / research.md D13 require it to play out and
+        // settle on its last frame rather than freeze wherever it happened to be.
+        if (view.sprite !== null && view.animAction === 'death') {
+          this.advanceAnimation(view, deltaMs);
+        }
+        continue;
+      }
 
       const transform = world.getComponent(id, TransformComponent);
       if (transform !== undefined) {
@@ -1403,6 +1679,7 @@ export class GameRenderer {
     view.animKey = key;
     view.animAction = action;
     view.animFrameMs = ANIM_FRAME_MS[action];
+    view.animLoop = isLoopingAction(action);
     view.animElapsedMs = 0;
     // The setter restarts the clip at frame 0 and pushes the texture, so no extra
     // `currentFrame` write is needed here.
@@ -1433,14 +1710,20 @@ export class GameRenderer {
   private advanceAnimation(view: EntityView, deltaMs: number): void {
     const sprite = view.sprite;
     if (sprite === null) return;
-    // A view whose death FX is running holds its last frame (the FX owns the
-    // motion from here), and a single-frame clip has nowhere to advance to.
-    if (view.isDying) return;
+    // A single-frame clip has nowhere to advance to. (Whether a DYING view advances
+    // is the caller's decision — see `syncTransforms` — because the death clip is
+    // the one clip that must keep playing while the death FX owns the container.)
     const total = view.animTotal;
     if (total <= 1) return;
 
     view.animElapsedMs += deltaMs;
-    const index = Math.min(total - 1, Math.floor(view.animElapsedMs / view.animFrameMs));
+    const elapsed = Math.floor(view.animElapsedMs / view.animFrameMs);
+    // M18 (research.md D13): a cycling clip WRAPS, a one-shot clip SETTLES. The
+    // distinction is the whole of FR-006's "待机与移动为循环动作，攻击与受击有明确
+    // 起止（停在末帧、不回绕）". Without it a walk cycle would freeze on its last
+    // pose after one pass — which is exactly what the pre-M18 renderer did, because
+    // the pixel sheets had 2-frame clips and no loop semantics at all.
+    const index = view.animLoop ? elapsed % total : Math.min(total - 1, elapsed);
     if (sprite.currentFrame !== index) sprite.currentFrame = index;
   }
 
@@ -1802,13 +2085,35 @@ export class GameRenderer {
     }
   }
 
-  /** Create a rising/fading damage floater and hand it to the FX layer. */
+  /**
+   * Create a rising/fading damage floater and hand it to the FX layer.
+   *
+   * M18 · WHY THIS IS STILL A `Text`, NOT A GLYPH SPRITE
+   * ---------------------------------------------------
+   * tasks.md T053 asks for damage numerals to use HD frames. They cannot: the
+   * FROZEN `tests/render/juice-verify.test.ts` (not in this feature's authorised
+   * update set — FR-028) asserts the floater is a `Text` node whose `.text` is
+   * exactly `-10`, and `juice_m14.test.ts` counts `Text` nodes to prove no text
+   * leaked into the particle layer. FR-028 outranks a phrasing detail in a task, and
+   * `contracts/hd-asset-manifest.md` §2 itself allows "`fx.damage-font`（或等价）".
+   *
+   * The equivalent is therefore taken: the numeral stays a `Text`, but its STYLE
+   * moves to the HD palette (warm white fill, dark outline) so it reads as part of
+   * the same art language. No glyph atlas is produced, because an atlas with no
+   * consumer would be dead weight that the licence registry still had to justify.
+   * This deviation is registered in `production/m18-evidence.md`.
+   */
   private spawnFloatingText(text: string, x: number, y: number): void {
     // PixiJS v8 options-object form — the positional `new Text(text, style)` form
     // is deprecated and would spew warnings into the test output.
     const node = new Text({
       text,
-      style: { fontFamily: 'monospace', fontSize: 16, fill: 0xffffff },
+      style: {
+        fontFamily: 'monospace',
+        fontSize: 16,
+        fill: FLOATING_TEXT_FILL,
+        stroke: { color: FLOATING_TEXT_STROKE, width: 3 },
+      },
     });
     node.x = x;
     node.y = y;
@@ -1987,6 +2292,7 @@ export class GameRenderer {
       animFacing: null,
       animFrameMs: ANIM_FRAME_MS.idle,
       animTotal: 0,
+      animLoop: false,
       animRot: Number.NaN,
     };
   }
@@ -2078,6 +2384,7 @@ export class GameRenderer {
         animFacing: null,
         animFrameMs: ANIM_FRAME_MS.idle,
         animTotal: 0,
+        animLoop: false,
         animRot: Number.NaN,
       };
     }
@@ -2105,6 +2412,7 @@ export class GameRenderer {
       animFacing: null,
       animFrameMs: ANIM_FRAME_MS.idle,
       animTotal: 0,
+      animLoop: false,
       animRot: Number.NaN,
     };
   }
@@ -2134,6 +2442,7 @@ export class GameRenderer {
       animFacing: null,
       animFrameMs: ANIM_FRAME_MS.idle,
       animTotal: 0,
+      animLoop: false,
       animRot: Number.NaN,
     };
   }
@@ -2189,6 +2498,7 @@ export class GameRenderer {
       animFacing: null,
       animFrameMs: ANIM_FRAME_MS.idle,
       animTotal: 0,
+      animLoop: false,
       animRot: Number.NaN,
     };
   }
@@ -2245,6 +2555,7 @@ export class GameRenderer {
       animFacing: null,
       animFrameMs: ANIM_FRAME_MS.idle,
       animTotal: 0,
+      animLoop: false,
       animRot: Number.NaN,
     };
   }
@@ -2257,15 +2568,24 @@ export class GameRenderer {
    * on the first `syncTransforms`; starting it here means a view is never rendered
    * with an unset texture, which PixiJS draws as an empty quad.
    *
-   * `autoUpdate` is off because {@link syncAnimations} owns the clock.
+   * M18 (research.md D14): the natural size is read from the FRAME, not from
+   * `TILE_NATURAL_PX`. The HD set deliberately mixes body sizes (grunt 96, raider /
+   * gunner 128, elite 160), and scaling all of them by the 128 tile base would draw
+   * a grunt at 4/3 of its hurtbox — i.e. the visible body would no longer equal the
+   * collision body (FR-008 / SC-004). Reading the frame keeps that identity true
+   * for any future art that changes a body's pixel size.
+   *
+   * `autoUpdate` is off because {@link advanceAnimation} owns the clock.
    */
   private buildAnimatedBody(spriteId: string, radiusUnits: number): AnimatedSprite | null {
     const frames = this.art.animation(`${spriteId}.idle.down`);
     if (frames === undefined || frames.length === 0) return null;
+    const first = frames[0];
+    if (first === undefined) return null;
 
     const sprite = new AnimatedSprite([...frames]);
     sprite.anchor.set(0.5);
-    sprite.scale.set(hurtboxSpriteScale(radiusUnits, TILE_NATURAL_PX, PX_PER_UNIT));
+    sprite.scale.set(hurtboxSpriteScale(radiusUnits, naturalPxOf(first), PX_PER_UNIT));
     sprite.autoUpdate = false;
     return sprite;
   }

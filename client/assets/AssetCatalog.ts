@@ -9,9 +9,13 @@
  *     a single bad atlas must not blank the screen (FR-013, SC-007).
  *  2. **Terminal degradation.** `degraded` is final; there is no retry. A per-frame
  *     retry would turn one corrupt file into a stutter for the whole session.
- *  3. **De-duplication by source.** Five enemy types share `enemies.png`, so the
- *     texture is fetched and decoded ONCE and the six ids resolve animations out of
- *     the same sheet. Loading it six times would be six decodes of the same bytes.
+ *  3. **De-duplication by source.** Ids that share one file decode it ONCE and each
+ *     resolves its own animation out of the same sheet (`tile.floor` / `tile.wall`
+ *     share `tiles`, the six `fx.*` ids share `fx`). M18 split the enemy sheets into
+ *     one atlas per type (research.md D15), so the rule is now a no-op for them —
+ *     which is the point: it stays honest instead of silently relying on six ids
+ *     sharing `enemies.png`. Loading a shared sheet N times would be N decodes of
+ *     the same bytes.
  *  4. **Audio is a URL, not a buffer.** `kind === 'audio'` never touches pixi.js:
  *     the catalog just hands the built URL to howler. Keeping the decode on
  *     howler's side is what keeps the audio channel's silent-degradation contract
@@ -28,7 +32,7 @@
 import { Assets, Spritesheet, Texture, TextureSource } from 'pixi.js';
 
 import type { AssetKind } from './manifest';
-import { MANIFEST, MANIFEST_IDS, SHEET_DATA } from './manifest';
+import { MANIFEST, MANIFEST_IDS, SHEET_DATA, isHdWorldArt } from './manifest';
 
 /** Loading lifecycle (data-model E1). `ready` and `degraded` are both terminal. */
 export type AssetState = 'declared' | 'loading' | 'ready' | 'degraded';
@@ -220,6 +224,21 @@ export class AssetCatalog implements SpriteProvider {
     sampleId: string,
   ): Promise<SourceBundle> {
     const texture = await this.loader.loadTexture(source);
+    // M18 (research.md D7): HD WORLD art overrides the global `nearest` default
+    // PER TEXTURE. The global default is what keeps M17's pixel-sharpness contract
+    // (`tests/render/camera_zoom_sharpness.test.ts`, not in this feature's
+    // authorised update set) passing unchanged; HD art is not pixel art, so
+    // magnifying it by a non-integer factor with `nearest` aliases hard, and
+    // minifying the 30x30 stress room (128px -> 29px at z=2.88) moires without
+    // mipmaps. `sampleId` is representative: every id that shares a source is in
+    // the same namespace group (tiles share `tiles`, fx share `fx`).
+    //
+    // This runs BEFORE `sheet.parse()` below, so the frame sub-textures PixiJS
+    // derives from this source inherit the overridden filtering.
+    if (isHdWorldArt(sampleId)) {
+      texture.source.scaleMode = 'linear';
+      texture.source.autoGenerateMipmaps = true;
+    }
     if (kind !== 'spritesheet') {
       return { sheet: null, texture };
     }

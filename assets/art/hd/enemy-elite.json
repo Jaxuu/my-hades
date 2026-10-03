@@ -1,0 +1,2545 @@
+{
+ "animations": {
+  "enemy.elite.idle.down": [
+   "enemy.elite.idle.down.0",
+   "enemy.elite.idle.down.1",
+   "enemy.elite.idle.down.2",
+   "enemy.elite.idle.down.3",
+   "enemy.elite.idle.down.4",
+   "enemy.elite.idle.down.5",
+   "enemy.elite.idle.down.6",
+   "enemy.elite.idle.down.7"
+  ],
+  "enemy.elite.idle.up": [
+   "enemy.elite.idle.up.0",
+   "enemy.elite.idle.up.1",
+   "enemy.elite.idle.up.2",
+   "enemy.elite.idle.up.3",
+   "enemy.elite.idle.up.4",
+   "enemy.elite.idle.up.5",
+   "enemy.elite.idle.up.6",
+   "enemy.elite.idle.up.7"
+  ],
+  "enemy.elite.idle.left": [
+   "enemy.elite.idle.left.0",
+   "enemy.elite.idle.left.1",
+   "enemy.elite.idle.left.2",
+   "enemy.elite.idle.left.3",
+   "enemy.elite.idle.left.4",
+   "enemy.elite.idle.left.5",
+   "enemy.elite.idle.left.6",
+   "enemy.elite.idle.left.7"
+  ],
+  "enemy.elite.idle.right": [
+   "enemy.elite.idle.right.0",
+   "enemy.elite.idle.right.1",
+   "enemy.elite.idle.right.2",
+   "enemy.elite.idle.right.3",
+   "enemy.elite.idle.right.4",
+   "enemy.elite.idle.right.5",
+   "enemy.elite.idle.right.6",
+   "enemy.elite.idle.right.7"
+  ],
+  "enemy.elite.move.down": [
+   "enemy.elite.move.down.0",
+   "enemy.elite.move.down.1",
+   "enemy.elite.move.down.2",
+   "enemy.elite.move.down.3",
+   "enemy.elite.move.down.4",
+   "enemy.elite.move.down.5",
+   "enemy.elite.move.down.6",
+   "enemy.elite.move.down.7"
+  ],
+  "enemy.elite.move.up": [
+   "enemy.elite.move.up.0",
+   "enemy.elite.move.up.1",
+   "enemy.elite.move.up.2",
+   "enemy.elite.move.up.3",
+   "enemy.elite.move.up.4",
+   "enemy.elite.move.up.5",
+   "enemy.elite.move.up.6",
+   "enemy.elite.move.up.7"
+  ],
+  "enemy.elite.move.left": [
+   "enemy.elite.move.left.0",
+   "enemy.elite.move.left.1",
+   "enemy.elite.move.left.2",
+   "enemy.elite.move.left.3",
+   "enemy.elite.move.left.4",
+   "enemy.elite.move.left.5",
+   "enemy.elite.move.left.6",
+   "enemy.elite.move.left.7"
+  ],
+  "enemy.elite.move.right": [
+   "enemy.elite.move.right.0",
+   "enemy.elite.move.right.1",
+   "enemy.elite.move.right.2",
+   "enemy.elite.move.right.3",
+   "enemy.elite.move.right.4",
+   "enemy.elite.move.right.5",
+   "enemy.elite.move.right.6",
+   "enemy.elite.move.right.7"
+  ],
+  "enemy.elite.attack.down": [
+   "enemy.elite.attack.down.0",
+   "enemy.elite.attack.down.1",
+   "enemy.elite.attack.down.2",
+   "enemy.elite.attack.down.3",
+   "enemy.elite.attack.down.4",
+   "enemy.elite.attack.down.5"
+  ],
+  "enemy.elite.attack.up": [
+   "enemy.elite.attack.up.0",
+   "enemy.elite.attack.up.1",
+   "enemy.elite.attack.up.2",
+   "enemy.elite.attack.up.3",
+   "enemy.elite.attack.up.4",
+   "enemy.elite.attack.up.5"
+  ],
+  "enemy.elite.attack.left": [
+   "enemy.elite.attack.left.0",
+   "enemy.elite.attack.left.1",
+   "enemy.elite.attack.left.2",
+   "enemy.elite.attack.left.3",
+   "enemy.elite.attack.left.4",
+   "enemy.elite.attack.left.5"
+  ],
+  "enemy.elite.attack.right": [
+   "enemy.elite.attack.right.0",
+   "enemy.elite.attack.right.1",
+   "enemy.elite.attack.right.2",
+   "enemy.elite.attack.right.3",
+   "enemy.elite.attack.right.4",
+   "enemy.elite.attack.right.5"
+  ],
+  "enemy.elite.hit.down": [
+   "enemy.elite.hit.down.0",
+   "enemy.elite.hit.down.1",
+   "enemy.elite.hit.down.2",
+   "enemy.elite.hit.down.3"
+  ],
+  "enemy.elite.hit.up": [
+   "enemy.elite.hit.up.0",
+   "enemy.elite.hit.up.1",
+   "enemy.elite.hit.up.2",
+   "enemy.elite.hit.up.3"
+  ],
+  "enemy.elite.hit.left": [
+   "enemy.elite.hit.left.0",
+   "enemy.elite.hit.left.1",
+   "enemy.elite.hit.left.2",
+   "enemy.elite.hit.left.3"
+  ],
+  "enemy.elite.hit.right": [
+   "enemy.elite.hit.right.0",
+   "enemy.elite.hit.right.1",
+   "enemy.elite.hit.right.2",
+   "enemy.elite.hit.right.3"
+  ],
+  "enemy.elite.death.down": [
+   "enemy.elite.death.down.0",
+   "enemy.elite.death.down.1",
+   "enemy.elite.death.down.2",
+   "enemy.elite.death.down.3",
+   "enemy.elite.death.down.4",
+   "enemy.elite.death.down.5"
+  ],
+  "enemy.elite.death.up": [
+   "enemy.elite.death.up.0",
+   "enemy.elite.death.up.1",
+   "enemy.elite.death.up.2",
+   "enemy.elite.death.up.3",
+   "enemy.elite.death.up.4",
+   "enemy.elite.death.up.5"
+  ],
+  "enemy.elite.death.left": [
+   "enemy.elite.death.left.0",
+   "enemy.elite.death.left.1",
+   "enemy.elite.death.left.2",
+   "enemy.elite.death.left.3",
+   "enemy.elite.death.left.4",
+   "enemy.elite.death.left.5"
+  ],
+  "enemy.elite.death.right": [
+   "enemy.elite.death.right.0",
+   "enemy.elite.death.right.1",
+   "enemy.elite.death.right.2",
+   "enemy.elite.death.right.3",
+   "enemy.elite.death.right.4",
+   "enemy.elite.death.right.5"
+  ],
+  "enemy.elite.dash.down": [
+   "enemy.elite.move.down.0",
+   "enemy.elite.move.down.1",
+   "enemy.elite.move.down.2",
+   "enemy.elite.move.down.3",
+   "enemy.elite.move.down.4",
+   "enemy.elite.move.down.5",
+   "enemy.elite.move.down.6",
+   "enemy.elite.move.down.7"
+  ],
+  "enemy.elite.dash.up": [
+   "enemy.elite.move.up.0",
+   "enemy.elite.move.up.1",
+   "enemy.elite.move.up.2",
+   "enemy.elite.move.up.3",
+   "enemy.elite.move.up.4",
+   "enemy.elite.move.up.5",
+   "enemy.elite.move.up.6",
+   "enemy.elite.move.up.7"
+  ],
+  "enemy.elite.dash.left": [
+   "enemy.elite.move.left.0",
+   "enemy.elite.move.left.1",
+   "enemy.elite.move.left.2",
+   "enemy.elite.move.left.3",
+   "enemy.elite.move.left.4",
+   "enemy.elite.move.left.5",
+   "enemy.elite.move.left.6",
+   "enemy.elite.move.left.7"
+  ],
+  "enemy.elite.dash.right": [
+   "enemy.elite.move.right.0",
+   "enemy.elite.move.right.1",
+   "enemy.elite.move.right.2",
+   "enemy.elite.move.right.3",
+   "enemy.elite.move.right.4",
+   "enemy.elite.move.right.5",
+   "enemy.elite.move.right.6",
+   "enemy.elite.move.right.7"
+  ]
+ },
+ "frames": {
+  "enemy.elite.idle.down.0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.1": {
+   "frame": {
+    "x": 164,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.2": {
+   "frame": {
+    "x": 328,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.3": {
+   "frame": {
+    "x": 492,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.4": {
+   "frame": {
+    "x": 656,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.5": {
+   "frame": {
+    "x": 820,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.6": {
+   "frame": {
+    "x": 984,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.down.7": {
+   "frame": {
+    "x": 1148,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.0": {
+   "frame": {
+    "x": 1312,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.1": {
+   "frame": {
+    "x": 1476,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.2": {
+   "frame": {
+    "x": 1640,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.3": {
+   "frame": {
+    "x": 1804,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.4": {
+   "frame": {
+    "x": 0,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.5": {
+   "frame": {
+    "x": 164,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.6": {
+   "frame": {
+    "x": 328,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.up.7": {
+   "frame": {
+    "x": 492,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.0": {
+   "frame": {
+    "x": 656,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.1": {
+   "frame": {
+    "x": 820,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.2": {
+   "frame": {
+    "x": 984,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.3": {
+   "frame": {
+    "x": 1148,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.4": {
+   "frame": {
+    "x": 1312,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.5": {
+   "frame": {
+    "x": 1476,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.6": {
+   "frame": {
+    "x": 1640,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.left.7": {
+   "frame": {
+    "x": 1804,
+    "y": 164,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.0": {
+   "frame": {
+    "x": 0,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.1": {
+   "frame": {
+    "x": 164,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.2": {
+   "frame": {
+    "x": 328,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.3": {
+   "frame": {
+    "x": 492,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.4": {
+   "frame": {
+    "x": 656,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.5": {
+   "frame": {
+    "x": 820,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.6": {
+   "frame": {
+    "x": 984,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.idle.right.7": {
+   "frame": {
+    "x": 1148,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.0": {
+   "frame": {
+    "x": 1312,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.1": {
+   "frame": {
+    "x": 1476,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.2": {
+   "frame": {
+    "x": 1640,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.3": {
+   "frame": {
+    "x": 1804,
+    "y": 328,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.4": {
+   "frame": {
+    "x": 0,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.5": {
+   "frame": {
+    "x": 164,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.6": {
+   "frame": {
+    "x": 328,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.down.7": {
+   "frame": {
+    "x": 492,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.0": {
+   "frame": {
+    "x": 656,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.1": {
+   "frame": {
+    "x": 820,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.2": {
+   "frame": {
+    "x": 984,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.3": {
+   "frame": {
+    "x": 1148,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.4": {
+   "frame": {
+    "x": 1312,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.5": {
+   "frame": {
+    "x": 1476,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.6": {
+   "frame": {
+    "x": 1640,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.up.7": {
+   "frame": {
+    "x": 1804,
+    "y": 492,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.0": {
+   "frame": {
+    "x": 0,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.1": {
+   "frame": {
+    "x": 164,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.2": {
+   "frame": {
+    "x": 328,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.3": {
+   "frame": {
+    "x": 492,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.4": {
+   "frame": {
+    "x": 656,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.5": {
+   "frame": {
+    "x": 820,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.6": {
+   "frame": {
+    "x": 984,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.left.7": {
+   "frame": {
+    "x": 1148,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.0": {
+   "frame": {
+    "x": 1312,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.1": {
+   "frame": {
+    "x": 1476,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.2": {
+   "frame": {
+    "x": 1640,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.3": {
+   "frame": {
+    "x": 1804,
+    "y": 656,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.4": {
+   "frame": {
+    "x": 0,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.5": {
+   "frame": {
+    "x": 164,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.6": {
+   "frame": {
+    "x": 328,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.move.right.7": {
+   "frame": {
+    "x": 492,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.0": {
+   "frame": {
+    "x": 656,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.1": {
+   "frame": {
+    "x": 820,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.2": {
+   "frame": {
+    "x": 984,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.3": {
+   "frame": {
+    "x": 1148,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.4": {
+   "frame": {
+    "x": 1312,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.down.5": {
+   "frame": {
+    "x": 1476,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.0": {
+   "frame": {
+    "x": 1640,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.1": {
+   "frame": {
+    "x": 1804,
+    "y": 820,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.2": {
+   "frame": {
+    "x": 0,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.3": {
+   "frame": {
+    "x": 164,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.4": {
+   "frame": {
+    "x": 328,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.up.5": {
+   "frame": {
+    "x": 492,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.0": {
+   "frame": {
+    "x": 656,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.1": {
+   "frame": {
+    "x": 820,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.2": {
+   "frame": {
+    "x": 984,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.3": {
+   "frame": {
+    "x": 1148,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.4": {
+   "frame": {
+    "x": 1312,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.left.5": {
+   "frame": {
+    "x": 1476,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.0": {
+   "frame": {
+    "x": 1640,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.1": {
+   "frame": {
+    "x": 1804,
+    "y": 984,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.2": {
+   "frame": {
+    "x": 0,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.3": {
+   "frame": {
+    "x": 164,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.4": {
+   "frame": {
+    "x": 328,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.attack.right.5": {
+   "frame": {
+    "x": 492,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.down.0": {
+   "frame": {
+    "x": 656,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.down.1": {
+   "frame": {
+    "x": 820,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.down.2": {
+   "frame": {
+    "x": 984,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.down.3": {
+   "frame": {
+    "x": 1148,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.up.0": {
+   "frame": {
+    "x": 1312,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.up.1": {
+   "frame": {
+    "x": 1476,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.up.2": {
+   "frame": {
+    "x": 1640,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.up.3": {
+   "frame": {
+    "x": 1804,
+    "y": 1148,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.left.0": {
+   "frame": {
+    "x": 0,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.left.1": {
+   "frame": {
+    "x": 164,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.left.2": {
+   "frame": {
+    "x": 328,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.left.3": {
+   "frame": {
+    "x": 492,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.right.0": {
+   "frame": {
+    "x": 656,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.right.1": {
+   "frame": {
+    "x": 820,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.right.2": {
+   "frame": {
+    "x": 984,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.hit.right.3": {
+   "frame": {
+    "x": 1148,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.0": {
+   "frame": {
+    "x": 1312,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.1": {
+   "frame": {
+    "x": 1476,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.2": {
+   "frame": {
+    "x": 1640,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.3": {
+   "frame": {
+    "x": 1804,
+    "y": 1312,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.4": {
+   "frame": {
+    "x": 0,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.down.5": {
+   "frame": {
+    "x": 164,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.0": {
+   "frame": {
+    "x": 328,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.1": {
+   "frame": {
+    "x": 492,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.2": {
+   "frame": {
+    "x": 656,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.3": {
+   "frame": {
+    "x": 820,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.4": {
+   "frame": {
+    "x": 984,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.up.5": {
+   "frame": {
+    "x": 1148,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.0": {
+   "frame": {
+    "x": 1312,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.1": {
+   "frame": {
+    "x": 1476,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.2": {
+   "frame": {
+    "x": 1640,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.3": {
+   "frame": {
+    "x": 1804,
+    "y": 1476,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.4": {
+   "frame": {
+    "x": 0,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.left.5": {
+   "frame": {
+    "x": 164,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.0": {
+   "frame": {
+    "x": 328,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.1": {
+   "frame": {
+    "x": 492,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.2": {
+   "frame": {
+    "x": 656,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.3": {
+   "frame": {
+    "x": 820,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.4": {
+   "frame": {
+    "x": 984,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  },
+  "enemy.elite.death.right.5": {
+   "frame": {
+    "x": 1148,
+    "y": 1640,
+    "w": 160,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 160,
+    "h": 160
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 160,
+    "h": 160
+   }
+  }
+ },
+ "meta": {
+  "app": "my-hades m18-placeholder-atlases.mjs",
+  "format": "RGBA8888",
+  "image": "enemy-elite.png",
+  "scale": 1,
+  "size": {
+   "w": 1968,
+   "h": 1804
+  },
+  "tilePx": 128,
+  "silhouettes": {
+   "enemy.elite": {
+    "grid": "0001100000011100001111000111111001111110001111000011110000000000",
+    "rows": [
+     78,
+     509,
+     874,
+     1446,
+     1610,
+     1040,
+     1263,
+     0
+    ],
+    "opaque": 6820
+   }
+  }
+ }
+}

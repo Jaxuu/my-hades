@@ -1,14 +1,30 @@
 /**
  * manifest — the ONE place in the repository that imports an asset FILE.
- * See specs/024-real-art-assets/contracts/asset-manifest.md.
+ * See specs/026-hd-2d-art-assets/contracts/hd-asset-manifest.md.
  *
  * WHY A CODE MODULE RATHER THAN A JSON FETCHED AT RUNTIME
  * ------------------------------------------------------
  * Every entry below is a Vite static import, so the asset is resolved at BUILD
- * time. That buys the contract's promise 2 for free: deleting an atlas makes
+ * time. That buys the contract's promise 3 for free: deleting an atlas makes
  * `npm run build` fail loudly instead of shipping a bundle that 404s at run time.
  * A `public/` directory plus a runtime `fetch` would have been simpler to write
- * and would have lost exactly that guarantee (research.md D2).
+ * and would have lost exactly that guarantee.
+ *
+ * M18 · WHAT CHANGED
+ * ------------------
+ * The world art (player / enemies / tiles / fx) now points at the nine HD atlases
+ * under `assets/art/hd/`. Two structural things changed with it:
+ *
+ *   1. **`SHEET_DATA` is an EXPLICIT association.** Each spritesheet id is keyed
+ *      to the atlas JSON it belongs to, instead of relying on "same basename means
+ *      the same sheet". That implicit rule was already fragile when six enemy ids
+ *      shared one file; with one atlas per enemy type it would be unverifiable.
+ *   2. **`HD_WORLD_ART_IDS` names the textures that sample `linear`.** The global
+ *      `TextureSource` default stays `nearest` (the M17 pixel-sharpness contract),
+ *      and only the HD world art is overridden per texture (research.md D7).
+ *
+ * `ui.*` and `sfx.*` are deliberately untouched (FR-030): the feature's scope is
+ * in-run WORLD art, so the interface and audio entries keep their old sources.
  *
  * WHY IT IS DOM-FREE
  * ------------------
@@ -21,21 +37,41 @@
  * -------------------------------
  * `license` is on every entry because `tests/assets/manifest.test.ts` reads it
  * against a whitelist and cross-checks every id against `assets/**\/LICENSES.md`.
- * FR-020 ("no proprietary asset may ever be redistributed") is enforced by that
+ * FR-023 ("no proprietary asset may ever be redistributed") is enforced by that
  * test, not by good intentions.
  */
 
-import playerSheetJson from '../../assets/art/atlas/player.json';
-import enemiesSheetJson from '../../assets/art/atlas/enemies.json';
-import tilesSheetJson from '../../assets/art/atlas/tiles.json';
-import fxSheetJson from '../../assets/art/atlas/fx.json';
-import uiSheetJson from '../../assets/art/atlas/ui.json';
+// ── World HD art (M18) ───────────────────────────────────────────────────────
+import playerSheetJson from '../../assets/art/hd/player.json';
+import enemyGruntSheetJson from '../../assets/art/hd/enemy-grunt.json';
+import enemyEliteSheetJson from '../../assets/art/hd/enemy-elite.json';
+import enemyRaiderSheetJson from '../../assets/art/hd/enemy-raider.json';
+import enemyBomberSheetJson from '../../assets/art/hd/enemy-bomber.json';
+import enemyGunnerSheetJson from '../../assets/art/hd/enemy-gunner.json';
+import enemyUnknownSheetJson from '../../assets/art/hd/enemy-unknown.json';
+import tilesSheetJson from '../../assets/art/hd/tiles.json';
+import fxSheetJson from '../../assets/art/hd/fx.json';
 
-import playerAtlas from '../../assets/art/atlas/player.png?url';
-import enemiesAtlas from '../../assets/art/atlas/enemies.png?url';
-import tilesAtlas from '../../assets/art/atlas/tiles.png?url';
-import fxAtlas from '../../assets/art/atlas/fx.png?url';
-import uiAtlas from '../../assets/art/atlas/ui.png?url';
+import playerAtlas from '../../assets/art/hd/player.png?url';
+import enemyGruntAtlas from '../../assets/art/hd/enemy-grunt.png?url';
+import enemyEliteAtlas from '../../assets/art/hd/enemy-elite.png?url';
+import enemyRaiderAtlas from '../../assets/art/hd/enemy-raider.png?url';
+import enemyBomberAtlas from '../../assets/art/hd/enemy-bomber.png?url';
+import enemyGunnerAtlas from '../../assets/art/hd/enemy-gunner.png?url';
+import enemyUnknownAtlas from '../../assets/art/hd/enemy-unknown.png?url';
+import tilesAtlas from '../../assets/art/hd/tiles.png?url';
+import fxAtlas from '../../assets/art/hd/fx.png?url';
+
+// ── Interface art (FR-030: NOT in this feature's scope, unchanged content) ────
+// M18 relocated these two files out of the deleted `assets/art/atlas/` directory
+// (SC-008), so `assets/art/atlas/**` could be removed entirely. The PNG is
+// byte-identical; the JSON differs in exactly ONE field — its `meta.app` string,
+// which used to name the deleted pixel generator (`build-atlas.py`) and would have
+// been a dangling reference to a tool that no longer exists. `meta.app` is
+// documentation only: no code reads it, and the frames / animations / silhouettes
+// are untouched, so the interface keeps exactly the art it had.
+import uiSheetJson from '../../assets/art/ui/icons.json';
+import uiAtlas from '../../assets/art/ui/icons.png?url';
 
 import uiPanelHud from '../../assets/art/ui/panel-hud.png?url';
 import uiPanelReward from '../../assets/art/ui/panel-reward.png?url';
@@ -49,6 +85,7 @@ import uiFrameSlot from '../../assets/art/ui/slot.png?url';
 import uiFrameSlotInlay from '../../assets/art/ui/slot-inlay.png?url';
 import uiBarHud from '../../assets/art/ui/bar.png?url';
 
+// ── Audio (FR-030: NOT in this feature's scope, unchanged) ────────────────────
 import sfxHit from '../../assets/audio/sfx/hit.ogg?url';
 import sfxDash from '../../assets/audio/sfx/dash.ogg?url';
 import sfxCoin from '../../assets/audio/sfx/coin.ogg?url';
@@ -62,7 +99,7 @@ import sfxWin from '../../assets/audio/sfx/win.ogg?url';
 /** What an entry IS, which decides the loader branch and the fallback path. */
 export type AssetKind = 'spritesheet' | 'image' | 'audio';
 
-/** What to do when an entry fails to load (contract §3.3). */
+/** What to do when an entry fails to load (contract §4). */
 export type AssetFallback = 'graphics' | 'silent';
 
 /** One asset. Every field is required: a missing license is a build-time mistake. */
@@ -72,7 +109,7 @@ export interface AssetEntry {
   readonly kind: AssetKind;
   /** The Vite-resolved URL of the built asset. Never a remote URL. */
   readonly source: string;
-  /** Redistribution license — `CC0-1.0` for every entry of this feature. */
+  /** Redistribution license — one of the registered open tiers (contract §5). */
   readonly license: string;
   /** The degradation path when this entry cannot be loaded. */
   readonly fallback: AssetFallback;
@@ -91,6 +128,16 @@ export interface SheetFrameData {
 /** A parsed spritesheet: explicit `frames` plus explicit `animations`. */
 export interface SpriteSheetData {
   readonly frames: Readonly<Record<string, SheetFrameData>>;
+  /**
+   * Animation name -> the frame names it plays, in order.
+   *
+   * The ARRAY is mutable while the RECORD is readonly. That is not sloppiness: the
+   * contract's C1 requires this interface to be structurally assignable to PixiJS's
+   * `SpritesheetData` with NO cast, and PixiJS types its animations as
+   * `Dict<string[]>`. `readonly string[]` would force a cast at the `new
+   * Spritesheet(...)` call site — trading a real, checkable property for a
+   * cosmetic one. Nothing in this project ever writes to the array.
+   */
   readonly animations?: Readonly<Record<string, string[]>>;
   /**
    * Atlas metadata. `scale` is required (and `size` declared) so this interface is
@@ -103,18 +150,18 @@ export interface SpriteSheetData {
     readonly image?: string;
     readonly scale: number | string;
     readonly size?: { readonly w: number; readonly h: number };
+    /** M18 · the atlas's natural tile/frame base in pixels (HD = 128). */
+    readonly tilePx?: number;
+    /** M18 · per-id silhouette reference, used by the shape-distinctness tests. */
+    readonly silhouettes?: Readonly<Record<string, unknown>>;
   };
 }
 
-/** The one license this feature ships under (FR-020). */
+/** The one license tier this feature ships under (FR-023). */
 const LICENSE = 'CC0-1.0';
 
 /** Shorthand: a visual entry that degrades to the existing geometry. */
-function visual(
-  id: string,
-  kind: AssetKind,
-  source: string,
-): AssetEntry {
+function visual(id: string, kind: AssetKind, source: string): AssetEntry {
   return { id, kind, source, license: LICENSE, fallback: 'graphics' };
 }
 
@@ -126,20 +173,20 @@ function audio(id: string, source: string): AssetEntry {
 /**
  * The whole registry, in a fixed order (the order tests and diagnostics report in).
  *
- * Several ids intentionally share ONE `source`: the five enemy types and the
- * generic fallback all live in `enemies.png`. `AssetCatalog` de-duplicates by
- * source so the atlas is decoded once, and each id then resolves its own animation
- * out of the shared sheet.
+ * M18 · every world-art id now has its OWN atlas, so `AssetCatalog`'s
+ * de-duplication by `source` is a no-op for them — which is exactly why the
+ * per-type split was chosen: it keeps the de-duplication rule honest instead of
+ * silently relying on six ids sharing one file.
  */
 export const MANIFEST: Readonly<Record<string, AssetEntry>> = Object.freeze({
   'player.base': visual('player.base', 'spritesheet', playerAtlas),
 
-  'enemy.grunt': visual('enemy.grunt', 'spritesheet', enemiesAtlas),
-  'enemy.elite': visual('enemy.elite', 'spritesheet', enemiesAtlas),
-  'enemy.raider': visual('enemy.raider', 'spritesheet', enemiesAtlas),
-  'enemy.bomber': visual('enemy.bomber', 'spritesheet', enemiesAtlas),
-  'enemy.gunner': visual('enemy.gunner', 'spritesheet', enemiesAtlas),
-  'enemy.unknown': visual('enemy.unknown', 'spritesheet', enemiesAtlas),
+  'enemy.grunt': visual('enemy.grunt', 'spritesheet', enemyGruntAtlas),
+  'enemy.elite': visual('enemy.elite', 'spritesheet', enemyEliteAtlas),
+  'enemy.raider': visual('enemy.raider', 'spritesheet', enemyRaiderAtlas),
+  'enemy.bomber': visual('enemy.bomber', 'spritesheet', enemyBomberAtlas),
+  'enemy.gunner': visual('enemy.gunner', 'spritesheet', enemyGunnerAtlas),
+  'enemy.unknown': visual('enemy.unknown', 'spritesheet', enemyUnknownAtlas),
 
   'tile.floor': visual('tile.floor', 'spritesheet', tilesAtlas),
   'tile.wall': visual('tile.wall', 'spritesheet', tilesAtlas),
@@ -147,6 +194,9 @@ export const MANIFEST: Readonly<Record<string, AssetEntry>> = Object.freeze({
   'fx.spark': visual('fx.spark', 'spritesheet', fxAtlas),
   'fx.dash-trail': visual('fx.dash-trail', 'spritesheet', fxAtlas),
   'fx.hazard-ring': visual('fx.hazard-ring', 'spritesheet', fxAtlas),
+  'fx.pickup.gold': visual('fx.pickup.gold', 'spritesheet', fxAtlas),
+  'fx.pickup.heal': visual('fx.pickup.heal', 'spritesheet', fxAtlas),
+  'fx.pickup.darkness': visual('fx.pickup.darkness', 'spritesheet', fxAtlas),
 
   'ui.icon.gold': visual('ui.icon.gold', 'spritesheet', uiAtlas),
   'ui.icon.heal': visual('ui.icon.heal', 'spritesheet', uiAtlas),
@@ -181,24 +231,62 @@ export const MANIFEST_IDS: readonly string[] = Object.freeze(Object.keys(MANIFES
 /**
  * The parsed spritesheet JSON, keyed by the SAME ids as {@link MANIFEST}.
  *
- * Kept as a sibling export rather than a field on `AssetEntry` because the contract
- * fixes `AssetEntry`'s shape (§1) and explicitly leaves the sheet's internal layout
- * out of scope (§5). The loader looks the data up by id and pairs it with the PNG.
+ * M18 · the association is EXPLICIT (contract §7): each id is keyed to the exact
+ * atlas object it draws from. Six enemy types used to share one `enemies.json`; now
+ * each has its own, so "which sheet is this id's?" can no longer be inferred from a
+ * filename and must be stated.
  */
 export const SHEET_DATA: Readonly<Record<string, SpriteSheetData>> = Object.freeze({
   'player.base': playerSheetJson as SpriteSheetData,
-  'enemy.grunt': enemiesSheetJson as SpriteSheetData,
-  'enemy.elite': enemiesSheetJson as SpriteSheetData,
-  'enemy.raider': enemiesSheetJson as SpriteSheetData,
-  'enemy.bomber': enemiesSheetJson as SpriteSheetData,
-  'enemy.gunner': enemiesSheetJson as SpriteSheetData,
-  'enemy.unknown': enemiesSheetJson as SpriteSheetData,
+
+  'enemy.grunt': enemyGruntSheetJson as SpriteSheetData,
+  'enemy.elite': enemyEliteSheetJson as SpriteSheetData,
+  'enemy.raider': enemyRaiderSheetJson as SpriteSheetData,
+  'enemy.bomber': enemyBomberSheetJson as SpriteSheetData,
+  'enemy.gunner': enemyGunnerSheetJson as SpriteSheetData,
+  'enemy.unknown': enemyUnknownSheetJson as SpriteSheetData,
+
   'tile.floor': tilesSheetJson as SpriteSheetData,
   'tile.wall': tilesSheetJson as SpriteSheetData,
+
   'fx.spark': fxSheetJson as SpriteSheetData,
   'fx.dash-trail': fxSheetJson as SpriteSheetData,
   'fx.hazard-ring': fxSheetJson as SpriteSheetData,
+  'fx.pickup.gold': fxSheetJson as SpriteSheetData,
+  'fx.pickup.heal': fxSheetJson as SpriteSheetData,
+  'fx.pickup.darkness': fxSheetJson as SpriteSheetData,
+
   'ui.icon.gold': uiSheetJson as SpriteSheetData,
   'ui.icon.heal': uiSheetJson as SpriteSheetData,
   'ui.icon.darkness': uiSheetJson as SpriteSheetData,
 });
+
+/**
+ * M18 · the ids whose textures sample `linear` with mipmaps (research.md D7).
+ *
+ * The GLOBAL default stays `'nearest'` — that is the M17 contract, pinned by a
+ * literal in `tests/render/camera_zoom_sharpness.test.ts`, which this feature is
+ * NOT allowed to touch (FR-028). HD art is not pixel art: magnified by a
+ * non-integer factor `nearest` produces hard aliasing, and minified (the 30x30
+ * stress room at `z = 2.88`, 128px -> 29px) it produces moire unless mipmaps exist.
+ * So the override is applied PER TEXTURE, and this list is what says which.
+ *
+ * Membership rule: the in-run WORLD art namespaces (`player.` / `enemy.` /
+ * `tile.` / `fx.`) — never `ui.` (kept pixel-crisp) or `sfx.` (not a texture).
+ */
+export const HD_WORLD_ART_IDS: readonly string[] = Object.freeze(
+  MANIFEST_IDS.filter((id) => {
+    if (MANIFEST[id]?.kind === 'audio') return false;
+    return (
+      id.startsWith('player.') ||
+      id.startsWith('enemy.') ||
+      id.startsWith('tile.') ||
+      id.startsWith('fx.')
+    );
+  }),
+);
+
+/** True when `id` is HD world art, i.e. must be sampled `linear` + mipmapped. */
+export function isHdWorldArt(id: string): boolean {
+  return HD_WORLD_ART_IDS.includes(id);
+}

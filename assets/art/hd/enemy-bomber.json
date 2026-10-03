@@ -1,0 +1,2545 @@
+{
+ "animations": {
+  "enemy.bomber.idle.down": [
+   "enemy.bomber.idle.down.0",
+   "enemy.bomber.idle.down.1",
+   "enemy.bomber.idle.down.2",
+   "enemy.bomber.idle.down.3",
+   "enemy.bomber.idle.down.4",
+   "enemy.bomber.idle.down.5",
+   "enemy.bomber.idle.down.6",
+   "enemy.bomber.idle.down.7"
+  ],
+  "enemy.bomber.idle.up": [
+   "enemy.bomber.idle.up.0",
+   "enemy.bomber.idle.up.1",
+   "enemy.bomber.idle.up.2",
+   "enemy.bomber.idle.up.3",
+   "enemy.bomber.idle.up.4",
+   "enemy.bomber.idle.up.5",
+   "enemy.bomber.idle.up.6",
+   "enemy.bomber.idle.up.7"
+  ],
+  "enemy.bomber.idle.left": [
+   "enemy.bomber.idle.left.0",
+   "enemy.bomber.idle.left.1",
+   "enemy.bomber.idle.left.2",
+   "enemy.bomber.idle.left.3",
+   "enemy.bomber.idle.left.4",
+   "enemy.bomber.idle.left.5",
+   "enemy.bomber.idle.left.6",
+   "enemy.bomber.idle.left.7"
+  ],
+  "enemy.bomber.idle.right": [
+   "enemy.bomber.idle.right.0",
+   "enemy.bomber.idle.right.1",
+   "enemy.bomber.idle.right.2",
+   "enemy.bomber.idle.right.3",
+   "enemy.bomber.idle.right.4",
+   "enemy.bomber.idle.right.5",
+   "enemy.bomber.idle.right.6",
+   "enemy.bomber.idle.right.7"
+  ],
+  "enemy.bomber.move.down": [
+   "enemy.bomber.move.down.0",
+   "enemy.bomber.move.down.1",
+   "enemy.bomber.move.down.2",
+   "enemy.bomber.move.down.3",
+   "enemy.bomber.move.down.4",
+   "enemy.bomber.move.down.5",
+   "enemy.bomber.move.down.6",
+   "enemy.bomber.move.down.7"
+  ],
+  "enemy.bomber.move.up": [
+   "enemy.bomber.move.up.0",
+   "enemy.bomber.move.up.1",
+   "enemy.bomber.move.up.2",
+   "enemy.bomber.move.up.3",
+   "enemy.bomber.move.up.4",
+   "enemy.bomber.move.up.5",
+   "enemy.bomber.move.up.6",
+   "enemy.bomber.move.up.7"
+  ],
+  "enemy.bomber.move.left": [
+   "enemy.bomber.move.left.0",
+   "enemy.bomber.move.left.1",
+   "enemy.bomber.move.left.2",
+   "enemy.bomber.move.left.3",
+   "enemy.bomber.move.left.4",
+   "enemy.bomber.move.left.5",
+   "enemy.bomber.move.left.6",
+   "enemy.bomber.move.left.7"
+  ],
+  "enemy.bomber.move.right": [
+   "enemy.bomber.move.right.0",
+   "enemy.bomber.move.right.1",
+   "enemy.bomber.move.right.2",
+   "enemy.bomber.move.right.3",
+   "enemy.bomber.move.right.4",
+   "enemy.bomber.move.right.5",
+   "enemy.bomber.move.right.6",
+   "enemy.bomber.move.right.7"
+  ],
+  "enemy.bomber.attack.down": [
+   "enemy.bomber.attack.down.0",
+   "enemy.bomber.attack.down.1",
+   "enemy.bomber.attack.down.2",
+   "enemy.bomber.attack.down.3",
+   "enemy.bomber.attack.down.4",
+   "enemy.bomber.attack.down.5"
+  ],
+  "enemy.bomber.attack.up": [
+   "enemy.bomber.attack.up.0",
+   "enemy.bomber.attack.up.1",
+   "enemy.bomber.attack.up.2",
+   "enemy.bomber.attack.up.3",
+   "enemy.bomber.attack.up.4",
+   "enemy.bomber.attack.up.5"
+  ],
+  "enemy.bomber.attack.left": [
+   "enemy.bomber.attack.left.0",
+   "enemy.bomber.attack.left.1",
+   "enemy.bomber.attack.left.2",
+   "enemy.bomber.attack.left.3",
+   "enemy.bomber.attack.left.4",
+   "enemy.bomber.attack.left.5"
+  ],
+  "enemy.bomber.attack.right": [
+   "enemy.bomber.attack.right.0",
+   "enemy.bomber.attack.right.1",
+   "enemy.bomber.attack.right.2",
+   "enemy.bomber.attack.right.3",
+   "enemy.bomber.attack.right.4",
+   "enemy.bomber.attack.right.5"
+  ],
+  "enemy.bomber.hit.down": [
+   "enemy.bomber.hit.down.0",
+   "enemy.bomber.hit.down.1",
+   "enemy.bomber.hit.down.2",
+   "enemy.bomber.hit.down.3"
+  ],
+  "enemy.bomber.hit.up": [
+   "enemy.bomber.hit.up.0",
+   "enemy.bomber.hit.up.1",
+   "enemy.bomber.hit.up.2",
+   "enemy.bomber.hit.up.3"
+  ],
+  "enemy.bomber.hit.left": [
+   "enemy.bomber.hit.left.0",
+   "enemy.bomber.hit.left.1",
+   "enemy.bomber.hit.left.2",
+   "enemy.bomber.hit.left.3"
+  ],
+  "enemy.bomber.hit.right": [
+   "enemy.bomber.hit.right.0",
+   "enemy.bomber.hit.right.1",
+   "enemy.bomber.hit.right.2",
+   "enemy.bomber.hit.right.3"
+  ],
+  "enemy.bomber.death.down": [
+   "enemy.bomber.death.down.0",
+   "enemy.bomber.death.down.1",
+   "enemy.bomber.death.down.2",
+   "enemy.bomber.death.down.3",
+   "enemy.bomber.death.down.4",
+   "enemy.bomber.death.down.5"
+  ],
+  "enemy.bomber.death.up": [
+   "enemy.bomber.death.up.0",
+   "enemy.bomber.death.up.1",
+   "enemy.bomber.death.up.2",
+   "enemy.bomber.death.up.3",
+   "enemy.bomber.death.up.4",
+   "enemy.bomber.death.up.5"
+  ],
+  "enemy.bomber.death.left": [
+   "enemy.bomber.death.left.0",
+   "enemy.bomber.death.left.1",
+   "enemy.bomber.death.left.2",
+   "enemy.bomber.death.left.3",
+   "enemy.bomber.death.left.4",
+   "enemy.bomber.death.left.5"
+  ],
+  "enemy.bomber.death.right": [
+   "enemy.bomber.death.right.0",
+   "enemy.bomber.death.right.1",
+   "enemy.bomber.death.right.2",
+   "enemy.bomber.death.right.3",
+   "enemy.bomber.death.right.4",
+   "enemy.bomber.death.right.5"
+  ],
+  "enemy.bomber.dash.down": [
+   "enemy.bomber.move.down.0",
+   "enemy.bomber.move.down.1",
+   "enemy.bomber.move.down.2",
+   "enemy.bomber.move.down.3",
+   "enemy.bomber.move.down.4",
+   "enemy.bomber.move.down.5",
+   "enemy.bomber.move.down.6",
+   "enemy.bomber.move.down.7"
+  ],
+  "enemy.bomber.dash.up": [
+   "enemy.bomber.move.up.0",
+   "enemy.bomber.move.up.1",
+   "enemy.bomber.move.up.2",
+   "enemy.bomber.move.up.3",
+   "enemy.bomber.move.up.4",
+   "enemy.bomber.move.up.5",
+   "enemy.bomber.move.up.6",
+   "enemy.bomber.move.up.7"
+  ],
+  "enemy.bomber.dash.left": [
+   "enemy.bomber.move.left.0",
+   "enemy.bomber.move.left.1",
+   "enemy.bomber.move.left.2",
+   "enemy.bomber.move.left.3",
+   "enemy.bomber.move.left.4",
+   "enemy.bomber.move.left.5",
+   "enemy.bomber.move.left.6",
+   "enemy.bomber.move.left.7"
+  ],
+  "enemy.bomber.dash.right": [
+   "enemy.bomber.move.right.0",
+   "enemy.bomber.move.right.1",
+   "enemy.bomber.move.right.2",
+   "enemy.bomber.move.right.3",
+   "enemy.bomber.move.right.4",
+   "enemy.bomber.move.right.5",
+   "enemy.bomber.move.right.6",
+   "enemy.bomber.move.right.7"
+  ]
+ },
+ "frames": {
+  "enemy.bomber.idle.down.0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.1": {
+   "frame": {
+    "x": 100,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.2": {
+   "frame": {
+    "x": 200,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.3": {
+   "frame": {
+    "x": 300,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.4": {
+   "frame": {
+    "x": 400,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.5": {
+   "frame": {
+    "x": 500,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.6": {
+   "frame": {
+    "x": 600,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.down.7": {
+   "frame": {
+    "x": 700,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.0": {
+   "frame": {
+    "x": 800,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.1": {
+   "frame": {
+    "x": 900,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.2": {
+   "frame": {
+    "x": 1000,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.3": {
+   "frame": {
+    "x": 1100,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.4": {
+   "frame": {
+    "x": 1200,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.5": {
+   "frame": {
+    "x": 1300,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.6": {
+   "frame": {
+    "x": 1400,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.up.7": {
+   "frame": {
+    "x": 1500,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.0": {
+   "frame": {
+    "x": 1600,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.1": {
+   "frame": {
+    "x": 1700,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.2": {
+   "frame": {
+    "x": 1800,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.3": {
+   "frame": {
+    "x": 1900,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.4": {
+   "frame": {
+    "x": 0,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.5": {
+   "frame": {
+    "x": 100,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.6": {
+   "frame": {
+    "x": 200,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.left.7": {
+   "frame": {
+    "x": 300,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.0": {
+   "frame": {
+    "x": 400,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.1": {
+   "frame": {
+    "x": 500,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.2": {
+   "frame": {
+    "x": 600,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.3": {
+   "frame": {
+    "x": 700,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.4": {
+   "frame": {
+    "x": 800,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.5": {
+   "frame": {
+    "x": 900,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.6": {
+   "frame": {
+    "x": 1000,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.idle.right.7": {
+   "frame": {
+    "x": 1100,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.0": {
+   "frame": {
+    "x": 1200,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.1": {
+   "frame": {
+    "x": 1300,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.2": {
+   "frame": {
+    "x": 1400,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.3": {
+   "frame": {
+    "x": 1500,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.4": {
+   "frame": {
+    "x": 1600,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.5": {
+   "frame": {
+    "x": 1700,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.6": {
+   "frame": {
+    "x": 1800,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.down.7": {
+   "frame": {
+    "x": 1900,
+    "y": 100,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.0": {
+   "frame": {
+    "x": 0,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.1": {
+   "frame": {
+    "x": 100,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.2": {
+   "frame": {
+    "x": 200,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.3": {
+   "frame": {
+    "x": 300,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.4": {
+   "frame": {
+    "x": 400,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.5": {
+   "frame": {
+    "x": 500,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.6": {
+   "frame": {
+    "x": 600,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.up.7": {
+   "frame": {
+    "x": 700,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.0": {
+   "frame": {
+    "x": 800,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.1": {
+   "frame": {
+    "x": 900,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.2": {
+   "frame": {
+    "x": 1000,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.3": {
+   "frame": {
+    "x": 1100,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.4": {
+   "frame": {
+    "x": 1200,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.5": {
+   "frame": {
+    "x": 1300,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.6": {
+   "frame": {
+    "x": 1400,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.left.7": {
+   "frame": {
+    "x": 1500,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.0": {
+   "frame": {
+    "x": 1600,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.1": {
+   "frame": {
+    "x": 1700,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.2": {
+   "frame": {
+    "x": 1800,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.3": {
+   "frame": {
+    "x": 1900,
+    "y": 200,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.4": {
+   "frame": {
+    "x": 0,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.5": {
+   "frame": {
+    "x": 100,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.6": {
+   "frame": {
+    "x": 200,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.move.right.7": {
+   "frame": {
+    "x": 300,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.0": {
+   "frame": {
+    "x": 400,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.1": {
+   "frame": {
+    "x": 500,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.2": {
+   "frame": {
+    "x": 600,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.3": {
+   "frame": {
+    "x": 700,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.4": {
+   "frame": {
+    "x": 800,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.down.5": {
+   "frame": {
+    "x": 900,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.0": {
+   "frame": {
+    "x": 1000,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.1": {
+   "frame": {
+    "x": 1100,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.2": {
+   "frame": {
+    "x": 1200,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.3": {
+   "frame": {
+    "x": 1300,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.4": {
+   "frame": {
+    "x": 1400,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.up.5": {
+   "frame": {
+    "x": 1500,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.0": {
+   "frame": {
+    "x": 1600,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.1": {
+   "frame": {
+    "x": 1700,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.2": {
+   "frame": {
+    "x": 1800,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.3": {
+   "frame": {
+    "x": 1900,
+    "y": 300,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.4": {
+   "frame": {
+    "x": 0,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.left.5": {
+   "frame": {
+    "x": 100,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.0": {
+   "frame": {
+    "x": 200,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.1": {
+   "frame": {
+    "x": 300,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.2": {
+   "frame": {
+    "x": 400,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.3": {
+   "frame": {
+    "x": 500,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.4": {
+   "frame": {
+    "x": 600,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.attack.right.5": {
+   "frame": {
+    "x": 700,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.down.0": {
+   "frame": {
+    "x": 800,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.down.1": {
+   "frame": {
+    "x": 900,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.down.2": {
+   "frame": {
+    "x": 1000,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.down.3": {
+   "frame": {
+    "x": 1100,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.up.0": {
+   "frame": {
+    "x": 1200,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.up.1": {
+   "frame": {
+    "x": 1300,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.up.2": {
+   "frame": {
+    "x": 1400,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.up.3": {
+   "frame": {
+    "x": 1500,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.left.0": {
+   "frame": {
+    "x": 1600,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.left.1": {
+   "frame": {
+    "x": 1700,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.left.2": {
+   "frame": {
+    "x": 1800,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.left.3": {
+   "frame": {
+    "x": 1900,
+    "y": 400,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.right.0": {
+   "frame": {
+    "x": 0,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.right.1": {
+   "frame": {
+    "x": 100,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.right.2": {
+   "frame": {
+    "x": 200,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.hit.right.3": {
+   "frame": {
+    "x": 300,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.0": {
+   "frame": {
+    "x": 400,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.1": {
+   "frame": {
+    "x": 500,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.2": {
+   "frame": {
+    "x": 600,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.3": {
+   "frame": {
+    "x": 700,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.4": {
+   "frame": {
+    "x": 800,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.down.5": {
+   "frame": {
+    "x": 900,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.0": {
+   "frame": {
+    "x": 1000,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.1": {
+   "frame": {
+    "x": 1100,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.2": {
+   "frame": {
+    "x": 1200,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.3": {
+   "frame": {
+    "x": 1300,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.4": {
+   "frame": {
+    "x": 1400,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.up.5": {
+   "frame": {
+    "x": 1500,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.0": {
+   "frame": {
+    "x": 1600,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.1": {
+   "frame": {
+    "x": 1700,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.2": {
+   "frame": {
+    "x": 1800,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.3": {
+   "frame": {
+    "x": 1900,
+    "y": 500,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.4": {
+   "frame": {
+    "x": 0,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.left.5": {
+   "frame": {
+    "x": 100,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.0": {
+   "frame": {
+    "x": 200,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.1": {
+   "frame": {
+    "x": 300,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.2": {
+   "frame": {
+    "x": 400,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.3": {
+   "frame": {
+    "x": 500,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.4": {
+   "frame": {
+    "x": 600,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  },
+  "enemy.bomber.death.right.5": {
+   "frame": {
+    "x": 700,
+    "y": 600,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   }
+  }
+ },
+ "meta": {
+  "app": "my-hades m18-placeholder-atlases.mjs",
+  "format": "RGBA8888",
+  "image": "enemy-bomber.png",
+  "scale": 1,
+  "size": {
+   "w": 2000,
+   "h": 700
+  },
+  "tilePx": 128,
+  "silhouettes": {
+   "enemy.bomber": {
+    "grid": "0001100000111100011111101111111111111111011111100011110000011000",
+    "rows": [
+     4,
+     155,
+     492,
+     654,
+     682,
+     612,
+     261,
+     4
+    ],
+    "opaque": 2864
+   }
+  }
+ }
+}

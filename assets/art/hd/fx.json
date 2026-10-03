@@ -1,0 +1,228 @@
+{
+ "animations": {
+  "fx.spark": [
+   "fx.spark.0"
+  ],
+  "fx.dash-trail": [
+   "fx.dash-trail.0"
+  ],
+  "fx.hazard-ring": [
+   "fx.hazard-ring.0"
+  ],
+  "fx.pickup.gold": [
+   "fx.pickup.gold.0"
+  ],
+  "fx.pickup.heal": [
+   "fx.pickup.heal.0"
+  ],
+  "fx.pickup.darkness": [
+   "fx.pickup.darkness.0"
+  ]
+ },
+ "frames": {
+  "fx.spark.0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx.dash-trail.0": {
+   "frame": {
+    "x": 132,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx.hazard-ring.0": {
+   "frame": {
+    "x": 264,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx.pickup.gold.0": {
+   "frame": {
+    "x": 396,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx.pickup.heal.0": {
+   "frame": {
+    "x": 528,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx.pickup.darkness.0": {
+   "frame": {
+    "x": 660,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   },
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   }
+  }
+ },
+ "meta": {
+  "app": "my-hades m18-placeholder-atlases.mjs",
+  "format": "RGBA8888",
+  "image": "fx.png",
+  "scale": 1,
+  "size": {
+   "w": 1980,
+   "h": 132
+  },
+  "silhouettes": {
+   "fx.spark": {
+    "grid": "0001100000011000000110001111111111111111000110000001100000011000",
+    "rows": [
+     18,
+     48,
+     48,
+     439,
+     544,
+     48,
+     48,
+     18
+    ],
+    "opaque": 1211
+   },
+   "fx.dash-trail": {
+    "grid": "0000000000000000110000001111111111111111111000000000000000000000",
+    "rows": [
+     0,
+     0,
+     91,
+     1284,
+     1328,
+     109,
+     0,
+     0
+    ],
+    "opaque": 2812
+   },
+   "fx.hazard-ring": {
+    "grid": "0011111001111111110000111100001111000011110000111111111101111110",
+    "rows": [
+     470,
+     744,
+     472,
+     416,
+     414,
+     466,
+     707,
+     539
+    ],
+    "opaque": 4228
+   },
+   "fx.pickup.gold": {
+    "grid": "0000000000111100011111100111111001111110011111100011110000000000",
+    "rows": [
+     0,
+     439,
+     1138,
+     1358,
+     1364,
+     1160,
+     498,
+     0
+    ],
+    "opaque": 5957
+   },
+   "fx.pickup.heal": {
+    "grid": "0001100000011000000110000011110000111100001111000011110000000000",
+    "rows": [
+     93,
+     392,
+     288,
+     560,
+     832,
+     832,
+     364,
+     0
+    ],
+    "opaque": 3361
+   },
+   "fx.pickup.darkness": {
+    "grid": "0001100000111100011111100111111001111110011111100011110000011000",
+    "rows": [
+     172,
+     542,
+     910,
+     1278,
+     1300,
+     934,
+     564,
+     196
+    ],
+    "opaque": 5896
+   }
+  }
+ }
+}

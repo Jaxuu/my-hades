@@ -90,6 +90,11 @@ export const SPARK_FX_ID = 'fx.spark';
 export const DASH_TRAIL_FX_ID = 'fx.dash-trail';
 export const HAZARD_RING_FX_ID = 'fx.hazard-ring';
 
+/** M18 · the three pickup decals, in the `fx.` namespace (research.md D4). */
+export const PICKUP_GOLD_FX_ID = 'fx.pickup.gold';
+export const PICKUP_HEAL_FX_ID = 'fx.pickup.heal';
+export const PICKUP_DARKNESS_FX_ID = 'fx.pickup.darkness';
+
 const TWO_PI = Math.PI * 2;
 const QUARTER_PI = Math.PI / 4;
 const THREE_QUARTER_PI = (3 * Math.PI) / 4;
@@ -244,11 +249,19 @@ export function animationCandidates(selection: SpriteSelection): readonly string
   return chain;
 }
 
-/** The pickup icon id for a kind (FR-017: three kinds, three distinct shapes). */
+/**
+ * The pickup decal id for a kind (FR-030: three kinds, three distinct shapes).
+ *
+ * M18 · these moved from `ui.icon.*` to `fx.pickup.*` (research.md D4). A pickup is
+ * rendered in WORLD space; the `ui.` namespace belongs to the HUD's screen-space
+ * skin, so keeping the in-world decals under `ui.` would have made "FR-030: the UI
+ * is untouched" impossible to check mechanically. The function stays PURE and the
+ * three ids stay mutually distinct — only the literals changed.
+ */
 export function pickupIconId(kind: PickupKind): string {
-  if (kind === PickupKind.HEAL) return 'ui.icon.heal';
-  if (kind === PickupKind.DARKNESS) return 'ui.icon.darkness';
-  return 'ui.icon.gold';
+  if (kind === PickupKind.HEAL) return PICKUP_HEAL_FX_ID;
+  if (kind === PickupKind.DARKNESS) return PICKUP_DARKNESS_FX_ID;
+  return PICKUP_GOLD_FX_ID;
 }
 
 /**

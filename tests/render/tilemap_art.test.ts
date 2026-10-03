@@ -1,10 +1,10 @@
 /**
- * Tilemap art tests (specs/024-real-art-assets US3, T021).
+ * Tilemap art tests (specs/026-hd-2d-art-assets US3, T029).
  *
  * WHAT THIS SUITE GUARDS
  * ----------------------
  * US3 turns the room into a tiled scene WITHOUT adding a single scene-graph node.
- * That is the whole design (research.md D6): the six frozen contracts F1–F6 are
+ * That is the whole design (research.md D10): the six frozen contracts F1–F6 are
  * re-asserted here, in the presence of art, so a future "let me just add a
  * tilemapLayer" refactor fails loudly instead of quietly breaking the suites that
  * live in `tests/render/`.
@@ -12,13 +12,21 @@
  * The room also has to keep its SHAPE: one wall node per wall entity, positioned at
  * that wall's world origin, with the art TILED (never stretched) across a meshed
  * AABB — FR-009.
+ *
+ * M18 NOTE (T030): the F1–F6 block below is a FROZEN CONTRACT and is reproduced
+ * UNCHANGED from M16. Only the structural, asset-coupled assertions elsewhere in
+ * this file were re-pinned — the tile scale moved from the 16px base to the HD
+ * 128px base, and a pillar room was added as a paving acceptance scene (C7). The
+ * M18 depth work is asserted in `tilemap_autotile.test.ts` (completeness,
+ * pixel containment, non-occlusion, floor determinism), which is a separate suite
+ * precisely so this file's frozen block stays easy to eyeball against M16.
  */
 
 import { describe, expect, it } from 'vitest';
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { Application } from 'pixi.js';
 
-import { GameRenderer, PX_PER_UNIT } from '../../client/GameRenderer';
+import { GameRenderer, PX_PER_UNIT, TILE_NATURAL_PX } from '../../client/GameRenderer';
 import { NULL_SPRITE_PROVIDER } from '../../client/assets/AssetCatalog';
 import { GameSimulator } from '../../src/core/GameSimulator';
 import { createDefaultSystems } from '../../src/ecs/systems/pipeline';
@@ -137,6 +145,72 @@ describe('US3 · the static layer keeps its node and gains tiles (FR-007)', () =
     const floorNode = staticLayer?.children[0];
     // start_room is 10x10, so the footprint is 100 tiles.
     expect(floorNode?.children.length).toBe(100);
+    renderer.destroy();
+  });
+
+  it('draws the scene at the HD tile base, so a cell is exactly one world unit (T029)', async () => {
+    // M18 re-pinned this from the 16px pixel base to the 128px HD base. The literal
+    // is the point: the conversion base is a CONTRACT (`contracts/tilemap-autotile.md`
+    // §1), and `tests/assets/licenses.test.ts` separately cross-checks it against
+    // `tiles.json`'s `meta.tilePx`.
+    expect(TILE_NATURAL_PX).toBe(128);
+    const expected = PX_PER_UNIT / TILE_NATURAL_PX;
+
+    const catalog = await loadedCatalog();
+    const app = makeApp();
+    const sim = new GameSimulator({ systems: createDefaultSystems() });
+    const renderer = new GameRenderer(app, catalog);
+    renderer.init();
+    enterRoom(sim, renderer, 'start_room');
+
+    const staticLayer = app.stage.children[0]?.children[0];
+    const floorNode = staticLayer?.children[0];
+    const wallNode = staticLayer?.children[1];
+    for (const node of [floorNode, wallNode]) {
+      for (const sprite of node?.children ?? []) {
+        if (!(sprite instanceof Sprite)) continue;
+        expect(sprite.scale.x).toBeCloseTo(expected, 9);
+        // One cell of art == one world unit of scene, so nothing is stretched.
+        expect(sprite.scale.x * TILE_NATURAL_PX).toBeCloseTo(PX_PER_UNIT, 9);
+      }
+    }
+    renderer.destroy();
+  });
+
+  it('paves a room with INTERNAL PILLARS without stretching or misplacing (T029 / C7 / SC-005)', async () => {
+    // SC-005 names three acceptance rooms: the small start room, an arena with
+    // pillars, and the 30x30 stress room. The pillar room is the interesting one —
+    // an autotile that only understood the outline would flatten it.
+    const catalog = await loadedCatalog();
+    const app = makeApp();
+    const sim = new GameSimulator({ systems: createDefaultSystems() });
+    const renderer = new GameRenderer(app, catalog);
+    renderer.init();
+
+    const wallCount = enterRoom(sim, renderer, 'arena_room');
+    const staticLayer = app.stage.children[0]?.children[0];
+    expect(staticLayer?.children.length).toBe(1 + wallCount);
+
+    // arena_room is 12x10 -> a 120-cell floor, and every wall node still carries
+    // exactly one sprite per cell of its own AABB.
+    const floorNode = staticLayer?.children[0];
+    expect(floorNode?.children.length).toBe(120);
+
+    const wallIds = sim.world.query(WallComponent);
+    let pillarCells = 0;
+    for (let i = 0; i < wallIds.length; i += 1) {
+      const id = wallIds[i];
+      if (id === undefined) continue;
+      const wall = sim.world.getComponent(id, WallComponent);
+      const node = staticLayer?.children[i + 1] as Container | undefined;
+      if (wall === undefined || node === undefined) continue;
+      const expected = Math.max(1, Math.round(wall.width)) * Math.max(1, Math.round(wall.height));
+      expect(node.children.length).toBe(expected);
+      const interior = wall.x > 0 && wall.y > 0 && wall.x + wall.width < 12 && wall.y + wall.height < 10;
+      if (interior) pillarCells += expected;
+    }
+    // Guard against a vacuous pass: the arena really does have internal pillars.
+    expect(pillarCells).toBeGreaterThan(0);
     renderer.destroy();
   });
 });

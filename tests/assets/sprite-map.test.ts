@@ -288,11 +288,14 @@ describe('selectSprite — the read-only projection used by the renderer', () =>
   });
 });
 
-describe('pickupIconId — three kinds, three distinct icons (FR-017)', () => {
+describe('pickupIconId — three kinds, three distinct icons (FR-030)', () => {
   it('maps each kind to its own icon', () => {
-    expect(pickupIconId(PickupKind.GOLD)).toBe('ui.icon.gold');
-    expect(pickupIconId(PickupKind.HEAL)).toBe('ui.icon.heal');
-    expect(pickupIconId(PickupKind.DARKNESS)).toBe('ui.icon.darkness');
+    // M18 (research.md D4): the in-world pickup decals moved from the `ui.` namespace
+    // to `fx.pickup.*`. A pickup renders in WORLD space; `ui.` is the HUD's
+    // screen-space skin, so mixing them would make FR-030 unverifiable.
+    expect(pickupIconId(PickupKind.GOLD)).toBe('fx.pickup.gold');
+    expect(pickupIconId(PickupKind.HEAL)).toBe('fx.pickup.heal');
+    expect(pickupIconId(PickupKind.DARKNESS)).toBe('fx.pickup.darkness');
   });
 
   it('gives the three kinds three DISTINCT ids', () => {

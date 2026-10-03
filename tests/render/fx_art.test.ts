@@ -17,6 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { resolve } from 'node:path';
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { Application } from 'pixi.js';
 
@@ -34,6 +35,34 @@ import { vec2 } from '../../src/core/math';
 import type { DashEvent, HitEvent } from '../../src/ecs/events';
 import type { FrameEvents } from '../../client/ClientEventBridge';
 import { loadedCatalog } from '../harness/art-fixtures';
+import { decodePng, silhouetteOf, type Silhouette } from '../harness/png';
+
+/**
+ * A silhouette RECOMPUTED from the shipped fx atlas's alpha channel.
+ *
+ * The declared `meta.silhouettes` is written by the atlas generator, so comparing
+ * declarations against each other would pass even if the metadata were stale. These
+ * helpers read the real pixels; the suite below first asserts the declaration MATCHES
+ * the pixels, then runs the distinctness claims on the pixel-derived values.
+ */
+function pixelSilhouette(id: string): Silhouette {
+  const sheet = SHEET_DATA['fx.spark'];
+  const frame = sheet?.frames[`${id}.0`]?.frame;
+  expect(frame, `${id} has no frame`).toBeDefined();
+  if (frame === undefined) throw new Error(`${id} has no frame`);
+  const png = decodePng(resolve(process.cwd(), 'assets/art/hd/fx.png'));
+  return silhouetteOf(png, frame.x, frame.y, frame.w, frame.h);
+}
+
+function declaredSilhouette(id: string): Silhouette {
+  const meta = SHEET_DATA['fx.spark']?.meta as
+    | { silhouettes?: Record<string, Silhouette> }
+    | undefined;
+  const entry = meta?.silhouettes?.[id];
+  expect(entry, `${id} declares no silhouette`).toBeDefined();
+  if (entry === undefined) throw new Error(`${id} declares no silhouette`);
+  return entry;
+}
 
 /** One synthetic hit / dash frame, the same shape `juice_m14` drives the VFX with. */
 function hitEvent(x = 3, y = 0): HitEvent {
@@ -232,8 +261,8 @@ describe('US6 · the hazard telegraph still runs on the COMPONENT fuse (FR-017)'
   });
 });
 
-describe('US6 · pickups use one icon per kind, and stay distinct in greyscale (FR-017)', () => {
-  it('draws a different ui.icon.* for each kind', async () => {
+describe('US6 · pickups use one decal per kind, and stay distinct in greyscale (FR-030)', () => {
+  it('draws a different fx.pickup.* for each kind', async () => {
     const catalog = await loadedCatalog();
     const app = makeApp(16);
     const world = new World({ seed: 13 });
@@ -249,32 +278,24 @@ describe('US6 · pickups use one icon per kind, and stay distinct in greyscale (
       const icon = view.children.find((child): child is Sprite => child instanceof Sprite);
       return icon?.texture.label ?? 'MISSING';
     });
-    expect(labels).toEqual(['ui.icon.gold.0', 'ui.icon.heal.0', 'ui.icon.darkness.0']);
+    // M18 (research.md D4): the in-world decals moved out of the `ui.` namespace,
+    // which is reserved for the HUD's screen-space skin (FR-030).
+    expect(labels).toEqual(['fx.pickup.gold.0', 'fx.pickup.heal.0', 'fx.pickup.darkness.0']);
     expect(new Set(labels).size).toBe(3);
     renderer.destroy();
   });
 
   it('keeps the three silhouettes pairwise different with colour removed', () => {
-    const ui = SHEET_DATA['ui.icon.gold'];
-    expect(ui).toBeDefined();
-    const silhouettes = (ui?.meta as { silhouettes?: Record<string, { grid: string; rows: number[] }> })
-      .silhouettes;
-    expect(silhouettes).toBeDefined();
-    if (silhouettes === undefined) return;
-
-    const ids = ['ui.icon.gold', 'ui.icon.heal', 'ui.icon.darkness'];
-    for (const id of ids) {
-      expect(silhouettes[id]).toBeDefined();
-    }
+    const ids = ['fx.pickup.gold', 'fx.pickup.heal', 'fx.pickup.darkness'];
     // Pairwise distinct coarse grids...
-    const grids = ids.map((id) => silhouettes[id]?.grid ?? '');
+    const grids = ids.map((id) => pixelSilhouette(id).grid);
     expect(new Set(grids).size).toBe(3);
     // ...AND pairwise distinct row profiles, which is the finer claim: two shapes
     // can share an 8x8 coverage map and still differ here.
     for (let i = 0; i < ids.length; i += 1) {
       for (let j = i + 1; j < ids.length; j += 1) {
-        const a = silhouettes[ids[i] ?? '']?.rows ?? [];
-        const b = silhouettes[ids[j] ?? '']?.rows ?? [];
+        const a = pixelSilhouette(ids[i] ?? '').rows;
+        const b = pixelSilhouette(ids[j] ?? '').rows;
         expect(a.length).toBeGreaterThan(0);
         expect(a.join(',')).not.toBe(b.join(','));
       }
@@ -282,19 +303,13 @@ describe('US6 · pickups use one icon per kind, and stay distinct in greyscale (
   });
 
   it('separates the SHAPE LANGUAGE of "pick up" from "run away"', () => {
-    const ui = SHEET_DATA['ui.icon.gold']?.meta as
-      | { silhouettes?: Record<string, { grid: string }> }
-      | undefined;
-    const fx = SHEET_DATA['fx.hazard-ring']?.meta as
-      | { silhouettes?: Record<string, { grid: string }> }
-      | undefined;
-    const coin = ui?.silhouettes?.['ui.icon.gold']?.grid ?? '';
-    const ring = fx?.silhouettes?.['fx.hazard-ring']?.grid ?? '';
+    const coin = pixelSilhouette('fx.pickup.gold').grid;
+    const ring = pixelSilhouette('fx.hazard-ring').grid;
     expect(coin.length).toBe(64);
     expect(ring.length).toBe(64);
     // The coin is a SOLID blob (its middle is filled); the ring is HOLLOW (its
     // middle is empty). That difference survives desaturation, which is what
-    // FR-017's "MUST NOT 混淆" asks for. The centre 2x2 of an 8x8 grid is the four
+    // FR-030's "MUST NOT 混淆" asks for. The centre 2x2 of an 8x8 grid is the four
     // cells at (3,3) (3,4) (4,3) (4,4).
     const centre = (grid: string): string => [27, 28, 35, 36].map((i) => grid[i] ?? '?').join('');
     expect(centre(coin)).toBe('1111');
@@ -312,5 +327,84 @@ describe('US6 · pickups use one icon per kind, and stay distinct in greyscale (
     const view = entityViews(app)[0];
     expect(view?.children[0]).toBeInstanceOf(Graphics);
     renderer.destroy();
+  });
+});
+
+/**
+ * T051 · the "pick up" / "run away" distinction, as its own acceptance block.
+ *
+ * SC-016 asks for two things that a single "the decals differ" test would blur:
+ * every one of the five fx elements must be a real HD asset, and the two MUTUALLY
+ * OPPOSITE promises on the ground — loot you want to touch and a hazard you must not
+ * — must not be confusable. The check below is on the atlas's own alpha-derived
+ * silhouettes, so it holds with the colour channel removed.
+ */
+describe('US8 · in-world FX are HD assets, and "pick up" never looks like "avoid" (T051 / SC-016)', () => {
+  it('recomputes every fx silhouette from the PNG and matches the declaration', () => {
+    // Same load-bearing check as the enemy suite: the declared silhouettes must BE
+    // the shipped pixels, or the distinctness claims below would rest on a claim.
+    for (const id of [
+      'fx.spark',
+      'fx.dash-trail',
+      'fx.hazard-ring',
+      'fx.pickup.gold',
+      'fx.pickup.heal',
+      'fx.pickup.darkness',
+    ]) {
+      const declared = declaredSilhouette(id);
+      const measured = pixelSilhouette(id);
+      expect(measured.grid, `${id} grid`).toBe(declared.grid);
+      expect([...measured.rows], `${id} rows`).toEqual([...declared.rows]);
+      expect(measured.opaque, `${id} opaque total`).toBe(declared.opaque);
+    }
+  });
+
+  it('declares all five fx elements as real sheet animations with frames', () => {
+    const sheet = SHEET_DATA['fx.spark'];
+    expect(sheet).toBeDefined();
+    for (const id of [
+      'fx.spark',
+      'fx.dash-trail',
+      'fx.hazard-ring',
+      'fx.pickup.gold',
+      'fx.pickup.heal',
+      'fx.pickup.darkness',
+    ]) {
+      const frames = sheet?.animations?.[id];
+      expect(frames, `${id} has no animation`).toBeDefined();
+      expect((frames ?? []).length).toBeGreaterThan(0);
+      for (const frame of frames ?? []) expect(sheet?.frames[frame], `${id} -> ${frame}`).toBeDefined();
+    }
+  });
+
+  it('asks the provider for the HD decal of every pickup kind', async () => {
+    const catalog = await loadedCatalog();
+    const { provider, askedAnimations } = recordingProvider(catalog);
+    const app = makeApp(16);
+    const world = new World({ seed: 21 });
+    spawnPickup(world, { x: 0, y: 0, kind: PickupKind.GOLD });
+    spawnPickup(world, { x: 2, y: 0, kind: PickupKind.HEAL });
+    spawnPickup(world, { x: 4, y: 0, kind: PickupKind.DARKNESS });
+
+    const renderer = new GameRenderer(app, provider);
+    renderer.init();
+    renderer.syncWorld(world);
+
+    for (const id of ['fx.pickup.gold', 'fx.pickup.heal', 'fx.pickup.darkness']) {
+      expect(askedAnimations).toContain(id);
+    }
+    renderer.destroy();
+  });
+
+  it('never lets a pickup decal read as a hazard ring, or the reverse', () => {
+    const centre = (grid: string): string => [27, 28, 35, 36].map((i) => grid[i] ?? '?').join('');
+    const hollow = (id: string): boolean => centre(pixelSilhouette(id).grid).includes('0');
+
+    // The hazard ring is the ONLY hollow shape: everything the player is meant to
+    // walk into is solid in the middle.
+    expect(hollow('fx.hazard-ring')).toBe(true);
+    for (const id of ['fx.pickup.gold', 'fx.pickup.heal', 'fx.pickup.darkness']) {
+      expect(hollow(id), `${id} is hollow like a hazard`).toBe(false);
+    }
   });
 });

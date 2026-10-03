@@ -25,8 +25,31 @@ import { describe, expect, it } from 'vitest';
 
 import { MANIFEST, MANIFEST_IDS, SHEET_DATA, type AssetEntry } from '../../client/assets/manifest';
 
-/** Licenses we are allowed to redistribute under (FR-020). */
-const LICENSE_WHITELIST = ['CC0-1.0', 'public-domain'];
+/** Licenses we are allowed to redistribute under (FR-023, contract §5). */
+// M18 · an EXPLICIT literal list (contract §5: "MUST NOT 用「非空字符串」之类的空真
+// 断言替代"). The pre-M18 form was `['CC0-1.0', 'public-domain']` plus a separate
+// "every entry is exactly CC0-1.0" rule; FR-023/FR-029 authorise widening the
+// whitelist to the open tiers the HD asset libraries actually use, so the exact-CC0
+// rule is replaced by membership in this list — and the "no commercial game
+// publisher, ever" bottom line is kept and EXTENDED (D17).
+const LICENSE_WHITELIST = ['CC0-1.0', 'Public Domain', 'CC-BY-4.0'];
+
+/** Commercial game publishers whose assets MUST NOT appear anywhere (FR-023). */
+const PROPRIETARY_PUBLISHERS = [
+  /Supergiant/i,
+  /Nintendo/i,
+  /Square ?Enix/i,
+  /Capcom/i,
+  /Blizzard/i,
+  /Riot Games/i,
+  /Ubisoft/i,
+  /Electronic Arts/i,
+  /Bethesda/i,
+  /FromSoftware/i,
+  /Konami/i,
+  /Bandai Namco/i,
+  /CD Projekt/i,
+];
 
 const REPO_ROOT = process.cwd();
 
@@ -102,9 +125,13 @@ describe('license whitelist (FR-020, contract §3.6)', () => {
     expect(bad.map((e) => `${e.id}=${e.license}`)).toEqual([]);
   });
 
-  it('declares CC0-1.0 for every entry (this feature uses one license tier)', () => {
+  it('declares the whitelist as an explicit literal list of open tiers', () => {
+    // The list itself is pinned, so "the whitelist" cannot quietly become
+    // "anything non-empty" — which is the failure mode a relaxed assertion has.
+    expect(LICENSE_WHITELIST).toEqual(['CC0-1.0', 'Public Domain', 'CC-BY-4.0']);
+    expect(LICENSE_WHITELIST.every((tier) => tier.trim().length > 0)).toBe(true);
     for (const entry of entries()) {
-      expect(entry.license).toBe('CC0-1.0');
+      expect(LICENSE_WHITELIST, `${entry.id}=${entry.license}`).toContain(entry.license);
     }
   });
 });
@@ -116,9 +143,11 @@ describe('traceability (SC-010, contract §3.5)', () => {
     expect(missing).toEqual([]);
   });
 
-  it('keeps the license files free of any Supergiant / Hades asset mention', () => {
+  it('keeps the license files free of any commercial game or publisher mention', () => {
     const text = readLicenseFiles();
-    expect(text).not.toMatch(/Supergiant/i);
+    for (const pattern of PROPRIETARY_PUBLISHERS) {
+      expect(text, `license registry mentions ${String(pattern)}`).not.toMatch(pattern);
+    }
   });
 });
 
@@ -174,7 +203,7 @@ describe('spritesheet data (contract §5: frame layout is the sheet JSON own bus
 });
 
 describe('the asset set covers the whole feature (FR-022: 全量)', () => {
-  it('declares the player, the five enemies, the tiles, the fx and the UI slots', () => {
+  it('declares the player, the five enemies, the tiles, the fx, the pickups and the UI slots', () => {
     const required = [
       'player.base',
       'enemy.grunt',
@@ -188,6 +217,9 @@ describe('the asset set covers the whole feature (FR-022: 全量)', () => {
       'fx.spark',
       'fx.dash-trail',
       'fx.hazard-ring',
+      'fx.pickup.gold',
+      'fx.pickup.heal',
+      'fx.pickup.darkness',
       'ui.icon.gold',
       'ui.icon.heal',
       'ui.icon.darkness',
@@ -211,5 +243,42 @@ describe('the asset set covers the whole feature (FR-022: 全量)', () => {
     ];
     const missing = required.filter((id) => !MANIFEST_IDS.includes(id));
     expect(missing).toEqual([]);
+  });
+
+  it('keeps every `ui.` and `sfx.` entry — FR-030 is a scope BOUND, not a deletion licence', () => {
+    // M18's coverage is the in-run WORLD art. The temptation is to "simplify" by
+    // dropping the interface and audio entries; that would silently break the HUD
+    // and the soundtrack while every remaining assertion stayed green.
+    const uiAndSfx = MANIFEST_IDS.filter((id) => id.startsWith('ui.') || id.startsWith('sfx.'));
+    expect(uiAndSfx.length).toBeGreaterThan(0);
+    for (const id of uiAndSfx) {
+      const entry = MANIFEST[id];
+      expect(entry, `${id} disappeared`).toBeDefined();
+      expect((entry?.source ?? '').length).toBeGreaterThan(0);
+    }
+    // The three HUD icon slots and the nine sounds are named individually, so a
+    // rename cannot masquerade as "still present".
+    for (const id of [
+      'ui.icon.gold',
+      'ui.icon.heal',
+      'ui.icon.darkness',
+      'ui.panel.hud',
+      'ui.overlay.death',
+      'ui.overlay.win',
+      'sfx.hit',
+      'sfx.dash',
+      'sfx.coin',
+      'sfx.win',
+    ]) {
+      expect(MANIFEST_IDS).toContain(id);
+    }
+  });
+
+  it('gives the six enemies six DISTINCT atlases (one loader unit each)', () => {
+    const sources = ['grunt', 'elite', 'raider', 'bomber', 'gunner', 'unknown'].map(
+      (type) => MANIFEST[`enemy.${type}`]?.source ?? '',
+    );
+    expect(new Set(sources).size).toBe(6);
+    for (const source of sources) expect(source.length).toBeGreaterThan(0);
   });
 });
