@@ -246,7 +246,7 @@ M0–M14 已交付（ECS 地基 → 角色控制 → 冲刺/状态机 → 命中
 
 **M19（本版本）** — 界面重构：材质化 HUD、三选一祝福卡片、Tab 状态面板与统一覆盖层视觉语言（`specs/027-hud-boon-ui`）。纯表现层，`src/` 零改动。
 
-权威规格见 `specs/00` … `specs/23`；架构决策见 `docs/architecture/ADR-001`（headless ECS）、`ADR-002`（渲染插值）、`ADR-004`（确定性 PRNG）。
+权威规格见 `specs/00` … `specs/27`；架构决策见 `docs/architecture/ADR-001`（headless ECS）、`ADR-002`（渲染插值）、`ADR-004`（确定性 PRNG）；技术债见 `docs/TECH-DEBT.md`。
 
 ---
 
@@ -263,4 +263,8 @@ M0–M14 已交付（ECS 地基 → 角色控制 → 冲刺/状态机 → 命中
 
 ## 10. 状态
 
-`1.0.0` — 逻辑内核、表现层、数据管线、局外成长与压测基线全部就位。**1126 例测试全绿**，`typecheck` / `typecheck:client` / `lint` / `build` 零告警。
+`1.0.0` — 逻辑内核、表现层、数据管线、局外成长与压测基线全部就位。**1133 例测试**，`typecheck` / `typecheck:client` / `lint` / `build` 零告警。
+
+> ⚠️ **如实说明**：其中 1 例（`tests/performance/stress.test.ts` G2）是**负载敏感的绝对墙钟断言**，机器忙时会误报失败（典型值 ~7.3，阈值 9）。空载复跑通过，且已用 7 轮交替 A/B 证伪为**非 M19 引入**（`src/` 字节相同，该测试只 import `src/`）。详见 [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) **TD-003**。
+
+已知但**有意不在本迭代修**的问题集中在 [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md)（M16 遗留死槽位 · 全局滚动条溢出 · 绝对墙钟性能断言）。每条带可复现证据与建议修复。
