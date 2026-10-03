@@ -252,9 +252,11 @@ M19 未改动它（见 `production/m19-baseline.md` §1）。
 
 | 提交 | 哈希 | 内容 |
 |---|---|---|
-| `feat(client)` | `PENDING-BACKFILL` | M19 表现层实现（`client/` · `index.html` · `assets/art/ui/` · `tests/ui/`） |
-| `docs(spec)` | `PENDING-BACKFILL` | M19 规格、证据与质量门报告（`specs/027-hud-boon-ui/` · `production/m19-*`） |
-| `docs(m19)` | `PENDING-BACKFILL` | 回填本表哈希 |
+| `feat(client)` | **`3391195`** | M19 表现层实现（`client/` · `index.html` · `assets/art/ui/` · `tests/ui/`）—— 43 文件，+4172 / −104 |
+| `docs(spec)` | **`127b94a`** | M19 规格、证据与质量门报告（`specs/027-hud-boon-ui/` · `production/m19-*`）—— 43 文件，+7515 / −4 |
+| `docs(m19)` | **`PENDING-BACKFILL`** | 回填本表哈希 |
+
+推送：`origin/main`（用户于 2026-10-03 授权提交并 push）。
 
 ---
 
