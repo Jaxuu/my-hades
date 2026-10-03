@@ -121,7 +121,7 @@ npm run dev              # → 然后打开 http://localhost:5173/?mode=stress  
 npm run build            # 生产构建
 npm run preview          # 预览构建产物
 
-npm test                 # Vitest 全量（947 例）
+npm test                 # Vitest 全量（1126 例）
 npm run typecheck        # 逻辑层 + 测试 类型检查
 npm run typecheck:client # 表现层类型检查（独立 tsconfig，含 DOM lib）
 npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门禁）
@@ -171,6 +171,31 @@ npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门�
 其余照常，游戏不崩溃、不黑屏（`tests/assets/degradation.test.ts`；真实浏览器实测见
 `production/m18-evidence.md` 的 T064）。
 
+### 界面重构（M19 / spec 027）
+
+**M19 把界面从「角落纯文本读数 + 英文名文字按钮」升级为材质化 HD 界面**，且**完全不动逻辑内核**
+（`src/` 零改动、逐 Tick 摘要逐位不变）。四块内容：
+
+| 表面 | 内容 |
+|---|---|
+| 局内 HUD | 生命 = 数值 + 三态比例条；冲刺 = 可用/冷却 + 进度环；金币 = 读数牌（取代纯文本） |
+| 三选一卡片 | 每卡三要素：**品质色**（蓝/紫/金）+ **CSS 字形图标** + **数值化描述** |
+| Tab 状态面板 | 呼出/收起已拥有祝福与描述，**不暂停**（开/关两条轨迹逐 Tick 一致） |
+| 死亡/胜利/营地覆盖层 | 纳入同一 HD 视觉语言，语义与交互契约不变（`R` 回营地 / 购买 / 开始逃离） |
+
+- **品质是纯外观**：`common #3f6ea8` / `epic #8a5cd0` / `legendary #ffcd4a` 三色 +
+  非颜色通道（中文标签 / 1·2·3 角标 / 方·切·冠轮廓），**不参与任何随机或数值**。
+- **描述数值只读派生**：卡面数字取自 `modifiers.json` / `POISON_STATUS_SPEC` /
+  `HP_UP_AMOUNT` / `DASH_UP_COOLDOWN_REDUCTION`，表现层**零数值字面量**。
+- **数据**：`client/assets/boons.json`（5 条），经 `client/ui/boon-catalog.ts` 静态解析；
+  `src/**` **不**引用它。
+- **资产**：7 个 48×48 九宫格框体（`assets/art/ui/`，本仓库原创 · 程序化生成 ·
+  `node production/m19-ui-frames.mjs`），经 `client/assets/manifest.ts` 的 `?url` 静态导入。
+- **降级**：7 个 `--ui-*` 槽位默认 `none` ⇒ 各表面回退纯 CSS（实心条 / `conic-gradient` 环 /
+  品质边框 / CSS 字形或 `◆`），**只去装饰，绝不去文字与状态色**，离线可用、零外部请求。
+
+> 证据与判定见 `production/m19-evidence.md`（五道闸门、摘要 `f52dfdd4`、性能比值、三条源码扫描红线自证）。
+
 ### `?mode=stress`
 
 一个 URL 后门：把 `runSetup` 换成 `buildStressRun`，直接站进 **30×30 的 `stress_room`**，面对 `encounters.json` 在 `depth: 2` 声明的 **150 敌单波**（100 `grunt` + 50 `gunner` 远程精英）。
@@ -215,7 +240,11 @@ npm run lint             # ESLint 9（含 src/ 的 headless / 确定性 AST 门�
 
 M0–M14 已交付（ECS 地基 → 角色控制 → 冲刺/状态机 → 命中判定 → 打击反馈 → 祝福/修饰器 → 状态与持续伤害 → 敌人 AI → 遭遇与死亡 → 渲染桥 → 手感/插值 → 肉鸽循环 → 护甲与冲刺祝福 → 竞技场与弹道 → AoE 与 run 生命周期 → 经济与胜利 → 数据驱动管线 → 遭遇热重载 → 高级弹道与危险地形 → 房间拓扑与瓦片地图 → 引擎优化与相机 → 营地与局外成长 → 音频与打击感）。
 
-**M15-T01（本版本）** — 极限压测、无损性能优化与 **1.0 收官**。
+**M15-T01** — 极限压测、无损性能优化与 **1.0 收官**。
+
+**M16 → M18** — 无损快照摘要管线 · 相机缩放与瓦片地图 · 高清 2D 美术与动画资产（`specs/024`…`026`）。
+
+**M19（本版本）** — 界面重构：材质化 HUD、三选一祝福卡片、Tab 状态面板与统一覆盖层视觉语言（`specs/027-hud-boon-ui`）。纯表现层，`src/` 零改动。
 
 权威规格见 `specs/00` … `specs/23`；架构决策见 `docs/architecture/ADR-001`（headless ECS）、`ADR-002`（渲染插值）、`ADR-004`（确定性 PRNG）。
 
@@ -234,4 +263,4 @@ M0–M14 已交付（ECS 地基 → 角色控制 → 冲刺/状态机 → 命中
 
 ## 10. 状态
 
-`1.0.0` — 逻辑内核、表现层、数据管线、局外成长与压测基线全部就位。**642 例测试全绿**，`typecheck` / `typecheck:client` / `lint` / `build` 零告警。
+`1.0.0` — 逻辑内核、表现层、数据管线、局外成长与压测基线全部就位。**1126 例测试全绿**，`typecheck` / `typecheck:client` / `lint` / `build` 零告警。

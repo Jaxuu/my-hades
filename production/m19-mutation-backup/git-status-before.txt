@@ -1,0 +1,47 @@
+ M .workbuddy-ai/memory/2026-10-03.md
+ M README.md
+ M assets/art/LICENSES.md
+ M client/UIManager.ts
+ M client/assets/manifest.ts
+ M client/main.ts
+ M index.html
+ M tests/ui/text_readability.test.ts
+ M tests/ui/ui_skin.test.ts
+?? .codebuddy/
+?? .specify/
+?? assets/art/ui/frame-boon-common.png
+?? assets/art/ui/frame-boon-epic.png
+?? assets/art/ui/frame-boon-legendary.png
+?? assets/art/ui/frame-dash.png
+?? assets/art/ui/frame-health.png
+?? assets/art/ui/panel-status.png
+?? assets/art/ui/rule-bronze.png
+?? client/assets/boons.json
+?? client/ui/
+?? production/m19-baseline.md
+?? production/m19-evidence.md
+?? production/m19-mutation-backup/
+?? production/m19-ui-frames.mjs
+?? production/m19-ui-volume.md
+?? specs/027-hud-boon-ui/
+?? tests/harness/ui-source.ts
+?? tests/ui/accessibility.test.ts
+?? tests/ui/boon-card.test.ts
+?? tests/ui/boon-data.test.ts
+?? tests/ui/boon-description.test.ts
+?? tests/ui/boon-draft-contract.test.ts
+?? tests/ui/boon-glyph.test.ts
+?? tests/ui/boon-select.test.ts
+?? tests/ui/hud-boundaries.test.ts
+?? tests/ui/hud-model.test.ts
+?? tests/ui/hud-persistence.test.ts
+?? tests/ui/lossless_m19.test.ts
+?? tests/ui/offline.test.ts
+?? tests/ui/overlay_contract.test.ts
+?? tests/ui/scene_graph_contracts.test.ts
+?? tests/ui/status-panel-lifecycle.test.ts
+?? tests/ui/status-panel-nopause.test.ts
+?? tests/ui/status-panel.test.ts
+?? tests/ui/ui-purity.test.ts
+?? tests/ui/ui-write-blacklist.test.ts
+?? tests/ui/ui_degradation.test.ts

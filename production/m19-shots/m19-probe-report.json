@@ -1,0 +1,299 @@
+{
+  "partA": [
+    {
+      "viewport": "v1-1920x1080",
+      "size": "1920x1080",
+      "canvas": 2,
+      "hudNonText": true,
+      "hudParts": {
+        "health": 1,
+        "dash": 1,
+        "ring": 1,
+        "fill": 1
+      },
+      "goldIsPlate": true,
+      "goldIcon": 1,
+      "goldValue": 1,
+      "unresolvedSlots": [],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 1920,
+        "cssH": 1080,
+        "attrW": 1920,
+        "attrH": 1080,
+        "styleW": "1920px",
+        "styleH": "1080px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2160,
+        "right": 1920,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "1920x2160",
+      "screenshot": "v1-1920x1080-game.png",
+      "screenshotBytes": 597908
+    },
+    {
+      "viewport": "v2-2560x1440",
+      "size": "2560x1440",
+      "canvas": 2,
+      "hudNonText": true,
+      "hudParts": {
+        "health": 1,
+        "dash": 1,
+        "ring": 1,
+        "fill": 1
+      },
+      "goldIsPlate": true,
+      "goldIcon": 1,
+      "goldValue": 1,
+      "unresolvedSlots": [],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 2560,
+        "cssH": 1440,
+        "attrW": 2560,
+        "attrH": 1440,
+        "styleW": "2560px",
+        "styleH": "1440px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2880,
+        "right": 2560,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "2560x2880",
+      "screenshot": "v2-2560x1440-game.png",
+      "screenshotBytes": 744274
+    },
+    {
+      "viewport": "v3-ultrawide-3840x1080",
+      "size": "3840x1080",
+      "canvas": 2,
+      "hudNonText": true,
+      "hudParts": {
+        "health": 1,
+        "dash": 1,
+        "ring": 1,
+        "fill": 1
+      },
+      "goldIsPlate": true,
+      "goldIcon": 1,
+      "goldValue": 1,
+      "unresolvedSlots": [],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 3840,
+        "cssH": 1080,
+        "attrW": 3840,
+        "attrH": 1080,
+        "styleW": "3840px",
+        "styleH": "1080px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2160,
+        "right": 3840,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "3840x2160",
+      "screenshot": "v3-ultrawide-3840x1080-game.png",
+      "screenshotBytes": 633700
+    },
+    {
+      "viewport": "v4-portrait-1080x1920",
+      "size": "1080x1920",
+      "canvas": 2,
+      "hudNonText": true,
+      "hudParts": {
+        "health": 1,
+        "dash": 1,
+        "ring": 1,
+        "fill": 1
+      },
+      "goldIsPlate": true,
+      "goldIcon": 1,
+      "goldValue": 1,
+      "unresolvedSlots": [],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 1080,
+        "cssH": 1920,
+        "attrW": 1080,
+        "attrH": 1920,
+        "styleW": "1080px",
+        "styleH": "1920px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 3840,
+        "right": 1080,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "1080x3840",
+      "screenshot": "v4-portrait-1080x1920-game.png",
+      "screenshotBytes": 576829
+    },
+    {
+      "viewport": "v5-small-800x600",
+      "size": "800x600",
+      "canvas": 2,
+      "hudNonText": true,
+      "hudParts": {
+        "health": 1,
+        "dash": 1,
+        "ring": 1,
+        "fill": 1
+      },
+      "goldIsPlate": true,
+      "goldIcon": 1,
+      "goldValue": 1,
+      "unresolvedSlots": [],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 800,
+        "cssH": 600,
+        "attrW": 800,
+        "attrH": 600,
+        "styleW": "800px",
+        "styleH": "600px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 1200,
+        "right": 800,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "800x1200",
+      "screenshot": "v5-small-800x600-game.png",
+      "screenshotBytes": 196055
+    }
+  ],
+  "partB": {
+    "measured": [
+      {
+        "rarity": "common",
+        "ringRgb": "#3f6ea8",
+        "chipRgb": "#3f6ea8",
+        "computedChip": "rgb(63, 110, 168)",
+        "computedShadow": "rgb(63, 110, 168) 0px 0px 0px 3px, rgba(63, 110, 168, 0.55) 0px 0px 14px 0px",
+        "borderImage": "url(\"http://127.0.0.1:4173/assets/frame-boon-com",
+        "pips": 1,
+        "tagText": "普通",
+        "frame": "boon-icon-frame--square",
+        "rect": {
+          "left": 584,
+          "top": 397,
+          "w": 240,
+          "h": 336
+        }
+      },
+      {
+        "rarity": "epic",
+        "ringRgb": "#8a5cd0",
+        "chipRgb": "#8a5cd0",
+        "computedChip": "rgb(138, 92, 208)",
+        "computedShadow": "rgb(138, 92, 208) 0px 0px 0px 3px, rgba(138, 92, 208, 0.6) 0px 0px 14px 0px",
+        "borderImage": "url(\"http://127.0.0.1:4173/assets/frame-boon-epi",
+        "pips": 2,
+        "tagText": "史诗",
+        "frame": "boon-icon-frame--cut",
+        "rect": {
+          "left": 840,
+          "top": 397,
+          "w": 240,
+          "h": 336
+        }
+      },
+      {
+        "rarity": "legendary",
+        "ringRgb": "#ffcd4a",
+        "chipRgb": "#ffcd4a",
+        "computedChip": "rgb(255, 205, 74)",
+        "computedShadow": "rgb(255, 205, 74) 0px 0px 0px 3px, rgba(255, 205, 74, 0.65) 0px 0px 14px 0px",
+        "borderImage": "url(\"http://127.0.0.1:4173/assets/frame-boon-leg",
+        "pips": 3,
+        "tagText": "传说",
+        "frame": "boon-icon-frame--crown",
+        "rect": {
+          "left": 1096,
+          "top": 397,
+          "w": 240,
+          "h": 336
+        }
+      }
+    ],
+    "pairs": [
+      {
+        "pair": "common↔epic",
+        "ring": "86.9 / 75",
+        "chip": "86.9 / 75",
+        "pass": true
+      },
+      {
+        "pair": "common↔legendary",
+        "ring": "233.9 / 192",
+        "chip": "233.9 / 192",
+        "pass": true
+      },
+      {
+        "pair": "epic↔legendary",
+        "ring": "210.7 / 134",
+        "chip": "210.7 / 134",
+        "pass": true
+      }
+    ],
+    "allPairsPass": true
+  },
+  "partC": {
+    "grayHashes": {
+      "common": "3205aef1818192a0",
+      "epic": "06b385ede409dd17",
+      "legendary": "6b9a71d785826278"
+    },
+    "grayDistinct": true
+  },
+  "console": [
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready",
+    "[info] [assets] 45 assets ready"
+  ],
+  "externalRequests": [],
+  "preExistingPageOverflow": true
+}

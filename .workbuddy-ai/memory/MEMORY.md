@@ -29,6 +29,7 @@
 - ⚠️ **「无损优化」必须用快照摘要自证**（`listEntities()×listComponents()` 拼串过 FNV-1a，同 seed 跑同一脚本，改前/改后必须**逐位相同**）。**既有测试全绿 ≠ 无损**——M15 实测：把字符串枚举 `Faction` 存进 `Int32Array`（被转成 `0`）让**全部 634 例通过**、摘要却变了（174→198 实体）。同时**性能断言要用「缩放比」而非绝对墙钟**（绝对值随 CI 负载漂 2 倍）。
 - ⚠️ **渲染场景图 6 条冻结契约**：`stage` 唯一子节点=camera / `camera.children[last]`=root / `root.children[last]`=fxLayer / `root.children[0]`=首个实体视图 / 无墙时 `camera.children` 长**恰 1** / 空闲时 `fxLayer.children` 长**恰 0**。加**常驻**节点必撞坏其一⇒只能**惰性挂载**（先例 `staticLayer`）或**常驻+显式同步钉桩**（先例 spec 20 §6.3）；禁放宽语义或删断言。
 - ⚠️「状态被设置」≠「效果被施加」：只断言状态字段等于构造它的常量，是恒真陷阱的变体，必须另配**效果断言**（M14 实测：关掉震动叠加时**无任何断言失败**）。
+- ⚠️「声明 + 注入 + 资产齐备 + 测试全绿」**≠**「被消费」：M19 实测 `--ui-frame-dash` 在 `index.html` 声明、`main.ts` 注入、`manifest.ts` 注册、PNG 已产出，却**无任何 CSS 引用它** ⇒ 死资产，且**全部既有断言零反应**。故每个 `--ui-*` 槽位必须另有「**`var(<slot>)` 在样式表中被引用**」的断言（`tests/ui/ui_degradation.test.ts`）。
 
 ## 4 工程风险
 - ESLint AST 门（仅 `src/**`）：禁 window/document、`Math.random`/`Date.now`、`new Date()`/`localeCompare`/`toLocale*`/`new Intl`、`pixi.js`、`**/client/**`。`no-unused-vars` ignore 均 `^_`；`no-explicit-any` 全仓生效。
@@ -38,6 +39,8 @@
 - 资产：**唯一引用点 `client/assets/manifest.ts`**（`?url` 静态导入 ⇒ 删文件即 `vite build` 失败）；`build.assetsInlineLimit: 0`（否则 <4 KB 资产被内联、不进 `dist/`）；根 tsconfig `types` 含 `vite/client`；生成器 `assets/art/tools/build-atlas.py`（Pillow，构建期工具）。`assets/**` 合计 ≈595 KB（预算 6 MB）。
 - 界面美术是 **48×48 九宫格白描框 ⇒ 必须 `border-image`（slice 12）**，`background-size:100% 100%` 会拉成满屏黑条。
 - `client/` 侧：**`GameRenderer` 导入图不得含 `howler`**（node 渲染套件只导入 `GameRenderer`）。真因是裸 `window` ⇒ 无 DOM 的 `typecheck` 报 **TS2304**，**不是** howler 导入炸（该前提已实测推翻）；`AudioManager` 只被 `main.ts` 导入。事件旁观用 `TeeEventQueue extends EventQueue` 覆写 `emit`（`src/` 零改动、Liskov 兼容）；run 边界**必须** `bridge.clear()`（`scheduler.reset()` 触不到客户端缓冲）。
+- 零依赖 CDP 探针（`production/m19-probe.mjs`，Node 22 内建 `WebSocket`）两坑：① **模板字面量内部的 `//` 注释里不得出现反引号**——会提前终止模板，报 `SyntaxError: missing ) after argument list`；② 破坏/替换锚点要警惕 **CRLF**（`index.html` 为 CRLF，含 `\n` 的多行锚点匹配失败；改用单行锚点）。探针**不得**把卡片注入 `#ui-layer`：`UIManager.sync` 每帧 `clear()`，须用探针自有容器。
+- 证明「某现象**不是**本次引入」：用 `git worktree add <dir> <基线commit>`（`mklink /J` 链 `node_modules`）跑**同一个**探针做 A/B，比推断可信（M19 据此证伪滚动条归属）。
 
 ## 5 里程碑不变量（明细见 memory/INVARIANTS.md）
 
@@ -49,4 +52,5 @@
 
 ## 7 进度
 M0–M4 ✅209 · M5-T01 ✅212 · M5-T02 ✅234 · M6-T01 ✅264 · M6-T02 ✅285 · M7-T01 ✅336 · M8-T01 ✅359 · M9-T01 ✅394 · M10-T01 ✅414 · M10-T02 ✅436 · M11-T01 ✅467 · M12-T01 ✅500 · M12-T02 ✅578（78 新用例 = 实现 21 + 独立 QA 57；已提交 `3960c2a`(docs) + `18b2d6c`(feat)，**未 push**）· M13-T01 ✅613（35 新用例；五道闸门全绿；管道仍 **17 段**；已提交 `a189367`(docs) + `5ac7a3f`(feat)，**未 push**）· M14-T01 ✅634（21 新用例；四闸门 + `build` 全绿；`src/` 零改动、既有测试零改动、管道仍 **17 段**；已提交 `87b3486`(docs) + `698b4b2`(feat)，**未 push**）· **M15-T01 ✅642**（8 新用例；`src/` 三处**无损**提速，摘要逐位一致；⚠️「600 Tick < 100ms」未达成，实测 ~460ms，已登记 `specs/23` §7 T1；已提交 `02f99c1`）· **M16-T01 ✅803**（spec 024；**161 新用例** = 资产 59 + 渲染 56 + UI 30 + 音频 10 + 性能/无损 6；五道闸门全绿；`src/` **零改动**、`tests/render/` 既有 6 套件零改动、管道仍 **17 段**；性能比值 **1.01–1.09**（3 次全量运行；预算 1.2）；资产 ≈595 KB；真实 Chromium 视觉验收 V1–V9/O1–O4 全过；已提交 `ae4cc52`(docs) + `539d96a`(feat)，**已 push** `origin/main`（远端 `539d96a`））· **M17-T01 ✅893**（spec 025；**90 新用例**（8 文件）；五道闸门全绿；`src/` **零改动**、既有 803 例零改动、管道仍 **17 段**（钉桩 13）；**真浏览器像素实测** 5 种视口房间短边占比**恒 80.0%**、居中到像素、零裁剪；摘要 `f52dfdd4`（= M15/M16 同值）；性能比值中位数 **0.993**；变异实验**双证**；⚠️ 超 `client/` 的两处改动已登记（`vitest.config.ts` 限 worker 并发、`eslint.config.mjs` 忽略 `production/**/*.mjs`）；⚠️ SC-002/SC-009 **主观判定 PENDING**（需人类观察者）；已提交 `b1583a8`(chore/test 配置隔离) + `da17474`(feat M17)，**未 push**）。
-权威规格 `specs/00`…`specs/25`。ADR-001(headless ECS) · ADR-002(渲染插值) · ADR-004(确定性 PRNG)。
+M18-T01 ✅1126（spec 026；HD 2D 美术替换像素世界美术 + 自动平铺地牢；已提交 `32183b3`(docs) + `8606ca5`(feat)）· **M19-T01 ✅1133**（spec 027；**表现层 UI 重构**：材质化 HUD（生命/冲刺/金币）+ 三选一祝福卡片（品质色/图标/数值化描述）+ Tab **不暂停**状态面板 + 死亡/胜利/营地覆盖层统一；**1133 例 / 0 失败**（基线 948，+185）；`src/` **零改动**、17 段管道、依赖仍 `{pixi.js, howler}`；摘要 `f52dfdd4` **逐位一致**；性能比值 **0.782**；变异实验 M1–M6 **6/6 被断言捕获 + 逐字节还原**；真浏览器 5 视口 PASS、品质像素 ΔRGB 全达标、外部请求 0；⚠️ 主理人修复工程侧遗漏的 **`--ui-frame-dash` 死槽位**（声明+注入+资产齐备却无 CSS 消费）并补「槽位必须被消费」守卫；⚠️ 既有滚动条缺陷（Pixi canvas 池的裸 `position:static` canvas）经 **M18 A/B 实测证伪为非 M19**；⚠️ 主观 SC-001/002/014 + US5 视觉统一 **PENDING**（需人类观察者））。
+权威规格 `specs/00`…`specs/27`。ADR-001(headless ECS) · ADR-002(渲染插值) · ADR-004(确定性 PRNG)。

@@ -1,0 +1,338 @@
+{
+  "partA": [
+    {
+      "viewport": "v1-1920x1080",
+      "size": "1920x1080",
+      "canvas": 2,
+      "hudNonText": false,
+      "hudParts": {
+        "health": 0,
+        "dash": 0,
+        "ring": 0,
+        "fill": 0
+      },
+      "goldIsPlate": false,
+      "goldIcon": 0,
+      "goldValue": 0,
+      "unresolvedSlots": [
+        "--ui-frame-health",
+        "--ui-frame-dash",
+        "--ui-frame-boon-common",
+        "--ui-frame-boon-epic",
+        "--ui-frame-boon-legendary",
+        "--ui-panel-status",
+        "--ui-rule"
+      ],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 1920,
+        "cssH": 1080,
+        "attrW": 1920,
+        "attrH": 1080,
+        "styleW": "1920px",
+        "styleH": "1080px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2160,
+        "right": 1920,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "1920x2160",
+      "screenshot": "v1-1920x1080-game.png",
+      "screenshotBytes": 595327
+    },
+    {
+      "viewport": "v2-2560x1440",
+      "size": "2560x1440",
+      "canvas": 2,
+      "hudNonText": false,
+      "hudParts": {
+        "health": 0,
+        "dash": 0,
+        "ring": 0,
+        "fill": 0
+      },
+      "goldIsPlate": false,
+      "goldIcon": 0,
+      "goldValue": 0,
+      "unresolvedSlots": [
+        "--ui-frame-health",
+        "--ui-frame-dash",
+        "--ui-frame-boon-common",
+        "--ui-frame-boon-epic",
+        "--ui-frame-boon-legendary",
+        "--ui-panel-status",
+        "--ui-rule"
+      ],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 2560,
+        "cssH": 1440,
+        "attrW": 2560,
+        "attrH": 1440,
+        "styleW": "2560px",
+        "styleH": "1440px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2880,
+        "right": 2560,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "2560x2880",
+      "screenshot": "v2-2560x1440-game.png",
+      "screenshotBytes": 748501
+    },
+    {
+      "viewport": "v3-ultrawide-3840x1080",
+      "size": "3840x1080",
+      "canvas": 2,
+      "hudNonText": false,
+      "hudParts": {
+        "health": 0,
+        "dash": 0,
+        "ring": 0,
+        "fill": 0
+      },
+      "goldIsPlate": false,
+      "goldIcon": 0,
+      "goldValue": 0,
+      "unresolvedSlots": [
+        "--ui-frame-health",
+        "--ui-frame-dash",
+        "--ui-frame-boon-common",
+        "--ui-frame-boon-epic",
+        "--ui-frame-boon-legendary",
+        "--ui-panel-status",
+        "--ui-rule"
+      ],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 3840,
+        "cssH": 1080,
+        "attrW": 3840,
+        "attrH": 1080,
+        "styleW": "3840px",
+        "styleH": "1080px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 2160,
+        "right": 3840,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "3840x2160",
+      "screenshot": "v3-ultrawide-3840x1080-game.png",
+      "screenshotBytes": 642180
+    },
+    {
+      "viewport": "v4-portrait-1080x1920",
+      "size": "1080x1920",
+      "canvas": 2,
+      "hudNonText": false,
+      "hudParts": {
+        "health": 0,
+        "dash": 0,
+        "ring": 0,
+        "fill": 0
+      },
+      "goldIsPlate": false,
+      "goldIcon": 0,
+      "goldValue": 0,
+      "unresolvedSlots": [
+        "--ui-frame-health",
+        "--ui-frame-dash",
+        "--ui-frame-boon-common",
+        "--ui-frame-boon-epic",
+        "--ui-frame-boon-legendary",
+        "--ui-panel-status",
+        "--ui-rule"
+      ],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 1080,
+        "cssH": 1920,
+        "attrW": 1080,
+        "attrH": 1920,
+        "styleW": "1080px",
+        "styleH": "1920px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 3840,
+        "right": 1080,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "1080x3840",
+      "screenshot": "v4-portrait-1080x1920-game.png",
+      "screenshotBytes": 574023
+    },
+    {
+      "viewport": "v5-small-800x600",
+      "size": "800x600",
+      "canvas": 2,
+      "hudNonText": false,
+      "hudParts": {
+        "health": 0,
+        "dash": 0,
+        "ring": 0,
+        "fill": 0
+      },
+      "goldIsPlate": false,
+      "goldIcon": 0,
+      "goldValue": 0,
+      "unresolvedSlots": [
+        "--ui-frame-health",
+        "--ui-frame-dash",
+        "--ui-frame-boon-common",
+        "--ui-frame-boon-epic",
+        "--ui-frame-boon-legendary",
+        "--ui-panel-status",
+        "--ui-rule"
+      ],
+      "overlayClass": "",
+      "dpr": 1,
+      "canvasBox": {
+        "cssW": 800,
+        "cssH": 600,
+        "attrW": 800,
+        "attrH": 600,
+        "styleW": "800px",
+        "styleH": "600px",
+        "display": "block"
+      },
+      "overflowSource": {
+        "tag": "CANVAS",
+        "id": "",
+        "cls": "",
+        "bottom": 1200,
+        "right": 800,
+        "position": "static"
+      },
+      "noScroll": false,
+      "scroll": "800x1200",
+      "screenshot": "v5-small-800x600-game.png",
+      "screenshotBytes": 197671
+    }
+  ],
+  "partB": {
+    "measured": [
+      {
+        "rarity": "common",
+        "ringRgb": "#0c0a0d",
+        "chipRgb": "#14111a",
+        "computedChip": "rgba(0, 0, 0, 0)",
+        "computedShadow": "none",
+        "borderImage": "url(\"http://127.0.0.1:4174/assets/frame-reward-c",
+        "pips": 1,
+        "tagText": "普通",
+        "frame": "boon-icon-frame--square",
+        "rect": {
+          "left": 394,
+          "top": 538,
+          "w": 240,
+          "h": 52
+        }
+      },
+      {
+        "rarity": "epic",
+        "ringRgb": "#14111a",
+        "chipRgb": "#14111a",
+        "computedChip": "rgba(0, 0, 0, 0)",
+        "computedShadow": "none",
+        "borderImage": "url(\"http://127.0.0.1:4174/assets/frame-reward-c",
+        "pips": 2,
+        "tagText": "史诗",
+        "frame": "boon-icon-frame--cut",
+        "rect": {
+          "left": 634,
+          "top": 539,
+          "w": 409,
+          "h": 52
+        }
+      },
+      {
+        "rarity": "legendary",
+        "ringRgb": "#14111a",
+        "chipRgb": "#14111a",
+        "computedChip": "rgba(0, 0, 0, 0)",
+        "computedShadow": "none",
+        "borderImage": "url(\"http://127.0.0.1:4174/assets/frame-reward-c",
+        "pips": 3,
+        "tagText": "传说",
+        "frame": "boon-icon-frame--crown",
+        "rect": {
+          "left": 1043,
+          "top": 539,
+          "w": 483,
+          "h": 51
+        }
+      }
+    ],
+    "pairs": [
+      {
+        "pair": "common↔epic",
+        "ring": "16.8 / 13",
+        "chip": "0.0 / 0",
+        "pass": false
+      },
+      {
+        "pair": "common↔legendary",
+        "ring": "16.8 / 13",
+        "chip": "0.0 / 0",
+        "pass": false
+      },
+      {
+        "pair": "epic↔legendary",
+        "ring": "0.0 / 0",
+        "chip": "0.0 / 0",
+        "pass": false
+      }
+    ],
+    "allPairsPass": false
+  },
+  "partC": {
+    "grayHashes": {
+      "common": "782b439e288fd5e6",
+      "epic": "c29ef66f3135cb65",
+      "legendary": "f9e419946647ca2e"
+    },
+    "grayDistinct": true
+  },
+  "console": [
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready",
+    "[info] [assets] 38 assets ready"
+  ],
+  "externalRequests": []
+}

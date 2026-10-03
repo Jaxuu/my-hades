@@ -1,0 +1,10 @@
+ .workbuddy-ai/memory/2026-10-03.md | 129 +++++++++++
+ README.md                          |  35 ++-
+ assets/art/LICENSES.md             |  21 ++
+ client/UIManager.ts                | 456 +++++++++++++++++++++++++++++--------
+ client/assets/manifest.ts          |  23 ++
+ client/main.ts                     |  19 +-
+ index.html                         | 333 ++++++++++++++++++++++++++-
+ tests/ui/text_readability.test.ts  |  29 +++
+ tests/ui/ui_skin.test.ts           |  76 +++++++
+ 9 files changed, 1014 insertions(+), 107 deletions(-)

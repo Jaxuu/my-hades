@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>my-hades · 逃离冥府</title>
+    <style>
+      /* =====================================================================
+       * M16 · the DOM skin (specs/024-real-art-assets T038).
+       *
+       * The STRUCTURE below is unchanged from M13: the same ids, the same class
+       * hooks, the same native <button> elements. What changed is the SKIN — the
+       * panels, frames and buttons are now drawn with CC0 art assets that
+       * `client/main.ts` injects as CSS custom properties (`--ui-*`).
+       *
+       * Why custom properties rather than `url()` literals here: the asset URLs
+       * are Vite build artifacts with content hashes, and this file cannot know
+       * them. Injecting them from the composition root keeps `manifest.ts` the
+       * single source of truth for "does this asset exist" AND keeps the
+       * build-time failure guarantee (delete a panel and `npm run build` fails).
+       *
+       * Every `--ui-*` variable defaults to `none`, so a degraded catalog (or a
+       * page opened with no JS at all) renders the plain CSS panel underneath —
+       * FR-013's graceful degradation, applied to the interface.
+       * ===================================================================== */
+
+      :root {
+        /* Art slots. `main.ts` overwrites these with url(...) once the catalog
+           has loaded; the `none` defaults are the degradation path. */
+        --ui-panel-hud: none;
+        --ui-panel-reward: none;
+        --ui-panel-camp: none;
+        --ui-frame-reward-card: none;
+        --ui-frame-talent-card: none;
+        --ui-button-primary: none;
+        --ui-overlay-death: none;
+        --ui-overlay-win: none;
+        --ui-frame-slot: none;
+        --ui-frame-slot-inlay: none;
+        --ui-bar-hud: none;
+
+        /* M19 · material UI frames (HUD bars, boon cards, status panel). Seven new
+           slots, ALL defaulting to `none` so a degraded catalog renders the plain
+           CSS surface underneath (FR-050). No ICON slot: user ruling U3 makes the
+           boon icon a pure CSS glyph, so no icon asset exists. */
+        --ui-frame-health: none;
+        --ui-frame-dash: none;
+        --ui-frame-boon-common: none;
+        --ui-frame-boon-epic: none;
+        --ui-frame-boon-legendary: none;
+        --ui-panel-status: none;
+        --ui-rule: none;
+
+        /* Palette, sampled from the art so the DOM and the canvas agree. */
+        --ink: #1a1622;
+        --parchment: #e8d9b8;
+        --parchment-dim: #b9a982;
+        --stone: #7f8aa3;
+        --stone-dark: #2a2f3d;
+        --gold: #ffcd4a;
+        --blood: #e23e4a;
+        --shadow: rgba(10, 8, 14, 0.72);
+
+        /* M19 · the three cosmetic quality tiers (U1). Deliberately NOT `--ui-*`
+           (they are not asset slots) and NOT `--font-*` (the readability contract
+           pins the font stacks at exactly two). The `-glow`/`-deep` variants are
+           decoration only; the base three are the pixel-sampled anchors. */
+        --rarity-common: #3f6ea8;
+        --rarity-epic: #8a5cd0;
+        --rarity-legendary: #ffcd4a;
+        --rarity-common-glow: rgba(63, 110, 168, 0.55);
+        --rarity-epic-glow: rgba(138, 92, 208, 0.6);
+        --rarity-legendary-glow: rgba(255, 205, 74, 0.65);
+
+        /* FR-019 · the text MUST stay readable with NO bundled font. A full CJK
+           face is 8–10 MB and would eat the whole asset budget on its own, so the
+           stack leans on the SYSTEM faces and keeps explicit CJK fallbacks
+           (`PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC`) so Chinese text
+           renders as glyphs rather than as tofu boxes. No web font is declared
+           anywhere — asserted by tests/ui/text_readability.test.ts. */
+        --font-body: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+          "PingFang SC", "Microsoft YaHei", monospace;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #14161c;
+        color: var(--parchment);
+        font-family: var(--font-body);
+      }
+
+      #app {
+        position: absolute;
+        inset: 0;
+      }
+
+      #app canvas {
+        display: block;
+      }
+
+      /* ---------------------------------------------------------------------
+       * Shared plate treatment.
+       *
+       * The UI art is a set of 48x48 NINE-SLICE frames (white line work with
+       * decorative corners and a transparent centre). They must therefore be drawn
+       * with `border-image`, never with `background-size: 100% 100%`: stretching a
+       * 48px frame across the viewport smears its corners into huge bars — which is
+       * exactly what the first browser pass of T048 caught.
+       *
+       * `border-color` is the degradation path: with `--ui-*` at `none` there is no
+       * border image, and the solid stone border is what remains.
+       * ------------------------------------------------------------------- */
+      #hud,
+      #keys,
+      #gold {
+        border-style: solid;
+        border-width: 10px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: var(--shadow);
+        background-repeat: no-repeat;
+        image-rendering: pixelated;
+      }
+
+      #hud,
+      #keys {
+        border-image-source: var(--ui-panel-hud);
+      }
+
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        padding: 4px 8px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.5;
+        pointer-events: none;
+        white-space: pre;
+        color: var(--parchment-dim);
+      }
+
+      #keys {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        padding: 4px 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        pointer-events: none;
+        color: var(--parchment-dim);
+      }
+
+      /* M9-T01 · gold / darkness read-out. The one always-on HUD element the
+         UIManager owns; top-right so it never collides with the diagnostics
+         block on the left. M16: skinned with the HUD panel art + a bar decal. */
+      #gold {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        padding: 4px 10px;
+        border-color: #6b5324;
+        border-image-source: var(--ui-panel-hud);
+        color: var(--gold);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        line-height: 1.5;
+        pointer-events: none;
+        white-space: pre;
+        /* The divider art is a thin rule, so it is sized explicitly rather than
+           stretched over the whole plate. */
+        background-image: var(--ui-bar-hud);
+        background-position: 50% 4px;
+        background-size: calc(100% - 24px) 8px;
+      }
+
+      /* ---------------------------------------------------------------------
+       * The overlay root. Same element for the draft, both terminal states and
+       * the camp — only one is ever on screen (M6-T01 / M8-T01 / M9-T01 / M13-T01).
+       * ------------------------------------------------------------------- */
+      #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-family: var(--font-body);
+        background: rgba(8, 10, 14, 0.72);
+      }
+
+      #ui-layer.is-visible {
+        display: flex;
+      }
+
+      /* The draft shares the overlay root, so it gets its own frame. `is-status`
+         (the M19 Tab panel) is excluded so the panel gets its OWN frame rather than
+         the reward frame — the two surfaces must read as different things. */
+      #ui-layer:not(.is-death):not(.is-win):not(.is-hub):not(.is-status) {
+        border-style: solid;
+        border-width: 14px;
+        border-color: transparent;
+        border-image-source: var(--ui-panel-reward);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
+      }
+
+      .ui-heading {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--parchment);
+        letter-spacing: 0.08em;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      /* ---------------------------------------------------------------------
+       * Shared card skin for the two button families that present CHOICES.
+       * ------------------------------------------------------------------- */
+      .ui-card {
+        border-style: solid;
+        border-width: 12px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: rgba(20, 18, 28, 0.9);
+        color: var(--parchment);
+        font: inherit;
+        cursor: pointer;
+        image-rendering: pixelated;
+        transition: transform 110ms ease, filter 110ms ease;
+      }
+
+      .talent-button.ui-card {
+        border-image-source: var(--ui-frame-talent-card);
+      }
+
+      .ui-card:hover:not(:disabled) {
+        transform: translateY(-2px);
+        filter: brightness(1.18);
+      }
+
+      .ui-card:active:not(:disabled) {
+        transform: translateY(0);
+      }
+
+      .reward-button {
+        min-width: 240px;
+        padding: 4px 10px;
+        border-color: #3f6ea8;
+        border-image-source: var(--ui-frame-reward-card);
+        font-size: 15px;
+      }
+
+      /* M8-T01 · death overlay. A terminal state: a deep blood wash, a
+         wide-tracked heading, and a hint line. */
+      #ui-layer.is-death {
+        background-color: rgba(34, 4, 6, 0.9);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #4a1218;
+        border-image-source: var(--ui-overlay-death);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
+      }
+
+      .ui-heading-terminal {
+        font-size: 38px;
+        letter-spacing: 0.24em;
+      }
+
+      #ui-layer.is-death .ui-heading {
+        color: var(--blood);
+        text-shadow: 0 0 20px rgba(226, 62, 74, 0.5), 0 3px 0 rgba(0, 0, 0, 0.7);
+      }
+
+      .death-hint {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        color: var(--parchment);
+        opacity: 0.9;
+      }
+
+      /* M9-T01 · victory overlay. Same structure as the death overlay, restyled
+         into a positive terminal state: a deep teal wash and a gold heading.
+         Deliberately the OPPOSITE temperature from `is-death`, so the two
+         endings are never mistaken for one another at a glance. */
+      #ui-layer.is-win {
+        background-color: rgba(4, 30, 28, 0.9);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #123f3a;
+        border-image-source: var(--ui-overlay-win);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
+      }
+
+      #ui-layer.is-win .ui-heading {
+        color: var(--gold);
+        text-shadow: 0 0 20px rgba(255, 205, 74, 0.5), 0 3px 0 rgba(0, 0, 0, 0.7);
+      }
+
+      /* M13-T01 · camp / talent screen. Same root element as the overlays, styled
+         as a MENU rather than a verdict: a cool violet wash (the darkness
+         colour), a normal-weight heading, and a scrollable list of talents. */
+      #ui-layer.is-hub {
+        background-color: rgba(14, 10, 26, 0.94);
+        border-style: solid;
+        border-width: 14px;
+        border-color: #2c2145;
+        border-image-source: var(--ui-panel-camp);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
+      }
+
+      #ui-layer.is-hub .ui-heading {
+        font-size: 28px;
+        color: #d8c8ff;
+        letter-spacing: 0.18em;
+      }
+
+      .hub-currency {
+        margin: 0 0 4px;
+        padding: 6px 14px;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: #c9a4ff;
+        border: 2px solid #4a3a6b;
+        border-radius: 4px;
+        background-color: rgba(20, 14, 36, 0.8);
+      }
+
+      .hub-talents {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 50vh;
+        overflow-y: auto;
+        padding: 6px;
+      }
+
+      /* A talent row: unaffordable and already-owned are both disabled, but they
+         read differently — one is a goal, the other is a trophy. */
+      .talent-button {
+        min-width: 340px;
+        padding: 4px 10px;
+        border-color: #5a4780;
+        border-image-source: var(--ui-frame-talent-card);
+        font-size: 14px;
+      }
+
+      .talent-button:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+
+      .talent-button.is-owned {
+        border-color: #4dff88;
+        color: #b8ffd0;
+        opacity: 0.8;
+      }
+
+      .talent-button.is-locked {
+        color: var(--parchment-dim);
+      }
+
+      /* The camp's ONE exit. Warmer and larger than a talent row, so "spend" and
+         "go" are never mistaken for each other. */
+      .start-button {
+        margin-top: 12px;
+        min-width: 240px;
+        padding: 4px 12px;
+        border-style: solid;
+        border-width: 12px;
+        border-color: #8a6a1e;
+        border-image-source: var(--ui-button-primary);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        background-color: rgba(255, 205, 74, 0.18);
+        color: var(--gold);
+        font: inherit;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        image-rendering: pixelated;
+        transition: transform 110ms ease, filter 110ms ease;
+      }
+
+      .start-button:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.2);
+      }
+
+      /* M16 skin hooks. They carry NO logic — they exist so the interface can be
+         re-skinned without touching `UIManager`'s branches (ui-asset-slots.md
+         承诺 1). Each one is a superset partner of a frozen hook, never a
+         replacement for it. */
+      .ui-hint {
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      .ui-currency {
+        box-shadow: inset 0 0 0 2px rgba(201, 164, 255, 0.18);
+      }
+
+      .ui-list {
+        scrollbar-color: #5a4780 rgba(20, 14, 36, 0.6);
+      }
+
+      .ui-button-primary {
+        text-transform: none;
+      }
+
+      /* Keyboard reachability is a contract (ui-asset-slots.md 承诺 3): the
+         native <button> focus ring must stay visible, so it is restyled rather
+         than removed. */
+      .ui-card:focus-visible,
+      .start-button:focus-visible,
+      .reward-button:focus-visible,
+      .talent-button:focus-visible {
+        outline: 3px solid var(--gold);
+        outline-offset: 2px;
+      }
+
+      /* =====================================================================
+       * M19 · the material UI. Everything below is ADDITIVE: no frozen hook is
+       * renamed or removed, the shared `#hud, #keys, #gold` plate block above is
+       * untouched, and no `--font-*` variable is introduced.
+       *
+       * Nine-slice frames use `border-image` (slice 12) — NEVER `background-size:
+       * 100% 100%`, which would smear a 48px frame's corners into bars. Every
+       * `--ui-*` defaults to `none`, so each surface has a real plain-CSS
+       * fallback underneath (FR-050).
+       * ===================================================================== */
+
+      /* --- Material HUD (US1) ------------------------------------------- */
+      /* `#hud-material` is declared STANDALONE, deliberately NOT appended to the
+         `#hud, #keys, #gold` selector list (the readability contract scans that
+         list for contiguity). */
+      #hud-material {
+        position: absolute;
+        left: 12px;
+        bottom: 64px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 6px 10px;
+        pointer-events: none;
+        font-family: var(--font-body);
+        border-style: solid;
+        border-width: 10px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        border-image-source: var(--ui-frame-health);
+        background-color: var(--shadow);
+        image-rendering: pixelated;
+      }
+
+      .hud-health {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 168px;
+      }
+
+      .hud-health-track {
+        height: 14px;
+        border: 2px solid var(--stone-dark);
+        background-color: rgba(10, 8, 14, 0.85);
+        overflow: hidden;
+      }
+
+      .hud-health-fill {
+        height: 100%;
+        width: 0;
+        transition: width 90ms linear;
+        background-color: #4dff88;
+      }
+
+      .hud-health.is-mid .hud-health-fill {
+        background-color: var(--gold);
+      }
+
+      .hud-health.is-critical .hud-health-fill {
+        background-color: var(--blood);
+      }
+
+      .hud-health-value,
+      .hud-dash-value,
+      .hud-gold-value {
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+        color: var(--parchment);
+        letter-spacing: 0.06em;
+      }
+
+      .hud-health.is-critical .hud-health-value {
+        color: var(--blood);
+      }
+
+      .hud-dash {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        /* M19 · the dash frame slot must be CONSUMED here, not merely declared. A
+           slot that is registered in `ui-asset-slots.md`, injected by `main.ts` and
+           shipped in `assets/art/ui/` but never referenced by any rule is a DEAD
+           asset — the art is paid for and never drawn. Same nine-slice treatment as
+           the health frame above so the two HUD components read as one family; with
+           the asset absent this degrades to the solid stone border (FR-050).
+           Guarded by `tests/ui/ui_degradation.test.ts` ("every M19 slot is consumed"). */
+        border-style: solid;
+        border-width: 8px;
+        border-color: var(--stone-dark);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        border-image-source: var(--ui-frame-dash);
+        image-rendering: pixelated;
+        padding: 2px 6px;
+      }
+
+      .hud-dash-ring {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 2px solid var(--stone-dark);
+        background: conic-gradient(
+          var(--gold) calc(var(--dash-progress, 1) * 360deg),
+          rgba(10, 8, 14, 0.75) 0
+        );
+      }
+
+      .hud-dash.is-ready .hud-dash-ring {
+        box-shadow: 0 0 8px rgba(255, 205, 74, 0.55);
+      }
+
+      .hud-dash.is-ready .hud-dash-value {
+        color: var(--gold);
+      }
+
+      /* `#gold` is reused as the material gold plate (A2). It keeps its id and its
+         existing plate block above; only its inner layout is added here. */
+      #gold.hud-gold,
+      .hud-gold {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .hud-gold-icon {
+        font-size: 15px;
+        color: var(--gold);
+      }
+
+      /* --- Boon cards (US2) --------------------------------------------- */
+      .boon-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: center;
+        max-width: 94vw;
+      }
+
+      .boon-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        width: clamp(160px, 22vw, 200px);
+        aspect-ratio: 5 / 7;
+        padding: 8px;
+        box-sizing: border-box;
+        border-width: 12px;
+        /* The quality colour is carried OUTSIDE the border box (the 3px ring) and
+           by the chip below, because `border-image` — once non-`none` — takes over
+           the border and makes `border-color` invisible. */
+        box-shadow: 0 0 0 3px var(--rarity, var(--rarity-common)),
+          0 0 14px var(--rarity-glow, transparent);
+      }
+
+      .boon-rarity-common {
+        --rarity: var(--rarity-common);
+        --rarity-glow: var(--rarity-common-glow);
+        border-image-source: var(--ui-frame-boon-common);
+        border-color: var(--rarity-common);
+      }
+
+      .boon-rarity-epic {
+        --rarity: var(--rarity-epic);
+        --rarity-glow: var(--rarity-epic-glow);
+        border-image-source: var(--ui-frame-boon-epic);
+        border-color: var(--rarity-epic);
+      }
+
+      .boon-rarity-legendary {
+        --rarity: var(--rarity-legendary);
+        --rarity-glow: var(--rarity-legendary-glow);
+        border-image-source: var(--ui-frame-boon-legendary);
+        border-color: var(--rarity-legendary);
+      }
+
+      .boon-rarity-tag {
+        align-self: flex-start;
+        padding: 1px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: var(--ink);
+        background: var(--rarity, var(--rarity-common));
+      }
+
+      .boon-pips {
+        display: flex;
+        gap: 3px;
+        align-self: flex-start;
+      }
+
+      .boon-pips > i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--rarity, var(--rarity-common));
+      }
+
+      .boon-icon {
+        font-size: 34px;
+        line-height: 1;
+        color: var(--rarity, var(--rarity-common));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        border: 2px solid var(--rarity, var(--rarity-common));
+      }
+
+      /* Three colour-blind silhouettes (SC-014): square / cut / crown. */
+      .boon-icon-frame--square {
+        border-radius: 2px;
+      }
+
+      .boon-icon-frame--cut {
+        border-radius: 2px;
+        clip-path: polygon(0 0, 78% 0, 100% 22%, 100% 100%, 0 100%);
+      }
+
+      .boon-icon-frame--crown {
+        border-radius: 2px 2px 0 0;
+        border-top-width: 5px;
+        box-shadow: inset 0 5px 0 -2px var(--rarity, var(--rarity-common));
+      }
+
+      .boon-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--parchment);
+        text-align: center;
+      }
+
+      .boon-desc {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--parchment-dim);
+        text-align: center;
+      }
+
+      /* --- Tab status panel (US3) --------------------------------------- */
+      #ui-layer.is-status {
+        /* A LIGHT scrim: the panel is a reference overlay, not a blocking modal
+           (the simulation keeps running underneath). */
+        background: rgba(8, 10, 14, 0.45);
+        border-style: solid;
+        border-width: 14px;
+        border-color: var(--stone-dark);
+        border-image-source: var(--ui-panel-status);
+        border-image-slice: 12;
+        border-image-repeat: stretch;
+        image-rendering: pixelated;
+      }
+
+      .status-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: min(720px, 94vw);
+        max-height: 92vh;
+        overflow-y: auto;
+        padding: 12px;
+        background-color: rgba(20, 18, 28, 0.92);
+        scrollbar-color: #5a4780 rgba(20, 14, 36, 0.6);
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 72px;
+        padding: 6px 10px;
+        border-left: 4px solid var(--rarity, var(--rarity-common));
+        background-color: rgba(10, 8, 14, 0.55);
+      }
+
+      .status-row .boon-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 26px;
+        flex: 0 0 auto;
+      }
+
+      .status-row .boon-desc {
+        text-align: left;
+      }
+
+      .status-empty {
+        margin: 0;
+        padding: 24px 12px;
+        font-size: 15px;
+        text-align: center;
+        color: var(--parchment-dim);
+        letter-spacing: 0.1em;
+      }
+
+      /* --- Unified overlay language (US5) ------------------------------- */
+      /* A bronze divider under a terminal / camp heading, so the death, victory and
+         camp screens share one typographic accent with the HUD and cards. */
+      .ui-heading-terminal::after,
+      #ui-layer.is-hub .ui-heading::after {
+        content: "";
+        display: block;
+        height: 4px;
+        margin: 10px auto 0;
+        width: min(360px, 70%);
+        background-image: var(--ui-rule);
+        background-repeat: repeat-x;
+        background-size: auto 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="ui-layer"></div>
+    <div id="hud"></div>
+    <!-- M19 · the material HUD: health bar + dash ring. A SEPARATE element from
+         the diagnostics block above, so the two never show a contradictory reading
+         (FR-007); `#gold` below is reused as the material gold plate. -->
+    <div id="hud-material"></div>
+    <div id="gold"></div>
+    <div id="keys">
+      W A S D 移动 &nbsp;·&nbsp; J 攻击 &nbsp;·&nbsp; K 冲刺 &nbsp;·&nbsp; R 回营地（终局后）
+    </div>
+    <script type="module" src="/client/main.ts"></script>
+  </body>
+</html>
